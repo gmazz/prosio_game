@@ -52,7 +52,11 @@ vec3 meadow(vec2 p, float dither) {
     float path = (1.0 - smoothstep(.41, 1.28, verge)) * smoothstep(-21.0, -11.0, p.y);
     path = step(.35 + .3 * dither, path);
     vec3 earth = mix(vec3(.66, .58, .42), vec3(.86, .77, .56), steps(.62 * broad + .38 * fine, 2.0, dither));
-    return mix(grass, earth, path);
+    vec3 ground = mix(grass, earth, path);
+    // Warm sunlight falls in broad soft patches, as through gaps in leaves.
+    float sun = smoothstep(.55, .8, wash(p * .09 + 7.3) * .7 + wash(p * .23) * .3);
+    ground *= mix(vec3(.94, .96, 1.0), vec3(1.1, 1.05, .9), steps(sun, 2.0, dither));
+    return ground;
 }
 
 void main() {
@@ -86,6 +90,8 @@ void main() {
         vec2 p = position.xz * 1.9 + position.y * vec2(1.3, -0.9);
         float clump = wash(p) * .65 + wash(p * 2.7) * .35;
         pigment *= .78 + .42 * steps(clump, 3.0, dither);
+        // Each leafy lump is darker underneath, so crowns look round and deep.
+        pigment *= mix(.72, 1.06, steps(smoothstep(-.8, .7, local.y), 3.0, dither));
     }
     if (surface == 4) {
         // Bark: long vertical grain.
@@ -110,10 +116,19 @@ void main() {
     }
 
     vec3 bounce = vec3(.03, .04, .025) * (1.0 - smoothstep(-.6, .35, n.y));
-    // Three flat tones, then a limited palette.
-    vec3 tint = mix(vec3(.55, .62, .78), vec3(.85, .86, .86), step(-.22, light));
-    tint = mix(tint, vec3(1.05, 1.0, .9), step(.3, light));
-    vec3 color = pigment * tint + bounce;
+    // Four flat tones from a warm low sun: deep shade, shade, light and a
+    // sunlit highlight. The edges between them are dithered, like hand-made
+    // pixel art. Shadows are cool, light is warm, and skylight tints
+    // anything facing up.
+    float lit = light + (dither - .5) * .12;
+    vec3 tint = vec3(.46, .5, .72);
+    tint = mix(tint, vec3(.64, .67, .84), step(-.4, lit));
+    tint = mix(tint, vec3(.97, .93, .84), step(.02, lit));
+    tint = mix(tint, vec3(1.13, 1.05, .86), step(.58, lit));
+    vec3 sky = vec3(.03, .05, .09) * max(n.y, 0.0);
+    // Darker where things meet the ground.
+    float contact = mix(.8, 1.0, steps(smoothstep(.0, .5, position.y), 2.0, dither));
+    vec3 color = pigment * tint * contact + bounce + sky;
     color = floor(color * 14.0 + .5) / 14.0;
     OUT_COLOR = vec4(mix(color, vec3(1.0, .89, .68), hitFlash), colDiffuse.a);
 }

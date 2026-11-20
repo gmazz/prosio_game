@@ -201,25 +201,45 @@ update_prosio :: proc(dt: f32) {
 	grounded := !p.airborne
 	can_act := p.dazed_t <= 0 && p.dash_t <= 0
 	food := food_in_reach(p.pos, r + 0.75)
+	bush := bush_in_reach(p.pos, r + 0.6)
 
 	// Grabbing and throwing.
 	update_grab(dt, can_act)
 	carrying := p.carry != .Nothing
 
 	// Eating: tap the action button next to food.
-	if grounded && can_act && !carrying && food != nil && pressed(.Action) {
-		p.kg += FOOD_KG[food.kind]
-		food.respawn = FOOD_RESPAWN
+	// Eating: tap the action button next to food, or next to a bush with
+	// berries on it.
+	if grounded && can_act && !carrying && (food != nil || bush != nil) && pressed(.Action) {
+		at: Vec2
+		if food != nil {
+			p.kg += FOOD_KG[food.kind]
+			if food.fallen {
+				food.gone = true
+			} else {
+				food.respawn = FOOD_RESPAWN[food.kind]
+			}
+			at = food.pos
+			EATEN := [Food_Kind]cstring{.Apple = "Crunch! Yum!", .Mushroom = "Mmm, mushroom!", .Pumpkin = "A whole pumpkin! Burp!"}
+			say(EATEN[food.kind])
+			burst({at.x, 0.5, at.y}, 10, 3, food.kind == .Mushroom ? COLOR_DUST : COLOR_CRUMB, 0.08)
+		} else {
+			p.kg += BERRY_KG
+			bush.fruit -= 1
+			bush.fruit_t = BERRY_REGROW
+			bush.shake_t = 0.4
+			at = bush.pos
+			say("Berries! Yum!")
+			burst({at.x, 0.7, at.y}, 8, 2.5, BERRY_COLOR, 0.06)
+		}
 		p.eat_t = 0.5
 		p.wobble_vel += 2.5
-		to_food := food.pos - p.pos
+		to_food := at - p.pos
 		p.facing = math.atan2(to_food.x, to_food.y)
-		burst({food.pos.x, 0.8, food.pos.y}, 10, 3, COLOR_CRUMB, 0.09)
-		say("Yum!")
 	}
 
 	// Push-ups: hold the action button anywhere else.
-	if grounded && food == nil && !carrying && pressed(.Action) && can_act && !p.pushups_on {
+	if grounded && food == nil && bush == nil && !carrying && pressed(.Action) && can_act && !p.pushups_on {
 		p.pushups_on = true
 		p.pushup_phase = 0
 		p.pushup_reps = 0
@@ -360,6 +380,10 @@ update_prosio :: proc(dt: f32) {
 	p.pos += p.vel * dt
 	if hit, n := collide_static(&p.pos, body_r, p.height); hit && !p.dive {
 		into := dot2(p.vel, n)
+		if p.dash_t > 0 && into < -2 {
+			// Bumping a tree shakes it, and down come the apples.
+			shake_trees_near(p.pos, body_r + 0.3, -into * p.kg / 60)
+		}
 		if into < 0 {
 			p.vel -= n * into
 		}

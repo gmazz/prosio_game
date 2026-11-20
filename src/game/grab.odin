@@ -62,11 +62,10 @@ LUNGE_SPEED :: f32(3) // how much faster a dragged animal pulls when it lunges
 SKIP_KEEP :: f32(0.82) // share of forward speed kept at each skip
 SKIP_BOUNCE :: f32(0.55) // share of falling speed that bounces back up
 SKIP_SPIN :: f32(0.18) // share of falling speed the spin turns into forward speed
-BASH_GAIN :: f32(1.6) // how much of the club's speed a struck animal or rock takes
 ARM_LEN :: f32(0.55) // from his shoulder to his hoof, arm outstretched
 HOLD_SIDE :: f32(1) // which hand holds a tail: +1 is the side his model's +x points to
 FOLLOW_THROUGH :: f32(0.12) // seconds his arm stays down after a swing lands
-KO_LIMP :: f32(9) // bashed until this limp, an animal is knocked out: four or five good whacks
+KO_LIMP :: f32(7) // bashed until this limp, an animal is knocked out: a handful of good whacks
 
 Carry :: enum {
 	Nothing,
@@ -371,7 +370,7 @@ begin_swing :: proc(throw: bool) {
 	p.bash_queued = false
 	// A heavier animal is slower to get round, so it hits less hard; a
 	// heavier Prosio is quicker with it.
-	p.swing_total = clamp(0.22 + 0.5 * ratio, 0.22, 0.7)
+	p.swing_total = clamp(0.3 + 0.45 * ratio, 0.3, 0.75)
 	if throw {
 		// Back, over his head, and up and away in front.
 		p.swing_total *= 0.8
@@ -380,21 +379,16 @@ begin_swing :: proc(throw: bool) {
 		say("Aaand...", 0.5)
 		return
 	}
-	// Each bash goes a different way: over his head, round his side, or
-	// backhand across his front, and down at the ground somewhere ahead.
-	// His hand is off to one side, so aim a little across to land in front of him.
-	yaw := -0.3 * HOLD_SIDE + random_range(-0.5, 0.5)
-	pitch := random_range(-1.05, -0.6)
+	// A bash is one swing of a pendulum across his front: from the side his
+	// hoof is on now, round past his front, out to the other side, so
+	// pressing again swings it back. Each swing is a little different: how
+	// far out it goes, how high, and how deep it dips in the middle (a deep
+	// dip slams it into the ground in front of him).
+	to_side: f32 = p.swing_from.x > 0.1 ? -1 : (p.swing_from.x < -0.1 ? 1 : (random() < 0.5 ? -1 : 1))
+	yaw := to_side * random_range(1.0, 1.75)
+	pitch := random_range(-0.45, 0.05)
 	p.swing_to = {math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)}
-	pick := random()
-	switch {
-	case pick < 0.45:
-		p.swing_via = {random_range(-0.3, 0.3), 1, -0.1}
-	case pick < 0.8:
-		p.swing_via = {HOLD_SIDE, random_range(0.1, 0.6), 0.2}
-	case:
-		p.swing_via = {-HOLD_SIDE * 0.8, 0.5, 0.6}
-	}
+	p.swing_via = {random_range(-0.25, 0.25), -random_range(0, 0.9), 1}
 	e.limp = max(e.limp, 0.3) // swung off its feet
 }
 
@@ -465,7 +459,11 @@ update_drag :: proc(dt: f32) {
 	swing_aim: Vec3 // during a swing: where his arm and the tail point, in the world
 	if p.swinging {
 		k := min(p.swing_t / p.swing_total, 1)
-		k = math.pow(k, 1.6) // it speeds up all the way, like the crack of a whip
+		if p.swing_throw {
+			k = math.pow(k, 1.6) // it speeds up all the way, like the crack of a whip
+		} else {
+			k = 0.5 - 0.5 * math.cos(k * math.PI) // a pendulum: fastest across his front
+		}
 		dir := swing_direction(k)
 		right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
 		world := right * dir.x + facing_dir(p.facing) * dir.z
@@ -579,6 +577,7 @@ update_drag :: proc(dt: f32) {
 		if hit, _ := collide_static(&xz, r * 0.55, point.y - r * 0.5, true); hit {
 			speed := linalg.length(vel)
 			if p.swinging && speed > 5 && !hit_something {
+				shake_trees_near(xz, r * 0.55 + 0.4, speed)
 				slam(e, point^, speed)
 				hit_something = true
 				g.shake = max(g.shake, 0.3)
@@ -683,7 +682,18 @@ slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 }
 
 // Whatever the swung animal hits takes a share of its speed set by their
-// weights, as when two balls collide.
+// weights, as when two balls collide. But the club is floppy: only part of
+// its body (CLUB_SHARE of its weight) is behind the blow, and it squashes
+// rather than bounces (restitution BASH_BOUNCE). For a club of weight m
+// moving at v, striking something of weight M:
+//
+//     it flies off at   (1 + e) * m' / (m' + M) * v,   with m' = CLUB_SHARE * m
+//     the club goes on  (m' - e * M) / (m' + M) * v
+//
+// So a fox swung into a fox knocks it about half as fast as it was swung,
+// and swung into the boar it barely rocks it and bounces back.
+CLUB_SHARE :: f32(0.6)
+BASH_BOUNCE :: f32(0.35)
 bash_hits :: proc(e: ^Enemy, dt: f32) {
 	p := &g.prosio
 	r := ENEMY_RADIUS[e.kind]
@@ -704,7 +714,8 @@ bash_hits :: proc(e: ^Enemy, dt: f32) {
 				continue
 			}
 			other := ENEMY_KG[o.kind]
-			passed := BASH_GAIN * club / (club + other) * speed
+			blow := club * CLUB_SHARE
+			passed := (1 + BASH_BOUNCE) * blow / (blow + other) * speed
 			dir := normalize2(normalize2(vel.xz) * 0.7 + normalize2(o.pos - point.xz) * 0.5)
 			if dir == {} {
 				dir = facing_dir(p.facing)
@@ -717,10 +728,12 @@ bash_hits :: proc(e: ^Enemy, dt: f32) {
 				o.vel = dir * passed
 			} else {
 				launch_enemy(&o, dir, passed, ENEMY_THROW_KO[o.kind])
+				o.vy = passed * 0.3 // knocked sideways more than up
 				o.skip = true
 			}
-			// The club loses what it passed on, and gets hurt too.
-			e.chain_old[k] = point - vel * dt * (club - other) / (club + other)
+			// The club goes on with what it kept (or bounces back), and gets
+			// hurt too.
+			e.chain_old[k] = point - vel * dt * (blow - BASH_BOUNCE * other) / (blow + other)
 			slam(e, point, speed * 0.6)
 			pain_stars({o.pos.x, ro * 1.8, o.pos.y}, passed)
 			g.shake = max(g.shake, min(passed * other / 500, 0.6))
@@ -734,7 +747,8 @@ bash_hits :: proc(e: ^Enemy, dt: f32) {
 			if rock > club * 2.5 {
 				continue // a boulder: the club just bonks off it (collide_static)
 			}
-			passed := BASH_GAIN * club / (club + rock) * speed
+			blow := club * CLUB_SHARE
+			passed := (1 + BASH_BOUNCE) * blow / (blow + rock) * speed
 			for &t in g.thrown {
 				if !t.active {
 					t = Thrown_Rock{active = true, round = i, r = rd.r, kg = rock, pos = rd.pos, vel = normalize2(vel.xz) * passed, y = 0.05, vy = passed * 0.3}

@@ -117,8 +117,7 @@ build_seesaws :: proc() {
 	// The crate stands where a well-fed Prosio's jump throws the boulder.
 	g.boulder.pos = boulder_rest_pos()
 	g.crate_pos = boulder_release_pos() + {-c.dir * predict_throw(AIM_KG), 0}
-	g.crate_round = g.round_count
-	add_round(g.crate_pos, 0.8, .Crate)
+	g.crate_round = add_round(g.crate_pos, 0.8, .Crate)
 }
 
 // Distance along the plank from the pivot; positive is Prosio's side.

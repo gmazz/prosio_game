@@ -125,7 +125,7 @@ draw_ui :: proc() {
 			case:
 				action = "F: throw it down"
 			}
-		} else if food_in_reach(p.pos, prosio_radius(p.kg) + 0.75) != nil {
+		} else if food_in_reach(p.pos, prosio_radius(p.kg) + 0.75) != nil || bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6) != nil {
 			action = "E: eat"
 		} else if _, found := grab_target(); found {
 			action = "F: grab     Hold E: push-ups"

@@ -129,7 +129,7 @@ draw_world :: proc() {
 	draw_shape(.Terrain, translate({0, 0.01, 0}) * scale({w.x, 1, w.y}), COLOR_WHITE)
 	set_surface(.Solid)
 	for d in g.decor[:g.decor_count] {
-		if !on_screen(d.pos) || (abs(d.pos.x) < 2.73 && abs(d.pos.y - 9.9) < 1.43) {
+		if !on_screen(d.pos) {
 			continue
 		}
 		m := translate({d.pos.x, 0, d.pos.y}) * rot_y(f32(d.variant) * 1.7)
@@ -146,22 +146,6 @@ draw_world :: proc() {
 		}
 	}
 
-	// A woven picnic cloth with narrow selvages and a gingham check.
-	cloth := translate({0, 0.032, 9.9})
-	box(cloth, {}, {5.4, 0.016, 2.8}, {192, 99, 76, 255})
-	for i in - 5 ..= 5 {
-		box(cloth, {f32(i) * 0.49, 0.012, 0}, {0.20, 0.003, 2.8}, {221, 148, 112, 255})
-	}
-	for j in - 2 ..= 2 {
-		z := f32(j) * 0.52
-		box(cloth, {0, 0.017, z}, {5.4, 0.003, 0.19}, {222, 153, 119, 255})
-		for i in - 5 ..= 5 {
-			box(cloth, {f32(i) * 0.49, 0.021, z}, {0.20, 0.003, 0.19}, {243, 199, 152, 255})
-		}
-	}
-	for side in ([2]f32{-1, 1}) {
-		box(cloth, {0, 0.02, side * 1.32}, {5.4, 0.004, 0.045}, {244, 209, 156, 255})
-	}
 	// Shadows go down before anything stands on them.
 	p := &g.prosio
 	floor := ground_height(p.pos)
@@ -171,17 +155,17 @@ draw_world :: proc() {
 			shadow(e.pos, ENEMY_RADIUS[e.kind] * 1.2, 0, e.y)
 		}
 	}
-	for f in g.foods[:g.food_count] {
-		if f.respawn <= 0 && on_screen(f.pos, 1) {
-			shadow(f.pos, 0.2)
+	for &f in g.foods[:g.food_count] {
+		if !f.gone && f.respawn <= 0 && on_screen(f.pos, 1) {
+			shadow(f.pos, FOOD_SIZE[f.kind] * 1.3, 0, f.y)
 		}
 	}
 	for r, i in g.rounds[:g.round_count] {
-		if r.kind == .Tree && on_screen(r.pos, 4) {
-			// The canopy's shadow falls well away from the trunk, as the sun is high.
+		if r.kind == .Tree && on_screen(r.pos, 5) {
+			// The crown's shadow falls well away from the trunk, as the sun is high.
 			t := tree_shape(i)
-			shadow(r.pos, t.canopy * 0.95, 0, t.canopy_y * 0.9)
-			shadow(r.pos, 0.5)
+			shadow(r.pos, t.canopy * 1.05, 0, t.canopy_y * 0.75)
+			shadow(r.pos, 0.4)
 		} else if r.r > 0 && r.kind != .Tree && on_screen(r.pos, 2) {
 			shadow(r.pos, r.r * 1.1)
 		}
@@ -261,12 +245,14 @@ draw_world :: proc() {
 
 	// Trees, rocks.
 	for r, i in g.rounds[:g.round_count] {
-		if r.r <= 0 || !on_screen(r.pos, r.kind == .Tree ? 4 : 2) {
+		if r.r <= 0 || !on_screen(r.pos, r.kind == .Tree ? 5 : 2) {
 			continue // carried, in flight, smashed or far away
 		}
 		switch r.kind {
 		case .Tree:
 			draw_tree(r.pos, i)
+		case .Bush:
+			draw_bush(r, i)
 		case .Rock:
 			m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(i) * 2.3)
 			draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
@@ -306,12 +292,6 @@ draw_world :: proc() {
 	}
 }
 
-Tree_Species :: enum {
-	Broadleaf,
-	Blossom,
-	Pine,
-}
-
 // The size of one tree, worked out from its number so it never changes.
 Tree_Shape :: struct {
 	species:  Tree_Species,
@@ -320,19 +300,20 @@ Tree_Shape :: struct {
 	canopy_y: f32, // height of the crown's centre
 }
 
+// Trees are tall and slim, so that standing close together they make a
+// little wood rather than a row of lollipops.
 tree_shape :: proc(index: int) -> Tree_Shape {
-	species := Tree_Species.Broadleaf
-	switch index % 5 {
-	case 2:
-		species = .Blossom
-	case 4:
-		species = .Pine
+	species := g.rounds[index].species
+	size := 0.85 + 0.4 * math.mod(f32(index) * 0.37, 1)
+	switch species {
+	case .Pine:
+		return {species, size, 1.25 * size, 3.2 * size}
+	case .Apple:
+		size *= 0.85 // apple trees are smaller, with a low, round crown
+		return {species, size, 1.55 * size, 3.7 * size}
+	case .Broadleaf, .Blossom:
 	}
-	size := 0.85 + 0.3 * math.mod(f32(index) * 0.37, 1)
-	if species == .Pine {
-		return {species, size, 1.7 * size, 2.8 * size}
-	}
-	return {species, size, 2.0 * size, 4.0 * size}
+	return {species, size, 1.4 * size, 4.7 * size}
 }
 
 // A tree standing between the camera and Prosio fades to a see-through
@@ -353,6 +334,8 @@ tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
 	return strength * cover * smooth((pos.y - p.pos.y + 0.5) / 1.0)
 }
 
+BERRY_COLOR :: Color{196, 40, 76, 255}
+
 // Trees are built from a trunk and clusters of round leafy lumps, so they
 // match everything else and sit correctly however the camera looks at them.
 draw_tree :: proc(pos: Vec2, index: int) {
@@ -366,16 +349,27 @@ draw_tree :: proc(pos: Vec2, index: int) {
 		set_fade(0)
 	}
 	m := translate({pos.x, 0, pos.y}) * rot_y(f32(index) * 2.39)
+	// A shaken tree trembles for a moment.
+	shake := g.rounds[index].shake_t
+	crown := m * translate({math.sin(g.time * 47) * shake * 0.25, 0, math.cos(g.time * 39) * shake * 0.2})
 
 	bark := t.species == .Blossom ? Color{104, 78, 72, 255} : COLOR_TRUNK
 	set_surface(.Bark)
-	if t.species == .Pine {
-		tube(m, {}, 0.26 * s, 1.6 * s, bark)
-	} else {
-		cone(m, {}, 0.55 * s, 0.7 * s, bark) // flared roots
-		tube(m, {}, 0.32 * s, 2.9 * s, bark)
+	switch t.species {
+	case .Pine:
+		cone(m, {}, 0.3 * s, 0.5 * s, bark)
+		tube(m, {}, 0.17 * s, 2.4 * s, bark)
+	case .Apple:
+		cone(m, {}, 0.38 * s, 0.5 * s, bark)
+		tube(m, {}, 0.2 * s, 3.0 * s, bark)
 		for side in ([2]f32{-1, 1}) {
-			limb(m, {0, 2.1 * s, 0}, {side * 0.85 * s, 3.1 * s, 0.25 * side * s}, 0.13 * s, bark)
+			limb(m, {0, 2.2 * s, 0}, {side * 0.75 * s, 3.1 * s, 0.2 * side * s}, 0.1 * s, bark)
+		}
+	case .Broadleaf, .Blossom:
+		cone(m, {}, 0.36 * s, 0.6 * s, bark) // flared roots
+		tube(m, {}, 0.19 * s, 4.0 * s, bark)
+		for side in ([2]f32{-1, 1}) {
+			limb(m, {0, 3.0 * s, 0}, {side * 0.6 * s, 3.9 * s, 0.2 * side * s}, 0.09 * s, bark)
 		}
 	}
 
@@ -385,24 +379,60 @@ draw_tree :: proc(pos: Vec2, index: int) {
 	switch t.species {
 	case .Pine:
 		dark := Color{58, 112, 80, 255}
-		tiers := [?][3]f32{{1.7, 1.1, 2.1}, {1.35, 2.4, 1.9}, {1.0, 3.6, 1.7}, {0.6, 4.7, 1.4}}
+		tiers := [?][3]f32{{1.25, 1.2, 1.9}, {1.02, 2.3, 1.8}, {0.8, 3.35, 1.7}, {0.57, 4.35, 1.5}, {0.34, 5.25, 1.2}}
 		for tier, k in tiers {
-			cone(m, {0, tier.y * s, 0}, tier.x * s, tier.z * s, k % 2 == 0 ? dark : shade(dark, 1.12))
+			cone(crown, {0, tier.y * s, 0}, tier.x * s, tier.z * s, k % 2 == 0 ? dark : shade(dark, 1.12))
 		}
-	case .Broadleaf, .Blossom:
-		blossom := t.species == .Blossom
-		colors := blossom ? [3]Color{{236, 158, 178, 255}, {222, 132, 158, 255}, {250, 192, 206, 255}} : [3]Color{COLOR_LEAF, COLOR_LEAF_DARK, COLOR_LEAF_LIGHT}
+	case .Broadleaf, .Blossom, .Apple:
+		colors := [3]Color{COLOR_LEAF, COLOR_LEAF_DARK, COLOR_LEAF_LIGHT}
+		if t.species == .Blossom {
+			colors = {{236, 158, 178, 255}, {222, 132, 158, 255}, {250, 192, 206, 255}}
+		} else if t.species == .Apple {
+			colors = {{104, 160, 74, 255}, {78, 136, 70, 255}, {140, 182, 86, 255}}
+		}
 		c := t.canopy
 		y := t.canopy_y
-		ball(m, {0, y, 0}, {c, c * 0.72, c}, colors[0])
+		tall: f32 = t.species == .Apple ? 0.85 : 1.15 // a tall, oval crown
+		ball(crown, {0, y, 0}, {c, c * tall, c}, colors[0])
 		for k in 0 ..< 5 {
 			a := f32(k) * math.TAU / 5 + f32(index)
 			lobe := c * (0.5 + 0.08 * f32((index + k) % 3))
-			ball(m, {math.cos(a) * c * 0.62, y - c * 0.12 + c * 0.1 * f32(k % 2), math.sin(a) * c * 0.62}, {lobe, lobe * 0.8, lobe}, colors[1 + k % 2])
+			ball(crown, {math.cos(a) * c * 0.6, y - c * 0.25 + c * 0.3 * f32(k % 2), math.sin(a) * c * 0.6}, {lobe, lobe * tall, lobe}, colors[1 + k % 2])
 		}
-		ball(m, {c * 0.12, y + c * 0.5, -c * 0.1}, {c * 0.58, c * 0.48, c * 0.58}, colors[2])
+		ball(crown, {c * 0.1, y + c * 0.75 * tall, -c * 0.1}, {c * 0.55, c * 0.5 * tall, c * 0.55}, colors[2])
+		if t.species == .Apple {
+			// Its apples, hanging round the lower half of the crown.
+			set_surface(.Solid)
+			set_sway(0)
+			// They sit on the upper slope of the crown, where the camera sees them.
+			for k in 0 ..< g.rounds[index].fruit {
+				a := f32(k) * 2.4 + f32(index) + 0.5
+				up := 0.45 + 0.15 * f32(k % 2)
+				out := math.sqrt(1 - up * up) * c * 1.02
+				ball(crown, {math.cos(a) * out, y + up * c * tall * 1.02, math.sin(a) * out}, {0.17, 0.16, 0.17}, {222, 44, 48, 255})
+			}
+		}
 	}
 	set_surface(.Solid)
+}
+
+// A berry bush: a low clump of leaves, with a few bunches of berries.
+draw_bush :: proc(b: Round, index: int) {
+	m := translate({b.pos.x, 0, b.pos.y}) * rot_y(f32(index) * 1.3)
+	m = m * translate({math.sin(g.time * 41) * b.shake_t * 0.12, 0, 0})
+	r := b.r
+	set_surface(.Leaf)
+	ball(m, {0, r * 0.75, 0}, {r, r * 0.8, r}, {74, 124, 66, 255})
+	ball(m, {r * 0.45, r * 0.6, r * 0.2}, {r * 0.7, r * 0.6, r * 0.7}, {92, 146, 74, 255})
+	ball(m, {-r * 0.4, r * 0.65, -r * 0.25}, {r * 0.72, r * 0.62, r * 0.72}, {62, 112, 64, 255})
+	set_surface(.Solid)
+	for k in 0 ..< b.fruit {
+		a := f32(k) * 2.1 + 0.4
+		bunch := m * translate({math.cos(a) * r * 0.62, r * 1.45, math.sin(a) * r * 0.62})
+		for j in 0 ..< 3 {
+			ball(bunch, {f32(j % 2) * 0.11 - 0.055, -f32(j / 2) * 0.09, 0}, {0.09, 0.09, 0.09}, BERRY_COLOR)
+		}
+	}
 }
 
 // Height of the ground alone, for placing shadows.
@@ -482,28 +512,35 @@ draw_throw_marker :: proc() {
 }
 
 draw_food :: proc(f: Food, index: int) {
-	if f.respawn > 0 || !on_screen(f.pos, 1) {
+	if f.gone || f.respawn > 0 || !on_screen(f.pos, 1) {
 		return
 	}
-	// Food is drawn at half its old size: an apple is now about a third of
-	// Prosio's head, still a little big so it is easy to spot.
-	bob := math.sin(g.time * 3 + f32(index)) * 0.03
-	m := translate({f.pos.x, 0.2 + bob, f.pos.y}) * rot_y(g.time * 1.2 + f32(index)) * scale({0.5, 0.5, 0.5})
+	m := translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1)
 	switch f.kind {
 	case .Apple:
-		ball(m, {0, 0.05, 0}, {0.26, 0.25, 0.26}, {230, 54, 54, 255})
-		tube(m, {0, 0.25, 0}, 0.025, 0.14, COLOR_TRUNK)
-		ball(m, {0.09, 0.36, 0}, {0.1, 0.03, 0.06}, COLOR_LEAF)
-	case .Donut:
-		ring := m * rot_x(math.PI / 2 - 0.5)
-		draw_shape(.Torus, ring * scale({0.62, 0.62, 0.62}), {226, 170, 100, 255})
-		draw_shape(.Torus, ring * translate({0, 0, -0.05}) * scale({0.6, 0.6, 0.5}), {255, 130, 190, 255})
-	case .Cake:
-		tube(m, {0, -0.2, 0}, 0.3, 0.3, {250, 236, 200, 255})
-		tube(m, {0, 0.1, 0}, 0.32, 0.1, {255, 150, 190, 255})
-		tube(m, {0, 0.2, 0}, 0.22, 0.2, {250, 236, 200, 255})
-		tube(m, {0, 0.4, 0}, 0.24, 0.07, {255, 150, 190, 255})
-		ball(m, {0, 0.52, 0}, {0.08, 0.08, 0.08}, {220, 30, 50, 255})
+		// Fallen apples brown a little as they start to rot.
+		ripe := Color{222, 44, 48, 255}
+		if f.fallen && f.life < 12 {
+			ripe = {170, 88, 50, 255}
+		}
+		ball(m, {0, 0.12, 0}, {0.13, 0.12, 0.13}, ripe)
+		tube(m, {0, 0.22, 0}, 0.012, 0.07, COLOR_TRUNK)
+	case .Mushroom:
+		tube(m, {}, 0.05, 0.16, {240, 228, 206, 255})
+		draw_shape(.Hemisphere, m * translate({0, 0.14, 0}) * scale({0.15, 0.1, 0.15}), {196, 64, 46, 255})
+		for k in 0 ..< 3 {
+			a := f32(k) * 2.1
+			ball(m, {math.cos(a) * 0.08, 0.21, math.sin(a) * 0.08}, {0.025, 0.012, 0.025}, COLOR_WHITE)
+		}
+	case .Pumpkin:
+		orange := Color{232, 128, 40, 255}
+		for k in 0 ..< 5 {
+			a := f32(k) * math.TAU / 5
+			ball(m, {math.cos(a) * 0.12, 0.22, math.sin(a) * 0.12}, {0.2, 0.2, 0.2}, k % 2 == 0 ? orange : shade(orange, 0.9))
+		}
+		ball(m, {0, 0.23, 0}, {0.26, 0.21, 0.26}, orange)
+		tube(m, {0, 0.4, 0}, 0.035, 0.1, {96, 110, 56, 255})
+		ball(m, {0.1, 0.42, 0.04}, {0.1, 0.02, 0.07}, COLOR_LEAF)
 	}
 }
 

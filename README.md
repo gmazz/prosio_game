@@ -34,7 +34,7 @@ The goal is to collect all five golden truffles. Each one sits behind a puzzle t
 | Sprint | hold `Shift` while moving |
 | Grab; press again to throw | `F` or `L` |
 | Bash with a held animal | `Space` |
-| Eat (next to food) | `E` or `K` |
+| Eat (next to food or a berry bush) | `E` or `K` |
 | Push-ups (anywhere else) | hold `E` or `K` |
 | Pause menu | `Esc` or `P` |
 | Try again after fainting | `Enter` or `R` |
@@ -72,16 +72,24 @@ Fainting and the heart attack both end the attempt; `Enter` puts Prosio back at 
 
 | What | Change |
 |---|---|
-| Apple | +3 kg |
-| Donut | +8 kg |
-| Cake | +15 kg |
+| Bunch of berries, off a bush | +2 kg |
+| Apple, fallen from an apple tree | +3 kg |
+| Mushroom | +5 kg |
+| Pumpkin | +12 kg |
 | One push-up | -2.5 kg |
 | Walking | -0.05 kg per second |
 | Sprinting | -0.2 kg per second |
 | One bump or throw | -0.3 kg |
 | One jump | -0.15 kg |
 
-Food reappears about seven seconds after it is eaten, so no puzzle can be made impossible.
+All of it is found in the meadow, not served:
+
+- **Berry bushes** grow a new bunch every 9 seconds, up to three; berries are eaten straight off the bush.
+- **Apple trees** (a smaller tree with a round crown and red apples) grow up to four apples, and now and then one drops and rolls to a stop under the tree. A fallen apple rots away after 45 seconds. **Bump an apple tree** (or slam an animal or throw one into it) and it shakes, and down come some of its apples: the harder the hit, the more.
+- **Mushrooms** grow in the shade under trees and come back 25 seconds after being eaten.
+- **Pumpkins** grow in patches out in the open and come back after 40 seconds. They are big enough to bump into.
+
+Nothing runs out for good, so no puzzle can be made impossible.
 
 ### What weight changes
 
@@ -112,6 +120,8 @@ His body is drawn from simple shapes in code, so it changes smoothly with every 
 ## Fighting
 
 The enemies are woodland animals: red foxes (20 kg in game) and one wild boar (190 kg). Weight goes with volume: the boar is about 2.1 times the fox's size, so about 9.4 times as heavy. Both have big kawaii eyes, blushing cheeks and a little smile. Nothing dies; enemies that are knocked out see stars and vanish in a puff, and foxes come back later.
+
+**Foxes hunt like a pack.** The foxes near Prosio do not run at him in a bunch. Like wolves round their prey, they spread out round him at about three metres, each taking its own place in the order they already stand (so their paths do not cross), with the places drifting round to his back. From time to time one darts in on a curve, leading him a little: more likely from behind (55% at each try), less from the side (25%) and rarely from in front (6%), and never more than two at once. After a strike, or a miss, it falls back and circles again. Foxes go round obstacles they bump into, and if one finds itself wedged in a dead end it turns back and tries the other way. When Prosio stands up on the tower they run round to the foot of the ramp and climb it; up there they go straight for him. The boar does not hunt; it just charges.
 
 ### Bump
 
@@ -166,11 +176,20 @@ Everything else scales with the *ratio* between the animal's weight and Prosio's
 | How long a swing takes | 0.22 + 0.5 x ratio seconds: a heavier Prosio swings faster, so he hits harder |
 | Throw speed | 3.2 x his weight / its weight (at most 22) |
 
-**Bashing.** His hoof sweeps round from his shoulder, speeding up all the way like the crack of a whip, and drags the animal's body round on the end of its tail; its front half flops along after it. Hitting the ground hard is a slam (WHACK, THUD, SPLAT...): dust, a little shake, and the animal goes limper. Whatever it hits on the way takes `1.6 x its weight / (its + the other's weight)` of its speed, as when two balls collide: struck foxes fly off spinning and skip along, small rocks are batted away, and the boar only rocks on its feet. Trees and walls stop it with a BONK. Enough slams knock it out:
+**Bashing.** Each press of `Space` is one swing of a pendulum across his front: from the side the animal is on, round past his front, out to the other side, fastest in the middle. Press again and it swings back. Each swing differs a little: how far out it goes, how high, and how deep it dips in the middle (a deep dip slams it into the ground in front of him). His hoof leads and the animal's body follows on the end of its tail, its front half flopping after it. Hitting the ground hard is a slam (WHACK, THUD, SPLAT...): dust, a little shake, and the animal goes limper.
+
+**The club is floppy.** Whatever it hits is struck as in a collision of two balls, but only part of the swung animal's body is behind the blow (0.6 of its weight, `m'`), and it squashes rather than bounces (restitution `e` = 0.35):
+
+```
+struck animal flies off at   (1 + e) x m' / (m' + its weight) x club speed
+the club carries on at       (m' - e x its weight) / (m' + its weight) x club speed
+```
+
+So a fox swung into a fox knocks it at about half the club's speed, mostly sideways (typically 2.5 to 6 m/s: tumbled over, not launched), and swung into the boar it only rocks it and bounces back. Small rocks are batted away the same way. Trees and walls stop it with a BONK, and shake the tree. Enough slams knock it out:
 
 | Bashing a fox | 40 kg Prosio | 80 kg | 125 kg |
 |---|---|---|---|
-| Knocked out after | more than four bashes | about four | about two |
+| Knocked out after | many bashes | a handful of bashes | fewer |
 | Then thrown at | 6.4 | 12.8, knocked out | 20 |
 
 A thrown animal is knocked out if it leaves at its knock-out speed (12 for a fox), or if it was knocked out already. It is spinning, so at every skip it keeps 82% of its forward speed, bounces back up with 55% of its falling speed, and the spin turns another 18% of the fall into forward speed. It knocks over any other animal it hits and bounces off walls, trees and rocks.
@@ -187,7 +206,7 @@ A thrown animal is knocked out if it leaves at its knock-out speed (12 for a fox
 
 ## The meadow and its puzzles
 
-The meadow is 88 by 60 units inside a fence, with the five sites spread out and trees, rocks, snacks and foxes scattered at random between them. Prosio starts at a picnic blanket near the middle. There is no map yet.
+The meadow is 88 by 60 units inside a fence, with the five sites spread out and little woods, single trees, bushes, rocks, food and foxes scattered at random between them. Prosio starts near the middle, by an apple tree, a berry bush and a few pumpkins. There is no map yet.
 
 | Truffle | Where | What it takes |
 |---|---|---|
@@ -298,9 +317,9 @@ A few choices shape the rest:
 - **Bodies** are built from those shapes. Arms and legs are tapered segments (thigh, shin, upper arm, forearm) that narrow towards the hooves, with round joints between; Prosio's shorts sit high over two small buttocks, so his legs show below them, and his arms are plump with a round biceps. He is built short and stocky: short legs, a compact body and a big head. When he eats, it is his belly that grows, forwards and sideways; his bottom hardly changes. Swapping raylib for another library would mean rewriting `platform.odin` only.
 - **No memory allocation in the game.** Everything lives in one `Game` struct of fixed-size arrays, which is also why the web build needs no allocator.
 - **Physics on the ground plane, plus height.** Positions are 2D; things that jump or fly also have a height and a vertical speed. Physics runs in fixed steps of at most 1/120 of a second.
-- **Pixel art from 3D.** The scene is lit with three flat tones and a limited palette, with dithered ground and one-pixel outlines, and drawn into a small image that is enlarged without smoothing. There are five pixel sizes (keys `1` to `5`), aiming at about 180, 240, 320 (the default), 420 and 560 rows of pixels. Each game pixel is a whole number of real screen pixels, so the actual count is the nearest that fits the window, and each level is kept at least one step finer than the one below it as far as the window allows (on a small window the finest levels can end up the same). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
+- **Pixel art from 3D.** The scene is lit by a warm, low sun in four flat tones (deep shade, shade, light and a sunlit highlight, with dithered edges between them): cool violet shadows, warm highlights, a touch of blue skylight on anything facing up, darkening where things meet the ground, and broad soft patches of sunlight on the grass. A limited palette, dithered ground and one-pixel outlines finish it. Everything is drawn into a small image that is enlarged without smoothing. There are five pixel sizes (keys `1` to `5`), aiming at about 180, 240, 320 (the default), 420 and 560 rows of pixels. Each game pixel is a whole number of real screen pixels, so the actual count is the nearest that fits the window, and each level is kept at least one step finer than the one below it as far as the window allows (on a small window the finest levels can end up the same). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
 - **Surface detail is calculated, not painted:** grass tones and the footpath, leaf clumps, bark grain and moss are all noise in the shader. Leaves sway in the wind.
-- **Trees** are a trunk plus clusters of round leafy lumps, in three species (broadleaf, blossom, pine). A tree standing between the camera and Prosio fades to a see-through pattern where it covers him.
+- **Trees** are tall and slim: a trunk plus clusters of round leafy lumps that are darker underneath, in four species (broadleaf, apple, blossom, pine). About a hundred stand in the meadow, many of them in nine little woods of six to ten trees with bushes round their edges. A tree standing between the camera and Prosio fades to a see-through pattern where it covers him.
 - **Only what is near the camera is drawn.**
 
 ## Testing without playing

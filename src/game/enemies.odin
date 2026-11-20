@@ -22,6 +22,16 @@ Enemy_Kind :: enum {
 	Boar,
 }
 
+// How a fox hunts. Like wolves round their prey, the foxes near Prosio
+// spread out round him at a distance, drifting towards his back, and take it
+// in turns to dart in, preferably from where he is not looking. After a
+// strike they fall back and circle again.
+Hunt :: enum {
+	Stalk, // circling at a distance
+	Charge, // darting in
+	Retreat, // falling back after a strike or a miss
+}
+
 Enemy_State :: enum {
 	Chase,
 	Flying,
@@ -44,6 +54,13 @@ Enemy :: struct {
 	ko:     bool, // knocked out: it disappears after landing
 	skip:   bool, // slammed down spinning: it skips along the ground
 	hit_t:  f32, // just hit by a swung animal: not hit again until this runs out
+	hunt:   Hunt,
+	hunt_t: f32, // time left in this part of the hunt
+	orbit:  f32, // the direction from Prosio it is circling towards
+	turn:   f32, // +1 or -1: which way round it likes to go
+	stuck_t:    f32, // how long it has been pressing against things
+	stuck_from: Vec2, // where it was when it started
+	turn_lock:  f32, // having turned back from a dead end, it keeps going this way for a while
 	// While held by the tail its body is a floppy chain (see grab.odin):
 	chain:     [3]Vec3, // the tail tip in Prosio's hand, the middle of its body, its shoulders
 	chain_old: [3]Vec3, // where they were a step ago
@@ -82,6 +99,8 @@ add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
 		kind = kind,
 		pos  = home,
 		home = home,
+		turn = g.enemy_count % 2 == 0 ? 1 : -1,
+		hunt_t = random_range(1.5, 3),
 	}
 	g.enemy_count += 1
 }
@@ -133,22 +152,44 @@ update_enemies :: proc(dt: f32) {
 
 		case .Chase:
 			e.timer -= dt
-			to_prosio := p.pos - e.pos
-			dist := length2(to_prosio)
-			target: Vec2
-			if p.fail == .None && dist < 9 && e.timer <= 0 {
-				target = to_prosio / max(dist, 0.001) * ENEMY_SPEED[e.kind]
-			} else if e.timer <= 0 && length2(e.home - e.pos) > 1 {
-				target = normalize2(e.home - e.pos) * ENEMY_SPEED[e.kind] * 0.6
-			}
-			e.vel = approach2(e.vel, target, 10 * dt)
+			e.turn_lock -= dt
+			target := chase_velocity(&e, index, dt)
+			accel: f32 = e.kind == .Fox ? 14 : 10
+			e.vel = approach2(e.vel, target, accel * dt)
 			e.pos += e.vel * dt
 			speed := length2(e.vel)
-			if speed > 0.3 {
-				e.facing = approach_angle(e.facing, math.atan2(e.vel.x, e.vel.y), 8 * dt)
+			look := e.vel
+			if e.kind == .Fox && e.hunt == .Stalk {
+				// Circling, it keeps its eyes on him.
+				look = normalize2(e.vel) * 0.6 + normalize2(p.pos - e.pos)
+			}
+			if speed > 0.3 && look != {} {
+				e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
 			}
 			e.hop += dt * (speed > 0.3 ? 9 : 3)
-			collide_static(&e.pos, r, 0, true)
+			if hit, n := collide_static(&e.pos, r, e.y, true); hit && dot2(target, n) < -0.2 * length2(target) {
+				// Something is in the way: go round it, the side nearer its goal.
+				along := Vec2{-n.y, n.x}
+				side := dot2(along, target)
+				if abs(side) > 0.2 * length2(target) && e.turn_lock <= 0 {
+					e.turn = side > 0 ? 1 : -1
+				}
+				e.vel = along * e.turn * max(length2(target), speed)
+				// Wedged in a corner, getting nowhere: try the other way round.
+				e.stuck_t += dt
+				if e.stuck_t > 0.8 {
+					if length2(e.pos - e.stuck_from) < 0.6 {
+						e.turn = -e.turn
+						e.turn_lock = 2
+					}
+					e.stuck_t = 0
+					e.stuck_from = e.pos
+				}
+			} else {
+				e.stuck_t = 0
+				e.stuck_from = e.pos
+			}
+			e.y, _ = ground_at(e.pos, true)
 			touch_prosio(&e, true)
 
 		case .Flying:
@@ -160,6 +201,9 @@ update_enemies :: proc(dt: f32) {
 				into := dot2(e.vel, n)
 				if into < 0 {
 					e.vel -= n * into * 1.6 // bounce off
+					if into < -4 {
+						shake_trees_near(e.pos, r + 0.6, -into) // apples come down
+					}
 					burst({e.pos.x, e.y + r, e.pos.y}, 5, 2, COLOR_DUST, 0.1)
 				}
 			}
@@ -180,8 +224,9 @@ update_enemies :: proc(dt: f32) {
 					}
 				}
 			}
-			if e.y <= 0 && e.vy < 0 {
-				e.y = 0
+			floor, _ := ground_at(e.pos, true)
+			if e.y <= floor && e.vy < 0 {
+				e.y = floor
 				burst({e.pos.x, 0.1, e.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 				if e.skip && e.vy < -4 {
 					// Slammed down spinning: the spin turns part of the fall into
@@ -207,7 +252,8 @@ update_enemies :: proc(dt: f32) {
 		case .Dizzy:
 			e.vel = approach2(e.vel, {}, 14 * dt)
 			e.pos += e.vel * dt
-			collide_static(&e.pos, r, 0, true)
+			collide_static(&e.pos, r, e.y, true)
+			e.y, _ = ground_at(e.pos, true)
 			e.timer -= dt
 			touch_prosio(&e, false)
 			if e.state == .Dizzy && e.timer <= 0 {
@@ -221,6 +267,8 @@ update_enemies :: proc(dt: f32) {
 				} else {
 					e.state = .Chase
 					e.timer = 0.5
+					e.hunt = .Retreat
+					e.hunt_t = 0.8
 				}
 			}
 		}
@@ -252,6 +300,170 @@ update_enemies :: proc(dt: f32) {
 	}
 }
 
+// How fast, and which way, a chasing enemy wants to go.
+chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
+	p := &g.prosio
+	speed := ENEMY_SPEED[e.kind]
+	to := p.pos - e.pos
+	dist := length2(to)
+	if p.fail != .None || dist > 11 || (e.kind == .Boar && dist > 9) {
+		// Nothing to hunt: amble home. When it spots him again it first
+		// takes its time to fan out round him.
+		e.hunt = .Stalk
+		e.hunt_t = random_range(1.5, 3)
+		e.orbit = math.atan2(-to.x, -to.y)
+		if e.timer <= 0 && length2(e.home - e.pos) > 1 {
+			return normalize2(e.home - e.pos) * speed * 0.6
+		}
+		return {}
+	}
+	// He is up on the tower: go round by the ramp.
+	if way, ok := way_up(e, p.pos, p.height); ok {
+		return normalize2(way - e.pos) * speed * 1.2
+	}
+	if e.kind == .Boar || e.y > 0.3 {
+		// A boar just charges. Up on the ramp or the tower there is no room
+		// to circle, so a fox goes straight for him too.
+		return e.timer > 0 ? Vec2{} : to / max(dist, 0.001) * speed
+	}
+
+	e.hunt_t -= dt
+	toward := to / max(dist, 0.001)
+	switch e.hunt {
+	case .Stalk:
+		// Circle at a distance, each fox heading for its own place round him,
+		// the places spread round his back.
+		slot, count := hunt_slot(index)
+		spread := min(f32(1.1), math.TAU / f32(max(count, 1)))
+		back := math.atan2(-math.sin(p.facing), -math.cos(p.facing))
+		want := back + (f32(slot) - f32(count - 1) / 2) * spread
+		e.orbit = approach_angle(e.orbit, want, 1.5 * dt)
+		radius := 3.3 + 0.5 * math.sin(g.time * 0.7 + f32(index) * 1.9)
+		here := math.atan2(-to.x, -to.y) // its direction from him
+		gap := angle_diff(e.orbit, here)
+		around := Vec2{-toward.y, toward.x} * (gap > 0 ? 1 : -1) // along the circle, the short way
+		pace := clamp(abs(gap) * 1.5, 0.3, 1)
+		closing := clamp((dist - radius) * 1.6, -0.7 * speed, 0.7 * speed)
+		want_vel := around * speed * 0.9 * pace + toward * closing
+		want_vel += keep_apart(e, index) * speed
+		if length2(want_vel) > speed {
+			want_vel = normalize2(want_vel) * speed
+		}
+		// Now and then one darts in: much more likely from where he is not
+		// looking, and never more than two at once.
+		if e.hunt_t <= 0 {
+			e.hunt_t = random_range(0.5, 1.3)
+			seen := dot2(facing_dir(p.facing), -toward) // 1 when he looks straight at it
+			chance: f32 = seen < -0.2 ? 0.55 : (seen < 0.4 ? 0.25 : 0.06)
+			if dist < 6 && e.timer <= 0 && chargers() < 2 && random() < chance {
+				e.hunt = .Charge
+				e.hunt_t = 1.6
+				e.turn = random() < 0.5 ? -1 : 1
+			}
+		}
+		return want_vel
+	case .Charge:
+		// Lead him a little and come in on a curve, not in a straight line.
+		lead := p.pos + p.vel * min(dist / (speed * 1.4), 0.5)
+		aim := lead - e.pos
+		curve := Vec2{-aim.y, aim.x} * e.turn * min(dist * 0.08, 0.35)
+		if e.hunt_t <= 0 {
+			e.hunt = .Retreat
+			e.hunt_t = random_range(0.6, 1.0)
+		}
+		return normalize2(aim + curve) * speed * 1.45
+	case .Retreat:
+		if e.hunt_t <= 0 || dist > 5.5 {
+			e.hunt = .Stalk
+			e.hunt_t = random_range(0.8, 2.5)
+			e.turn = random() < 0.5 ? -1 : 1
+		}
+		side := Vec2{-toward.y, toward.x} * e.turn
+		return normalize2(-toward + side * 0.6 + keep_apart(e, index)) * speed * 1.15
+	}
+	return {}
+}
+
+// Which place round Prosio this fox has, out of how many hunting him. The
+// places are handed out in the order the foxes already stand round him, so
+// they fan out without crossing each other's paths.
+hunt_slot :: proc(index: int) -> (slot, count: int) {
+	p := &g.prosio
+	back := math.atan2(-math.sin(p.facing), -math.cos(p.facing))
+	mine := g.enemies[index].pos - p.pos
+	my_angle := angle_diff(math.atan2(mine.x, mine.y), back)
+	for &o, i in g.enemies[:g.enemy_count] {
+		if o.kind != .Fox || o.state != .Chase || length2(o.pos - p.pos) > 11 {
+			continue
+		}
+		count += 1
+		d := o.pos - p.pos
+		a := angle_diff(math.atan2(d.x, d.y), back)
+		if a < my_angle || (a == my_angle && i < index) {
+			slot += 1
+		}
+	}
+	return
+}
+
+chargers :: proc() -> (n: int) {
+	for &o in g.enemies[:g.enemy_count] {
+		if o.state == .Chase && o.hunt == .Charge {
+			n += 1
+		}
+	}
+	return
+}
+
+// A push away from packmates that are too close.
+keep_apart :: proc(e: ^Enemy, index: int) -> (push: Vec2) {
+	for &o, i in g.enemies[:g.enemy_count] {
+		if i == index || !on_ground(&o) {
+			continue
+		}
+		d := e.pos - o.pos
+		dist := length2(d)
+		room := ENEMY_RADIUS[e.kind] + ENEMY_RADIUS[o.kind] + 1.2
+		if dist < room && dist > 1e-3 {
+			push += d / dist * (1 - dist / room)
+		}
+	}
+	return
+}
+
+// The signed angle from b round to a, between -pi and pi.
+angle_diff :: proc(a, b: f32) -> f32 {
+	d := math.mod(a - b + math.PI, math.TAU)
+	if d < 0 {
+		d += math.TAU
+	}
+	return d - math.PI
+}
+
+// When its target stands up on a platform it cannot step onto, the place to
+// head for instead: the foot of the ramp, then up it. ok is false when it
+// can go straight there.
+way_up :: proc(e: ^Enemy, target: Vec2, target_height: f32) -> (way: Vec2, ok: bool) {
+	if target_height < e.y + STEP_UP {
+		return {}, false
+	}
+	for &pl in g.platforms[:g.platform_count] {
+		if !pl.ramp {
+			continue
+		}
+		centre := (pl.lo.x + pl.hi.x) / 2
+		if inside(e.pos, pl.lo, pl.hi) {
+			return {centre, pl.lo.y - 0.6}, true // on the ramp: keep climbing
+		}
+		foot := Vec2{centre, pl.hi.y + 0.7}
+		if length2(e.pos - foot) < 0.5 {
+			return {centre, pl.lo.y}, true
+		}
+		return foot, true
+	}
+	return {}, false
+}
+
 // Everything that happens when an enemy on the ground and Prosio touch:
 // his bump lands, or it shoves him, and either way they end up side by side.
 touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
@@ -260,7 +472,7 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 	pr := prosio_radius(p.kg)
 	d := e.pos - p.pos
 	dist := length2(d)
-	if dist >= pr + r || p.height > r * 1.8 {
+	if dist >= pr + r || abs(p.height - e.y) > r * 1.8 {
 		return // apart, or he is jumping over it
 	}
 	away := dist > 1e-4 ? d / dist : Vec2{1, 0}
@@ -301,6 +513,8 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 			}
 			e.vel = away * 4
 			e.timer = 1.2
+			e.hunt = .Retreat // strike and fall back, like a wolf
+			e.hunt_t = random_range(0.8, 1.4)
 			g.shake = max(g.shake, 0.25)
 		}
 	}
