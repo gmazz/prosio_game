@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prosio</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #60a050; overflow: hidden; }
+	canvas { display: block; width: 100vw; height: 100vh; border: 0; outline: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<script src="odin.js"></script>
+<script>
+	// The game is Odin code linked with raylib by Emscripten, so the page
+	// gives the program both Odin's and Emscripten's browser functions.
+	var odinMemory = new odin.WasmMemoryInterface();
+	odinMemory.setIntSize(4);
+	var odinImports = odin.setupDefaultImports(odinMemory);
+
+	var Module = {
+		canvas: document.getElementById("canvas"),
+		print: (...args) => console.log(...args),
+		printErr: (...args) => console.error(...args),
+		instantiateWasm: (imports, done) => {
+			const all = { ...odinImports, ...imports };
+			WebAssembly.instantiateStreaming(fetch("index.wasm"), all).then((result) => {
+				odinMemory.setExports(result.instance.exports);
+				odinMemory.setMemory(result.instance.exports.memory);
+				done(result.instance);
+			});
+			return {};
+		},
+		onRuntimeInitialized: () => {
+			var game = wasmExports;
+			game._start();
+			game.main_start();
+			function resize() {
+				game.web_window_size_changed(Module.canvas.clientWidth, Module.canvas.clientHeight);
+			}
+			window.addEventListener("resize", resize, true);
+			resize();
+			function frame() {
+				if (!game.main_update()) {
+					game.main_end();
+					game._end();
+					return;
+				}
+				requestAnimationFrame(frame);
+			}
+			requestAnimationFrame(frame);
+		},
+	};
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
