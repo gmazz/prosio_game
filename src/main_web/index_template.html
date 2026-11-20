@@ -36,8 +36,12 @@
 			var game = wasmExports;
 			game._start();
 			game.main_start();
+			// The canvas gets one pixel per real screen pixel, so on a
+			// high-resolution screen the game can pick finer pixel sizes and
+			// the browser does not blur the picture by enlarging it.
 			function resize() {
-				game.web_window_size_changed(Module.canvas.clientWidth, Module.canvas.clientHeight);
+				const dpr = window.devicePixelRatio || 1;
+				game.web_window_size_changed(Math.round(Module.canvas.clientWidth * dpr), Math.round(Module.canvas.clientHeight * dpr));
 			}
 			window.addEventListener("resize", resize, true);
 			resize();

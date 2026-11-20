@@ -63,23 +63,23 @@ KEYS := [Button][3]rl.KeyboardKey {
 // The world is drawn into a small image, which is then enlarged without
 // smoothing, so it comes out as crisp pixels.
 //
-// How fine the pixels are: five levels, picked with the number keys 1 to 5.
+// How fine the pixels are: six levels, picked with the number keys 1 to 6.
 // Each is about this many rows of pixels from top to bottom. Each game pixel
-// is a whole number of real screen pixels, so the actual count is the nearest
-// that fits the window.
-PIXEL_LEVELS :: 5
-PIXEL_ROWS := [PIXEL_LEVELS]f32{180, 240, 320, 420, 560}
-pixel_level := 2 // 0 to PIXEL_LEVELS - 1
+// is a whole number of real screen pixels (or, on a fine screen, a whole
+// number and a half), so the actual count is the nearest that fits the window.
+PIXEL_LEVELS :: 6
+PIXEL_ROWS := [PIXEL_LEVELS]f32{180, 240, 320, 360, 420, 560}
+pixel_level := 3 // 0 to PIXEL_LEVELS - 1
 
 // The number key (1 to PIXEL_LEVELS) pressed this frame, or 0.
 level_key_pressed :: proc() -> int {
 	if !keyboard_enabled {
 		return 0
 	}
-	KEYS_1_TO_5 := [PIXEL_LEVELS]rl.KeyboardKey{.ONE, .TWO, .THREE, .FOUR, .FIVE}
-	PAD_1_TO_5 := [PIXEL_LEVELS]rl.KeyboardKey{.KP_1, .KP_2, .KP_3, .KP_4, .KP_5}
+	KEYS := [PIXEL_LEVELS]rl.KeyboardKey{.ONE, .TWO, .THREE, .FOUR, .FIVE, .SIX}
+	PAD := [PIXEL_LEVELS]rl.KeyboardKey{.KP_1, .KP_2, .KP_3, .KP_4, .KP_5, .KP_6}
 	for i in 0 ..< PIXEL_LEVELS {
-		if rl.IsKeyPressed(KEYS_1_TO_5[i]) || rl.IsKeyPressed(PAD_1_TO_5[i]) {
+		if rl.IsKeyPressed(KEYS[i]) || rl.IsKeyPressed(PAD[i]) {
 			return i + 1
 		}
 	}
@@ -314,10 +314,20 @@ begin_pixel_view :: proc(eye, target: Vec3, fov_y: f32) -> (Vec3, Vec3, f32) {
 	_, sh := screen_size()
 	rw, rh := f32(rl.GetRenderWidth()), f32(rl.GetRenderHeight())
 	// Every level gets its own pixel size, coarser than the level above it,
-	// as far as the window allows.
+	// as far as the window allows. Where a game pixel is several real pixels
+	// wide (a high-resolution screen), it may also be a whole number and a
+	// half: the pixels then alternate by one real pixel, too little to see,
+	// and there is room for levels between the whole sizes.
 	device: f32 = 1e9
 	for level in 0 ..= pixel_level {
-		device = max(1, min(math.round(rh / PIXEL_ROWS[level]), device - 1))
+		want := rh / PIXEL_ROWS[level]
+		size := math.round(want)
+		step: f32 = 1
+		if want >= 3.5 {
+			size = math.round(want * 2) / 2
+			step = 0.5
+		}
+		device = max(1, min(size, device - step))
 	}
 	v.scale = device * sh / rh // screen points per game pixel
 	inner_w := i32(math.ceil(rw / device))

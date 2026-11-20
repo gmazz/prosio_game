@@ -172,7 +172,7 @@ MENU_TEXT := [Menu_Item]cstring {
 }
 
 look_text :: proc() -> cstring {
-	return ui_format("PIXELS: %d / 5", i32(pixel_level + 1))
+	return ui_format("PIXELS: %d / 6", i32(pixel_level + 1))
 }
 
 MENU_MAIN := [?]Menu_Item{.Play, .Look, .Quit}
@@ -220,7 +220,7 @@ draw_menu :: proc() {
 		y += 64 * s
 	}
 
-	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE     Pixel size any time: 1 to 5", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
+	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE     Pixel size any time: 1 to 6", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
 	if scene == .Menu {
 		// While paused, the game's own controls line is already showing.
 		label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Eat / push-ups: E", sw / 2, sh - 70 * s, 20 * s)

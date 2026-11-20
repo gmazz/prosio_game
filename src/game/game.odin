@@ -17,7 +17,7 @@ Options :: struct {
 	release_at: int, // stop holding the --hold buttons on this frame
 	menu:       bool, // start on the menu even in a test run
 	crowd:      bool, // put a few animals round Prosio at the start
-	detail:     int, // 1 to 5: pixel density to start with (0 = default)
+	detail:     int, // 1 to 6: pixel density to start with (0 = default)
 }
 
 Game :: struct {
@@ -183,7 +183,7 @@ frame :: proc() {
 		}
 	}
 
-	// The pixel size can be changed at any time with the keys 1 to 5.
+	// The pixel size can be changed at any time with the keys 1 to 6.
 	if level := level_key_pressed(); level > 0 {
 		pixel_level = level - 1
 	}

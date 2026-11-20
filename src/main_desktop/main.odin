@@ -22,7 +22,7 @@ main :: proc() {
 	//   --tap2-at 90      ...on this frame
 	//   --menu            show the menu instead of starting the game
 	//   --crowd           put three foxes and a boar round Prosio at the start
-	//   --detail 3        pixel size: 1 chunkiest ... 5 finest (default 3)
+	//   --detail 4        pixel size: 1 chunkiest ... 6 finest (default 4)
 	opts: game.Options
 	args := os.args
 	for i := 1; i < len(args); i += 1 {

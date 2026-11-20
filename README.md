@@ -38,7 +38,7 @@ The goal is to collect all five golden truffles. Each one sits behind a puzzle t
 | Push-ups (anywhere else) | hold `E` or `K` |
 | Pause menu | `Esc` or `P` |
 | Try again after fainting | `Enter` or `R` |
-| Pixel size | `1` (chunkiest) to `5` (finest), any time, or from the menus |
+| Pixel size | `1` (chunkiest) to `6` (finest), any time, or from the menus |
 | Menus | up / down to choose, `Enter` or `Space` to select |
 
 There is no gamepad or touch support yet.
@@ -317,7 +317,7 @@ A few choices shape the rest:
 - **Bodies** are built from those shapes. Arms and legs are tapered segments (thigh, shin, upper arm, forearm) that narrow towards the hooves, with round joints between; Prosio's shorts sit high over two small buttocks, so his legs show below them, and his arms are plump with a round biceps. He is built short and stocky: short legs, a compact body and a big head. When he eats, it is his belly that grows, forwards and sideways; his bottom hardly changes. Swapping raylib for another library would mean rewriting `platform.odin` only.
 - **No memory allocation in the game.** Everything lives in one `Game` struct of fixed-size arrays, which is also why the web build needs no allocator.
 - **Physics on the ground plane, plus height.** Positions are 2D; things that jump or fly also have a height and a vertical speed. Physics runs in fixed steps of at most 1/120 of a second.
-- **Pixel art from 3D.** The scene is lit by a warm, low sun in four flat tones (deep shade, shade, light and a sunlit highlight, with dithered edges between them): cool violet shadows, warm highlights, a touch of blue skylight on anything facing up, darkening where things meet the ground, and broad soft patches of sunlight on the grass. A limited palette, dithered ground and one-pixel outlines finish it. Everything is drawn into a small image that is enlarged without smoothing. There are five pixel sizes (keys `1` to `5`), aiming at about 180, 240, 320 (the default), 420 and 560 rows of pixels. Each game pixel is a whole number of real screen pixels, so the actual count is the nearest that fits the window, and each level is kept at least one step finer than the one below it as far as the window allows (on a small window the finest levels can end up the same). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
+- **Pixel art from 3D.** The scene is lit by a warm, low sun in four flat tones (deep shade, shade, light and a sunlit highlight, with dithered edges between them): cool violet shadows, warm highlights, a touch of blue skylight on anything facing up, darkening where things meet the ground, and broad soft patches of sunlight on the grass. A limited palette, dithered ground and one-pixel outlines finish it. Everything is drawn into a small image that is enlarged without smoothing. There are six pixel sizes (keys `1` to `6`), aiming at about 180, 240, 320, 360 (the default), 420 and 560 rows of pixels. Each game pixel is a whole number of real screen pixels (on a high-resolution screen it can also be a whole number and a half, which is what makes room for the level between 320 and 420), so the actual count is the nearest that fits the window, and each level is kept at least one step finer than the one below it as far as the window allows (on a small window the finest levels can end up the same). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
 - **Surface detail is calculated, not painted:** grass tones and the footpath, leaf clumps, bark grain and moss are all noise in the shader. Leaves sway in the wind.
 - **Trees** are tall and slim: a trunk plus clusters of round leafy lumps that are darker underneath, in four species (broadleaf, apple, blossom, pine). About a hundred stand in the meadow, many of them in nine little woods of six to ten trees with bushes round their edges. A tree standing between the camera and Prosio fades to a see-through pattern where it covers him.
 - **Only what is near the camera is drawn.**
@@ -339,7 +339,7 @@ The desktop build takes options that script a run, save a picture and quit. They
 | `--frame 150` | which frame to take the picture on |
 | `--menu` | show the menu instead of starting the game |
 | `--crowd` | put three foxes and a boar round Prosio at the start, for trying the club |
-| `--detail 3` | pixel size: 1 chunkiest to 5 finest (default 3) |
+| `--detail 4` | pixel size: 1 chunkiest to 6 finest (default 4) |
 
 Button letters: `l r u d` to move, `b` bump, `j` jump, `s` sprint, `a` eat or push-ups, `g` grab or throw.
 
