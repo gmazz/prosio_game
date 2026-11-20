@@ -41,7 +41,6 @@ Button :: enum {
 	Restart,
 	Menu,
 	Confirm,
-	Look,
 }
 
 // Up to three keys per button.
@@ -59,41 +58,35 @@ KEYS := [Button][3]rl.KeyboardKey {
 	.Restart = {.ENTER, .R, .KEY_NULL},
 	.Menu    = {.ESCAPE, .P, .KEY_NULL},
 	.Confirm = {.ENTER, .SPACE, .KP_ENTER},
-	.Look    = {.V, .F1, .KEY_NULL},
 }
 
-// The two looks being compared. Both draw the same 3D scene:
-//   Toy    soft clay-like shading straight to the screen, no outlines.
-//   Pixel  hard cartoon shading with outlines, drawn into a small image that is
-//          then enlarged without smoothing, so it comes out as crisp pixels.
-Look :: enum i32 {
-	Toy,
-	Pixel,
-}
-look: Look = .Pixel
+// The world is drawn into a small image, which is then enlarged without
+// smoothing, so it comes out as crisp pixels.
+//
+// How fine the pixels are: five levels, picked with the number keys 1 to 5.
+// Each is about this many rows of pixels from top to bottom. Each game pixel
+// is a whole number of real screen pixels, so the actual count is the nearest
+// that fits the window.
+PIXEL_LEVELS :: 5
+PIXEL_ROWS := [PIXEL_LEVELS]f32{180, 240, 320, 420, 560}
+pixel_level := 2 // 0 to PIXEL_LEVELS - 1
 
-LOOK_NAMES := [Look]cstring {
-	.Toy   = "TOY",
-	.Pixel = "PIXEL",
+// The number key (1 to PIXEL_LEVELS) pressed this frame, or 0.
+level_key_pressed :: proc() -> int {
+	if !keyboard_enabled {
+		return 0
+	}
+	KEYS_1_TO_5 := [PIXEL_LEVELS]rl.KeyboardKey{.ONE, .TWO, .THREE, .FOUR, .FIVE}
+	PAD_1_TO_5 := [PIXEL_LEVELS]rl.KeyboardKey{.KP_1, .KP_2, .KP_3, .KP_4, .KP_5}
+	for i in 0 ..< PIXEL_LEVELS {
+		if rl.IsKeyPressed(KEYS_1_TO_5[i]) || rl.IsKeyPressed(PAD_1_TO_5[i]) {
+			return i + 1
+		}
+	}
+	return 0
 }
 
-// How fine the Pixel look is: about how many rows of pixels it has from top
-// to bottom. Each game pixel is a whole number of real screen pixels, so the
-// actual count is the nearest that fits the window.
-Pixel_Detail :: enum {
-	Chunky,
-	Medium,
-	Fine,
-}
-PIXEL_ROWS := [Pixel_Detail]f32 {
-	.Chunky = 240,
-	.Medium = 360,
-	.Fine   = 480,
-}
-pixel_detail := Pixel_Detail.Medium
-
-// Dark cartoon outlines around solid shapes. Their width is set each frame
-// by the look: none for Toy, about one pixel for Pixel.
+// Dark cartoon outlines around solid shapes, about one pixel wide.
 OUTLINE_COLOR :: Color{52, 40, 44, 255}
 outline_width: f32
 outlines_enabled := true
@@ -105,7 +98,7 @@ material: rl.Material
 @(private = "file")
 camera: rl.Camera3D
 
-// The Pixel look draws the world into this small image first.
+// The world is drawn into this small image first.
 @(private = "file")
 pixel_view: struct {
 	target:     rl.RenderTexture2D,
@@ -135,7 +128,7 @@ flash_location: i32
 surface_location: i32
 @(private = "file")
 uniforms: struct {
-	look, view, fade, wind_time, sway: i32,
+	fade, wind_time, sway: i32,
 }
 active_surface: Surface
 set_surface :: proc(surface: Surface) {
@@ -190,8 +183,6 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	material.shader = rl.LoadShaderFromMemory(cstring(raw_data(VERTEX_SHADER)), cstring(raw_data(FRAGMENT_SHADER)))
 	surface_location = rl.GetShaderLocation(material.shader, "surface")
 	flash_location = rl.GetShaderLocation(material.shader, "hitFlash")
-	uniforms.look = rl.GetShaderLocation(material.shader, "look")
-	uniforms.view = rl.GetShaderLocation(material.shader, "viewPos")
 	uniforms.fade = rl.GetShaderLocation(material.shader, "fade")
 	uniforms.wind_time = rl.GetShaderLocation(material.shader, "windTime")
 	uniforms.sway = rl.GetShaderLocation(material.shader, "sway")
@@ -292,32 +283,24 @@ end_frame :: proc() {
 }
 
 begin_world :: proc(eye, target: Vec3, fov_y: f32, time: f32) {
-	eye, target, fov_y := eye, target, fov_y
-	outline_width = 0
-	if look == .Pixel {
-		eye, target, fov_y = begin_pixel_view(eye, target, fov_y)
-	}
+	snapped_eye, snapped_target, wide_fov := begin_pixel_view(eye, target, fov_y)
 	camera = rl.Camera3D {
-		position   = eye,
-		target     = target,
+		position   = snapped_eye,
+		target     = snapped_target,
 		up         = {0, 1, 0},
-		fovy       = fov_y,
+		fovy       = wide_fov,
 		projection = .PERSPECTIVE,
 	}
 	rl.BeginMode3D(camera)
 
-	look_value := look
-	view := eye
 	wind := time
 	no_fade: f32 = 0
-	rl.SetShaderValue(material.shader, uniforms.look, &look_value, .INT)
-	rl.SetShaderValue(material.shader, uniforms.view, &view, .VEC3)
 	rl.SetShaderValue(material.shader, uniforms.wind_time, &wind, .FLOAT)
 	rl.SetShaderValue(material.shader, uniforms.fade, &no_fade, .FLOAT)
 	rl.SetShaderValue(material.shader, uniforms.sway, &no_fade, .FLOAT)
 }
 
-// Sets up the small image for the Pixel look, and returns the camera to draw
+// Sets up the small image, and returns the camera to draw
 // it with.
 //
 // The camera is snapped to whole pixels of the image, so that the scenery
@@ -330,7 +313,12 @@ begin_pixel_view :: proc(eye, target: Vec3, fov_y: f32) -> (Vec3, Vec3, f32) {
 	// them than layout points, which allows finer steps between densities.
 	_, sh := screen_size()
 	rw, rh := f32(rl.GetRenderWidth()), f32(rl.GetRenderHeight())
-	device := max(1, math.round(rh / PIXEL_ROWS[pixel_detail]))
+	// Every level gets its own pixel size, coarser than the level above it,
+	// as far as the window allows.
+	device: f32 = 1e9
+	for level in 0 ..= pixel_level {
+		device = max(1, min(math.round(rh / PIXEL_ROWS[level]), device - 1))
+	}
 	v.scale = device * sh / rh // screen points per game pixel
 	inner_w := i32(math.ceil(rw / device))
 	inner_h := i32(math.ceil(rh / device))
@@ -366,14 +354,12 @@ begin_pixel_view :: proc(eye, target: Vec3, fov_y: f32) -> (Vec3, Vec3, f32) {
 
 end_world :: proc() {
 	rl.EndMode3D()
-	if look == .Pixel {
-		v := &pixel_view
-		rl.EndTextureMode()
-		edge := -PIXEL_MARGIN * v.scale
-		source := rl.Rectangle{0, 0, f32(v.width), -f32(v.height)}
-		dest := rl.Rectangle{edge + v.offset.x, edge + v.offset.y, f32(v.width) * v.scale, f32(v.height) * v.scale}
-		rl.DrawTexturePro(v.target.texture, source, dest, {}, 0, rl.WHITE)
-	}
+	v := &pixel_view
+	rl.EndTextureMode()
+	edge := -PIXEL_MARGIN * v.scale
+	source := rl.Rectangle{0, 0, f32(v.width), -f32(v.height)}
+	dest := rl.Rectangle{edge + v.offset.x, edge + v.offset.y, f32(v.width) * v.scale, f32(v.height) * v.scale}
+	rl.DrawTexturePro(v.target.texture, source, dest, {}, 0, rl.WHITE)
 }
 
 draw_shape :: proc(shape: Shape, transform: Mat4, color: Color) {
@@ -427,9 +413,6 @@ draw_outline :: proc(shape: Shape, m: Mat4) {
 }
 
 world_to_screen :: proc(pos: Vec3) -> Vec2 {
-	if look != .Pixel {
-		return rl.GetWorldToScreen(pos, camera)
-	}
 	v := &pixel_view
 	p := rl.GetWorldToScreenEx(pos, camera, v.width, v.height)
 	edge := -PIXEL_MARGIN * v.scale

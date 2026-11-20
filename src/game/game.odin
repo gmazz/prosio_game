@@ -16,9 +16,8 @@ Options :: struct {
 	tap2_frame: int,
 	release_at: int, // stop holding the --hold buttons on this frame
 	menu:       bool, // start on the menu even in a test run
-	toy:        bool, // start in the Toy look
 	crowd:      bool, // put a few animals round Prosio at the start
-	detail:     int, // 1, 2 or 3: pixel density to start with (0 = default)
+	detail:     int, // 1 to 5: pixel density to start with (0 = default)
 }
 
 Game :: struct {
@@ -81,11 +80,8 @@ init :: proc(opts: Options) {
 	platform_init("Prosio", 1280, 720)
 	g.opts = opts
 	keyboard_enabled = opts.shot_path == nil
-	if opts.toy {
-		look = .Toy
-	}
 	if opts.detail > 0 {
-		pixel_detail = Pixel_Detail(clamp(opts.detail - 1, 0, 2))
+		pixel_level = clamp(opts.detail - 1, 0, PIXEL_LEVELS - 1)
 	}
 	new_game()
 	// Test runs go straight into the game.
@@ -138,7 +134,7 @@ update_menu :: proc() {
 	}
 	choice := menu_items()[menu_choice]
 	if choice == .Look {
-		toggle_look() // stays on the menu
+		pixel_level = (pixel_level + 1) % PIXEL_LEVELS // stays on the menu
 		return
 	}
 	menu_choice = 0
@@ -154,19 +150,6 @@ update_menu :: proc() {
 	case .Quit:
 		g.quit = true
 	case .Look:
-	}
-}
-
-// Cycles Toy, then the Pixel look from chunky to fine, then back to Toy.
-toggle_look :: proc() {
-	switch {
-	case look == .Toy:
-		look = .Pixel
-		pixel_detail = .Chunky
-	case pixel_detail == .Fine:
-		look = .Toy
-	case:
-		pixel_detail = Pixel_Detail(int(pixel_detail) + 1)
 	}
 }
 
@@ -200,9 +183,9 @@ frame :: proc() {
 		}
 	}
 
-	// The look can be switched at any time.
-	if button_pressed(.Look) {
-		toggle_look()
+	// The pixel size can be changed at any time with the keys 1 to 5.
+	if level := level_key_pressed(); level > 0 {
+		pixel_level = level - 1
 	}
 
 	switch scene {
@@ -270,7 +253,6 @@ frame :: proc() {
 	}
 	draw_prosio()
 	draw_grab()
-	draw_snatch_aim()
 	draw_particles()
 	end_world()
 	if scene == .Menu {

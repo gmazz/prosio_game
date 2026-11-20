@@ -22,8 +22,7 @@ main :: proc() {
 	//   --tap2-at 90      ...on this frame
 	//   --menu            show the menu instead of starting the game
 	//   --crowd           put three foxes and a boar round Prosio at the start
-	//   --toy             start in the Toy look (the default is Pixel)
-	//   --detail 3        pixel density: 1 chunky, 2 medium (default), 3 fine
+	//   --detail 3        pixel size: 1 chunkiest ... 5 finest (default 3)
 	opts: game.Options
 	args := os.args
 	for i := 1; i < len(args); i += 1 {
@@ -70,8 +69,6 @@ main :: proc() {
 				opts.tap2_frame, _ = strconv.parse_int(args[i + 1])
 				i += 1
 			}
-		case "--toy":
-			opts.toy = true
 		case "--detail":
 			if i + 1 < len(args) {
 				opts.detail, _ = strconv.parse_int(args[i + 1])

@@ -1,6 +1,7 @@
 package game
 
 import "core:math"
+import "core:math/linalg"
 
 // Everything is drawn from a handful of simple shapes placed with matrices.
 
@@ -347,8 +348,8 @@ tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
 	him := world_to_screen({p.pos.x, p.height + 1, p.pos.y})
 	apart := length2(crown - him)
 	cover := 1 - smooth((apart - reach * 0.75) / (reach * 0.5 + 1))
-	// The Pixel look shows the leftover leaves as single pixels, so it fades further.
-	strength: f32 = look == .Pixel ? 0.86 : 0.72
+	// The leftover leaves show as single pixels, so it fades a long way.
+	strength: f32 = 0.86
 	return strength * cover * smooth((pos.y - p.pos.y + 0.5) / 1.0)
 }
 
@@ -524,12 +525,36 @@ draw_truffle :: proc(t: Truffle) {
 	}
 }
 
-// Little stars circling a dizzy head.
-draw_stars :: proc(centre: Vec3, radius: f32) {
-	for i in 0 ..< 3 {
-		a := g.time * 5 + f32(i) * math.TAU / 3
-		ball(IDENTITY, centre + {math.cos(a) * radius, math.sin(a * 2) * 0.05, math.sin(a) * radius}, {0.09, 0.09, 0.09}, COLOR_STAR)
+// A few little stars circling a dizzy head, each its own size, height and
+// pace. seed keeps them the same from frame to frame.
+draw_stars :: proc(centre: Vec3, radius: f32, seed: f32) {
+	count := 2 + int(hash01(seed) * 3)
+	for i in 0 ..< count {
+		k := seed * 7.31 + f32(i) * 3.17
+		pace := lerp(3, 6, hash01(k)) * (hash01(k + 1) < 0.3 ? -1 : 1)
+		a := g.time * pace + hash01(k + 2) * math.TAU
+		orbit := radius * lerp(0.55, 1.1, hash01(k + 3))
+		rise := (hash01(k + 4) - 0.5) * 0.18 + math.sin(g.time * lerp(4, 8, hash01(k + 5)) + k) * 0.04
+		size := lerp(0.035, 0.065, hash01(k + 6))
+		ball(IDENTITY, centre + {math.cos(a) * orbit, rise, math.sin(a) * orbit}, {size, size, size}, hash01(k + 7) < 0.2 ? COLOR_WHITE : COLOR_STAR)
 	}
+}
+
+// A steady random number from 0 to 1 for any seed.
+hash01 :: proc(n: f32) -> f32 {
+	x := math.sin(n * 12.9898 + 78.233) * 43758.5453
+	return x - math.floor(x)
+}
+
+// How an animal's body is placed. Standing, both halves of its body share
+// one frame; held by the tail, the back and the front halves hang between
+// the points of its floppy chain, and its legs dangle.
+Animal_Pose :: struct {
+	rear, front: Mat4,
+	legs:        [2][2]Vec2, // [side][hind, front]: how far each leg turns forward (x) and outward (y)
+	held:        bool, // its tail runs to Prosio's hand
+	hand:        Vec3,
+	dizzy:       bool,
 }
 
 // Animal models share the same metre-independent frame (+Z is the muzzle).
@@ -539,33 +564,112 @@ draw_enemy :: proc(e: Enemy) {
 		return
 	}
 	r := ENEMY_RADIUS[e.kind]
-	boar := e.kind == .Boar
-	pace := e.state == .Chase ? min(length2(e.vel) / ENEMY_SPEED[e.kind], 1) : f32(0)
-	held := e.state == .Held
-	swung := held && g.prosio.snatching
-	stride := math.sin(e.hop) * pace
-	bob := abs(stride) * 0.07
-	m := translate({e.pos.x, e.y, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
-	switch e.state {
-	case .Flying:
-		m = m * translate({0, 0.9, 0}) * rot_x(e.spin) * translate({0, -0.9, 0})
-	case .Held:
-		// Hanging by its tail from Prosio's hands, wriggling.
-		held_e := e
-		m = held_matrix(&held_e) * rot_z(0.06 * math.sin(g.time * 18))
-	case .Dizzy:
-		m = m * rot_z(0.10 * math.sin(g.time * 6))
-	case .Chase, .Gone:
-	}
-	body := m * translate({0, bob, 0})
-	if boar {
-		draw_boar(body, e, stride, held, swung)
+	pose := Animal_Pose{dizzy = e.state == .Dizzy || e.limp > 0 || e.ko}
+	if e.state == .Held {
+		pose = held_pose(e)
 	} else {
-		draw_fox(body, e, stride, held, swung)
+		pace := e.state == .Chase ? min(length2(e.vel) / ENEMY_SPEED[e.kind], 1) : f32(0)
+		stride := math.sin(e.hop) * pace
+		bob := abs(stride) * 0.07
+		m := translate({e.pos.x, e.y, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
+		#partial switch e.state {
+		case .Flying:
+			m = m * translate({0, 0.9, 0}) * rot_x(e.spin) * translate({0, -0.9, 0})
+		case .Dizzy:
+			m = m * rot_z(0.10 * math.sin(g.time * 6))
+		}
+		body := m * translate({0, bob, 0})
+		pose.rear, pose.front = body, body
+		for si in 0 ..< 2 {
+			side := f32(si * 2 - 1)
+			for ei in 0 ..< 2 {
+				end := f32(ei * 2 - 1)
+				pose.legs[si][ei] = {side * end * stride * 0.52, 0}
+			}
+		}
 	}
-	if e.state == .Dizzy {
-		draw_stars({e.pos.x, e.y + r * 2.55, e.pos.y}, r * 0.8)
+	if e.kind == .Boar {
+		draw_boar(pose, e)
+	} else {
+		draw_fox(pose, e)
 	}
+	if e.state == .Dizzy || (e.state == .Held && (e.limp > 0 || e.ko)) {
+		head := pose.front * [4]f32{0, 2.3, 0.6, 1}
+		draw_stars(head.xyz, r * 0.75, e.home.x * 1.7 + e.home.y)
+	}
+}
+
+// The frame that carries one half of a held animal's body: the model point a
+// goes to the world point wa, the model direction from a to b points from wa
+// to wb, and the model's side (x) lies as close to side as it can.
+frame_between :: proc(a, b, wa, wb, side: Vec3, r: f32) -> Mat4 {
+	mz := linalg.normalize(b - a)
+	mx := Vec3{1, 0, 0} // the chain lies in the model's middle plane, so x is square to it
+	my := linalg.cross(mz, mx)
+	wz := linalg.normalize0(wb - wa)
+	if wz == {} {
+		wz = mz
+	}
+	wx := side - wz * linalg.dot(side, wz)
+	if linalg.length(wx) < 1e-3 {
+		wx = linalg.cross(Vec3{0, 1, 0}, wz)
+		if linalg.length(wx) < 1e-3 {
+			wx = {1, 0, 0}
+		}
+	}
+	wx = linalg.normalize(wx)
+	wy := linalg.cross(wz, wx)
+	turn := IDENTITY
+	for i in 0 ..< 3 {
+		for j in 0 ..< 3 {
+			turn[i, j] = wx[i] * mx[j] + wy[i] * my[j] + wz[i] * mz[j]
+		}
+	}
+	return translate(wa) * turn * scale({r, r, r}) * translate(-a)
+}
+
+// The turns that point a leg, which hangs down its frame's -y at rest, along
+// the world direction d.
+leg_towards :: proc(frame: Mat4, d: Vec3) -> Vec2 {
+	ex := linalg.normalize(Vec3{frame[0, 0], frame[1, 0], frame[2, 0]})
+	ey := linalg.normalize(Vec3{frame[0, 1], frame[1, 1], frame[2, 1]})
+	ez := linalg.normalize(Vec3{frame[0, 2], frame[1, 2], frame[2, 2]})
+	local := Vec3{linalg.dot(d, ex), linalg.dot(d, ey), linalg.dot(d, ez)}
+	forward := math.asin(clamp(-local.z, -1, 1))
+	outward := math.atan2(local.x, -local.y)
+	return {clamp(forward, -1.4, 1.4), clamp(outward, -0.9, 0.9)}
+}
+
+held_pose :: proc(e: Enemy) -> (pose: Animal_Pose) {
+	r := ENEMY_RADIUS[e.kind]
+	c := CHAIN_MODEL[e.kind]
+	pose.rear = frame_between(c[1], c[0], e.chain[1], e.chain[0], e.side, r)
+	pose.front = frame_between(c[1], c[2], e.chain[1], e.chain[2], e.side, r)
+	pose.held = true
+	pose.hand = e.chain[0]
+	pose.dizzy = e.limp > 0 || e.ko
+	alive := !pose.dizzy
+	ground, _ := ground_at(e.chain[1].xz)
+	on_feet := alive && e.chain[1].y < ground + r * c[1].y + 0.05
+	for si in 0 ..< 2 {
+		side := f32(si * 2 - 1)
+		for ei in 0 ..< 2 {
+			end := f32(ei * 2 - 1)
+			if on_feet {
+				// Scrabbling to get away.
+				pose.legs[si][ei] = {side * end * math.sin(e.hop) * 0.6, 0}
+				continue
+			}
+			frame := ei == 0 ? pose.rear : pose.front
+			hang := leg_towards(frame, e.dangle[ei])
+			// Alive, it kicks wildly in the air; limp, only a twitch.
+			kick: f32 = alive ? 0.5 : 0.06
+			hang.x += kick * math.sin(e.hop * 1.3 + side * 1.7 + end)
+			hang.y += side * (alive ? f32(0.25) : 0.1)
+			pose.legs[si][ei] = hang
+		}
+	}
+	return
 }
 
 FOX_COAT :: Color{212, 116, 55, 255}
@@ -573,23 +677,16 @@ FOX_FEET :: Color{84, 60, 52, 255}
 ANIMAL_CREAM :: Color{248, 222, 178, 255}
 ANIMAL_INK :: Color{58, 47, 48, 255}
 
-// How far an animal's leg is swung: trotting, or, when held by the tail,
-// front paws braced and scrabbling while the hind legs dangle.
-leg_swing :: proc(e: Enemy, side, end, stride: f32, held, swung: bool) -> f32 {
-	if !held {
-		return side * end * stride * 0.52
-	}
-	if end > 0 {
-		return -e.tilt - 0.45 + (swung ? -0.6 : 0.22 * math.sin(e.hop * 1.3 + side))
-	}
-	return -e.tilt + 0.35 + 0.08 * math.sin(e.hop + side) + (swung ? 0.9 : 0)
-}
-
-draw_fox :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
+draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
 	coat, feet, cream, ink := FOX_COAT, FOX_FEET, ANIMAL_CREAM, ANIMAL_INK
-	for side in ([2]f32{-1, 1}) {
-		for end in ([2]f32{-1, 1}) {
-			leg := body * translate({side * 0.34, 0.77, end * 0.59}) * rot_x(leg_swing(e, side, end, stride, held, swung))
+	r := ENEMY_RADIUS[e.kind]
+	for si in 0 ..< 2 {
+		side := f32(si * 2 - 1)
+		for ei in 0 ..< 2 {
+			end := f32(ei * 2 - 1)
+			turn := pose.legs[si][ei]
+			frame := end < 0 ? pose.rear : pose.front
+			leg := frame * translate({side * 0.34, 0.77, end * 0.59}) * rot_z(turn.y) * rot_x(turn.x)
 			knee := Vec3{0, -0.35, end < 0 ? -0.10 : 0.05}
 			paw := Vec3{0, -0.69, 0.04}
 			taper(leg, {0, 0.05, 0}, knee, 0.2, coat)
@@ -597,14 +694,28 @@ draw_fox :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
 			ball(leg, paw + {0, 0, 0.035}, {0.12, 0.105, 0.16}, feet)
 		}
 	}
-	ball(body, {0, 0.97, -0.10}, {0.51, 0.53, 0.92}, coat)
-	limb(body, {0, 1.07, 0.36}, {0, 1.47, 0.64}, 0.40, cream)
-	wag: f32 = held ? 0 : 0.39 + 0.20 * math.sin(e.hop * 0.52) // a held tail is straight
-	tail := body * translate({0, 1.04, -0.75}) * rot_y(wag)
-	limb(tail, {0, 0, 0.07}, {0, 0.30, -1.12}, 0.305, coat)
-	limb(tail, {0, 0.26, -0.87}, {0, 0.53, -1.43}, 0.20, cream)
+	// The body in three overlapping parts, so it can bend in the middle.
+	ball(pose.rear, {0, 0.97, -0.45}, {0.51, 0.53, 0.6}, coat)
+	ball(pose.rear, {0, 0.98, -0.07}, {0.5, 0.52, 0.45}, coat)
+	ball(pose.front, {0, 0.99, 0.27}, {0.5, 0.52, 0.56}, coat)
+	limb(pose.front, {0, 1.07, 0.36}, {0, 1.47, 0.64}, 0.40, cream)
+	if pose.held {
+		// The bushy tail runs straight to Prosio's hoof.
+		root := pose.rear * [4]f32{TAIL_ROOT[.Fox].x, TAIL_ROOT[.Fox].y, TAIL_ROOT[.Fox].z, 1}
+		mid := root.xyz + (pose.hand - root.xyz) * 0.6
+		limb(IDENTITY, root.xyz, pose.hand + (root.xyz - pose.hand) * 0.25, 0.305 * r, coat)
+		limb(IDENTITY, mid, pose.hand, 0.2 * r, cream)
+	} else {
+		wag: f32 = 0.39 + 0.20 * math.sin(e.hop * 0.52)
+		tail := pose.rear * translate({0, 1.04, -0.75}) * rot_y(wag)
+		limb(tail, {0, 0, 0.07}, {0, 0.30, -1.12}, 0.305, coat)
+		limb(tail, {0, 0.26, -0.87}, {0, 0.53, -1.43}, 0.20, cream)
+	}
 
-	h := body * translate({0, 1.51, 0.65}) * scale({1.12, 1.12, 1.12}) // a big head is a cute head
+	h := pose.front * translate({0, 1.51, 0.65}) * scale({1.12, 1.12, 1.12}) // a big head is a cute head
+	if pose.held && !pose.dizzy {
+		h = h * rot_y(0.3 * math.sin(e.hop * 0.7)) // looking wildly about
+	}
 	ball(h, {0, 0, 0}, {0.51, 0.44, 0.47}, coat)
 	ball(h, {0, -0.15, 0.31}, {0.36, 0.21, 0.35}, cream)
 	ball(h, {0, -0.10, 0.58}, {0.19, 0.15, 0.22}, coat)
@@ -615,7 +726,7 @@ draw_fox :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
 		draw_shape(.Cone, ear * translate({0, 0.059, 0.106}) * scale({0.139, 0.44, 0.077}), ink)
 		patch := h * translate({side * 0.32, -0.085, 0.265}) * rot_z(side * 0.32)
 		ball(patch, {}, {0.23, 0.16, 0.18}, cream)
-		draw_cute_eye(h * translate({side * 0.24, 0.07, 0.36}) * rot_y(side * 0.45), 0.13, e.state == .Dizzy)
+		draw_cute_eye(h * translate({side * 0.24, 0.07, 0.36}) * rot_y(side * 0.45), 0.13, pose.dizzy)
 		ball(h, {side * 0.3, -0.12, 0.31}, {0.085, 0.045, 0.035}, ANIMAL_BLUSH)
 	}
 	draw_smile(h * translate({0, -0.2, 0.62}), 0.06)
@@ -663,12 +774,16 @@ boar_back :: proc(z: f32) -> f32 {
 
 // A wild boar: a heavy front with a hump of shoulders over thin legs, small
 // hindquarters, a crest of bristles, and a long snout with tusks.
-draw_boar :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
+draw_boar :: proc(pose: Animal_Pose, e: Enemy) {
 	coat, dark, ink := BOAR_COAT, BOAR_DARK, ANIMAL_INK
-	for side in ([2]f32{-1, 1}) {
-		for end in ([2]f32{-1, 1}) {
+	r := ENEMY_RADIUS[e.kind]
+	for si in 0 ..< 2 {
+		side := f32(si * 2 - 1)
+		for ei in 0 ..< 2 {
+			end := f32(ei * 2 - 1)
+			turn := pose.legs[si][ei]
 			// Thick at the body, slim down to a small cloven hoof.
-			leg := body * translate({side * 0.4, 0.8, end * 0.6}) * rot_x(leg_swing(e, side, end, stride, held, swung))
+			leg := (end < 0 ? pose.rear : pose.front) * translate({side * 0.4, 0.8, end * 0.6}) * rot_z(turn.y) * rot_x(turn.x)
 			knee := Vec3{0, -0.36, end < 0 ? -0.09 : 0.06}
 			ankle := Vec3{0, -0.67, 0.02}
 			taper(leg, {0, 0.14, 0}, knee, 0.27, coat)
@@ -681,23 +796,30 @@ draw_boar :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
 	}
 
 	// Torso: haunches, barrel and a hump of shoulders, with a paler belly.
-	ball(body, {0, 1.02, -0.55}, {0.52, 0.55, 0.62}, coat)
-	ball(body, {0, 1.08, 0.0}, {0.62, 0.66, 0.78}, coat)
-	ball(body, {0, 1.28, 0.42}, {0.64, 0.72, 0.6}, coat)
-	ball(body, {0, 0.86, 0.05}, {0.46, 0.3, 0.72}, BOAR_BELLY)
+	ball(pose.rear, {0, 1.02, -0.55}, {0.52, 0.55, 0.62}, coat)
+	ball(pose.rear, {0, 1.08, -0.15}, {0.62, 0.66, 0.6}, coat)
+	ball(pose.front, {0, 1.1, 0.1}, {0.62, 0.66, 0.5}, coat)
+	ball(pose.front, {0, 1.28, 0.42}, {0.64, 0.72, 0.6}, coat)
+	ball(pose.rear, {0, 0.86, -0.15}, {0.46, 0.3, 0.55}, BOAR_BELLY)
+	ball(pose.front, {0, 0.88, 0.2}, {0.44, 0.3, 0.45}, BOAR_BELLY)
 	// A crest of stiff bristles along the spine, tallest over the shoulders.
 	for i in 0 ..< 9 {
 		z := 0.85 - f32(i) * 0.2
 		tall := 0.34 - abs(z - 0.35) * 0.18
-		tuft := body * translate({0, boar_back(z) - 0.08, z}) * rot_x(-0.55)
+		tuft := (z < -0.1 ? pose.rear : pose.front) * translate({0, boar_back(z) - 0.08, z}) * rot_x(-0.55)
 		cone(tuft, {}, 0.1, tall, dark)
 	}
 	// A thin tail ending in a tuft.
-	limb(body, {0, 1.4, -1.07}, {0.04, 0.95, -1.3}, 0.05, coat)
-	ball(body, {0.05, 0.8, -1.32}, {0.08, 0.15, 0.075}, dark)
+	if pose.held {
+		root := pose.rear * [4]f32{TAIL_ROOT[.Boar].x, TAIL_ROOT[.Boar].y, TAIL_ROOT[.Boar].z, 1}
+		limb(IDENTITY, root.xyz, pose.hand, 0.05 * r, coat)
+	} else {
+		limb(pose.rear, {0, 1.4, -1.07}, {0.04, 0.95, -1.3}, 0.05, coat)
+		ball(pose.rear, {0.05, 0.8, -1.32}, {0.08, 0.15, 0.075}, dark)
+	}
 
 	// Head held low, with a long snout ending in a flat disc of a nose.
-	h := body * translate({0, 1.22, 0.98}) * rot_x(0.22) * scale({1.15, 1.15, 1.15}) // a big head is a cute head
+	h := pose.front * translate({0, 1.22, 0.98}) * rot_x(0.22) * scale({1.15, 1.15, 1.15}) // a big head is a cute head
 	ball(h, {0, 0, 0}, {0.44, 0.48, 0.5}, coat)
 	taper(h, {0, -0.06, 0.2}, {0, -0.18, 0.86}, 0.34, coat)
 	nose := h * translate({0, -0.19, 0.84}) * rot_x(math.PI / 2)
@@ -716,10 +838,10 @@ draw_boar :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
 		ball(h, {side * 0.32, -0.1, 0.34}, {0.1, 0.055, 0.045}, ANIMAL_BLUSH)
 		// A pale rim round each eye makes them stand out on the dark face.
 		eye := h * translate({side * 0.21, 0.1, 0.42}) * rot_y(side * 0.45)
-		if e.state != .Dizzy {
+		if !pose.dizzy {
 			ball(eye, {0, 0, -0.02}, {0.15, 0.17, 0.08}, BOAR_SNOUT)
 		}
-		draw_cute_eye(eye, 0.15, e.state == .Dizzy)
+		draw_cute_eye(eye, 0.15, pose.dizzy)
 		brow := h * translate({side * 0.21, 0.3, 0.43}) * rot_z(side * 0.3)
 		box(brow, {}, {0.14, 0.035, 0.05}, dark)
 	}
@@ -727,9 +849,10 @@ draw_boar :: proc(body: Mat4, e: Enemy, stride: f32, held, swung: bool) {
 }
 
 // Prosio is short and stocky: short legs, a compact body and a big head.
-LEG_SCALE :: f32(0.72) // leg length, as a share of the old, longer legs
-TORSO_SCALE :: f32(0.93) // the body from hips to neck, likewise
+LEG_SCALE :: f32(0.86) // leg length, as a share of the old, longer legs
+TORSO_SCALE :: f32(0.84) // the body from hips to neck, likewise
 HIP :: f32(0.47) // hip height in the body's own measurements
+SHOULDER_HEIGHT :: HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE // above his feet
 
 draw_prosio :: proc() {
 	p := &g.prosio
@@ -751,10 +874,12 @@ draw_prosio :: proc() {
 	swing: f32 = walking ? math.sin(p.walk_phase) * (p.sprinting ? 1.0 : 0.7) : 0
 
 	// The collision radius follows the belly. The jacket stays snug as he grows.
-	belly_out := 0.03 + 0.09 * t // how far the belly sticks out in front
-	belly := (r - belly_out) * lerp(0.78, 0.92, t)
-	chest := min(r - 0.12, 0.33 + 0.2 * t)
-	hips := min(r - 0.04, 0.31 + 0.42 * t)
+	// Eating goes to the belly: it swells forwards and sideways, while his
+	// bottom stays about the same size.
+	belly_out := 0.03 + 0.17 * t // how far the belly sticks out in front
+	belly := (r - belly_out * 0.6) * lerp(0.8, 0.93, t)
+	chest := prosio_chest(p.kg)
+	hips := 0.3 + 0.1 * t
 	head := f32(0.43)
 
 	base := translate({p.pos.x, p.height, p.pos.y}) * rot_y(p.facing)
@@ -782,9 +907,15 @@ draw_prosio :: proc() {
 	case p.dash_t > 0:
 		m = m * rot_x(0.2)
 		brow_tilt = -0.5
-	case p.carry == .Enemy && !p.snatching:
-		m = m * rot_x(-0.16) // leaning back, tugging
-		brow_tilt = -0.4
+	case p.carry == .Enemy:
+		// Leaning back against a heavy animal, or into a swing.
+		lean := -0.45 * p.strain
+		if p.swinging {
+			k := min(p.swing_t / p.swing_total, 1)
+			lean = p.swing_throw ? -0.25 + 0.5 * k : 0.35 * math.sin(k * math.PI * 0.9)
+		}
+		m = m * rot_x(lean)
+		brow_tilt = p.strain > 0.5 ? 0.35 : -0.4
 	case p.dazed_t > 0:
 		m = m * rot_z(math.sin(g.time * 9) * 0.2)
 		eyes_closed = true
@@ -818,19 +949,21 @@ draw_prosio :: proc() {
 	m = m * translate({0, HIP * LEG_SCALE, 0}) * scale({1, TORSO_SCALE, 1}) * translate({0, -HIP, 0})
 
 	// Shorts over two round buttocks, with a crease between them at the back.
-	ball(m, {0, 0.56, 0.05}, {hips * 0.9, 0.26, hips * 0.78}, COLOR_SHORTS)
+	// They sit high, so his legs show below them.
+	ball(m, {0, 0.6, 0.05}, {hips * 0.95, 0.2, hips * 0.8}, COLOR_SHORTS)
 	for side in ([2]f32{-1, 1}) {
-		ball(m, {side * hips * 0.44, 0.5, -hips * 0.22}, {hips * 0.6, 0.29, hips * 0.66}, COLOR_SHORTS)
+		ball(m, {side * hips * 0.42, 0.57, -hips * 0.25}, {hips * 0.58, 0.21, hips * 0.62}, COLOR_SHORTS)
 	}
-	belly_y := 0.26 + 0.26 * t
-	ball(m, {0, 0.84, belly_out}, {belly * (1 + wob), belly_y * (1 - wob), belly * (1 + wob)}, COLOR_SKIN)
+	belly_y := 0.26 + 0.2 * t
+	belly_mid := 0.86 + 0.04 * t // the belly hangs over the shorts, but not down to the knees
+	ball(m, {0, belly_mid, belly_out}, {belly * (1 + wob), belly_y * (1 - wob), belly * (1 + wob)}, COLOR_SKIN)
 	if t > 0.25 {
-		ball(m, {0, 0.76, belly_out + belly * (1 + wob)}, {0.045, 0.045, 0.03}, COLOR_SKIN_DARK)
+		ball(m, {0, belly_mid - 0.08, belly_out + belly * (1 + wob)}, {0.045, 0.045, 0.03}, COLOR_SKIN_DARK)
 	}
 	// Cropped jacket follows the upper arc of his belly, with a narrow sewn hem.
-	jacket := m * translate({0, 0.84 + belly_y * (1 - wob) * 0.51, belly_out})
+	jacket := m * translate({0, belly_mid + belly_y * (1 - wob) * 0.51, belly_out})
 	jacket_w := max(chest, belly * (1 + wob) * 0.86 + 0.014)
-	jacket_h := max(0.33, 1.46 - (0.84 + belly_y * (1 - wob) * 0.51))
+	jacket_h := max(0.33, 1.46 - (belly_mid + belly_y * (1 - wob) * 0.51))
 	set_surface(.Jacket)
 	draw_shape(.Hemisphere, jacket * scale({jacket_w, jacket_h, jacket_w}), COLOR_SHIRT)
 	set_surface(.Solid)
@@ -844,13 +977,13 @@ draw_prosio :: proc() {
 	ball(pack, {}, {0.235, 0.255, 0.135}, COLOR_SHORTS)
 	ball(pack, {0, 0.077, -0.069}, {0.232, 0.123, 0.093}, {89, 133, 126, 255})
 	box(pack, {0, 0.031, -0.165}, {0.047, 0.065, 0.016}, COLOR_SHIRT)
-	ball(m, {0, 0.7, -hips * 0.86}, {0.08, 0.08, 0.08}, COLOR_SKIN_DARK) // curly tail, above the crease
-	ball(m, {0.06, 0.78, -hips * 0.9 - 0.04}, {0.05, 0.05, 0.05}, COLOR_SKIN_DARK)
+	ball(m, {0, 0.72, -hips * 0.86}, {0.08, 0.08, 0.08}, COLOR_SKIN_DARK) // curly tail, above the crease
+	ball(m, {0.06, 0.8, -hips * 0.9 - 0.04}, {0.05, 0.05, 0.05}, COLOR_SKIN_DARK)
 
 	// Set the wrist and elbow outside the current belly cross section. All
 	// points are in the same local frame as the wobbling torso, so squash,
 	// spin, facing and the push-up tilt are applied to the whole rig together.
-	arm_r := lerp(0.085, 0.119, t)
+	arm_r := lerp(0.1, 0.135, t)
 	belly_width := belly * (1 + wob)
 	belly_height := belly_y * (1 - wob)
 	for side in ([2]f32{-1, 1}) {
@@ -859,20 +992,22 @@ draw_prosio :: proc() {
 		elbow := Vec3{rest_x, 1.09, 0.04 - side * swing * 0.18}
 		hand := Vec3{rest_x, 0.86 + 0.075 * abs(swing), 0.16 - side * swing * 0.35}
 		switch {
-		case p.carry == .Enemy:
-			// Both hands on the tail, wherever it is: the hold point is
-			// turned into his own frame and kept within arm's reach.
-			to_hand := p.hand.xz - p.pos
-			right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
-			local := Vec3{dot2(to_hand, right), p.hand.y - p.height, dot2(to_hand, facing_dir(p.facing))}
+		case p.carry == .Enemy && side == HOLD_SIDE:
+			// One hoof on the tail, wherever it is: the hold point is turned
+			// into his own frame and kept within arm's reach.
+			local := direction_to_prosio(p.hand - {p.pos.x, p.height, p.pos.y})
 			local.y = (local.y - HIP * LEG_SCALE) / TORSO_SCALE + HIP // into the compacted body's measurements
 			from_shoulder := local - shoulder
-			reach := length2(from_shoulder.xz) + abs(from_shoulder.y)
-			if reach > 1.45 {
-				local = shoulder + from_shoulder * (1.45 / reach)
+			reach := linalg.length(from_shoulder)
+			if reach > 0.75 {
+				local = shoulder + from_shoulder * (0.75 / reach)
 			}
-			hand = local + {side * 0.07, 0, 0}
-			elbow = (shoulder + hand) * 0.5 + {side * 0.14, -0.05, 0}
+			hand = local
+			elbow = (shoulder + hand) * 0.5 + {side * 0.1, -0.04, 0}
+		case p.carry == .Enemy && (p.swinging || p.strain > 0.4):
+			// The free arm flung out for balance.
+			elbow = {side * (chest + 0.22), 1.25, 0.05}
+			hand = {side * (chest + 0.36), 1.45, 0.12}
 		case p.carry == .Rock:
 			lift := smooth(1 - p.lift_t / max(p.lift_total, 0.001))
 			reach := (r + carry_radius()) * (1 - lift)
@@ -895,7 +1030,7 @@ draw_prosio :: proc() {
 			elbow.z = -0.23
 		}
 		for point in ([2]^Vec3{&elbow, &hand}) {
-			dy := (point.y - 0.84) / belly_height
+			dy := (point.y - belly_mid) / belly_height
 			dz := (point.z - belly_out) / belly_width
 			section := 1 - dy * dy - dz * dz
 			if section > 0 {
@@ -904,15 +1039,17 @@ draw_prosio :: proc() {
 			}
 
 		}
-		// Upper arm and forearm both narrow towards the hoof, joined by a
-		// round elbow; a short sleeve covers the top of the arm.
-		taper(m, shoulder, elbow, arm_r * 1.4, COLOR_SKIN)
-		ball(m, elbow, {arm_r * 0.9, arm_r * 0.9, arm_r * 0.9}, COLOR_SKIN)
-		taper(m, elbow, hand, arm_r * 0.92, COLOR_SKIN)
-		sleeve_end := shoulder + (elbow - shoulder) * 0.5
-		ball(m, shoulder, {arm_r * 1.5, arm_r * 1.5, arm_r * 1.5}, COLOR_SHIRT)
-		taper(m, shoulder, sleeve_end, arm_r * 1.6, COLOR_SHIRT)
-		ball(m, hand, {arm_r * 1.05, 0.09, arm_r * 1.12}, COLOR_HOOF)
+		// Chubby arms: a plump upper arm with a round biceps, narrowing to
+		// the elbow, then a forearm narrowing to the hoof. A short sleeve
+		// covers the top of the arm.
+		taper(m, shoulder, elbow, arm_r * 1.75, COLOR_SKIN)
+		ball(m, shoulder + (elbow - shoulder) * 0.45, {arm_r * 1.45, arm_r * 1.45, arm_r * 1.45}, COLOR_SKIN)
+		ball(m, elbow, {arm_r * 1.05, arm_r * 1.05, arm_r * 1.05}, COLOR_SKIN)
+		taper(m, elbow, hand, arm_r * 1.12, COLOR_SKIN)
+		sleeve_end := shoulder + (elbow - shoulder) * 0.4
+		ball(m, shoulder, {arm_r * 1.8, arm_r * 1.8, arm_r * 1.8}, COLOR_SHIRT)
+		taper(m, shoulder, sleeve_end, arm_r * 1.95, COLOR_SHIRT)
+		ball(m, hand, {arm_r * 1.1, 0.1, arm_r * 1.15}, COLOR_HOOF)
 	}
 
 	// Head: cheeks get rounder too.
@@ -956,13 +1093,16 @@ draw_prosio :: proc() {
 	if p.eat_t > 0 || p.airborne {
 		ball(h, {0, -0.23, 0.33}, {0.06, 0.05, 0.03}, COLOR_NOSTRIL) // open mouth
 	}
+	if p.strain > 0.5 || p.heave_t > 0 {
+		ball(h, {0, -0.22, 0.34}, {0.09, 0.025, 0.03}, COLOR_WHITE) // gritted teeth
+	}
 
 	head_top := Vec3{p.pos.x, p.height + 2.2, p.pos.y}
 	if p.dazed_t > 0 {
-		draw_stars(head_top, 0.45)
+		draw_stars(head_top, 0.45, 3.3)
 	}
 	if p.fail == .Fainted && p.fail_t > 0.4 {
-		draw_stars({p.pos.x, p.height + 1.3, p.pos.y}, 0.6)
+		draw_stars({p.pos.x, p.height + 1.3, p.pos.y}, 0.6, 5.1)
 	}
 	if p.fail == .Heart_Attack && p.fail_t > 0.4 {
 		// A thumping cartoon heart above him.

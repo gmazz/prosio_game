@@ -116,23 +116,23 @@ draw_ui :: proc() {
 		action: cstring = "Hold E: push-ups"
 		if p.carry != .Nothing {
 			switch {
-			case p.carry == .Enemy && p.snatching:
-				action = ""
+			case p.carry == .Enemy && p.carry_kg > p.kg * LIFT_LIMIT:
+				action = "Too heavy to swing!   SPACE: heave     F: let go"
 			case p.carry == .Enemy:
-				action = "SPACE: snatch it the way you're heading!     Let go of F: drop it"
+				action = "SPACE: bash with it!     F: throw it"
 			case p.lift_t > 0:
 				action = "Lifting..."
 			case:
-				action = "Let go of F: throw it down"
+				action = "F: throw it down"
 			}
 		} else if food_in_reach(p.pos, prosio_radius(p.kg) + 0.75) != nil {
 			action = "E: eat"
 		} else if _, found := grab_target(); found {
-			action = "Hold F: grab     Hold E: push-ups"
+			action = "F: grab     Hold E: push-ups"
 		}
 		label_centred(action, sw / 2, sh - 74 * s, 22 * s, UI_YELLOW)
 	}
-	label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab: hold F   Eat / push-ups: E   Menu: ESC", sw / 2, sh - 40 * s, 20 * s)
+	label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Eat / push-ups: E   Menu: ESC", sw / 2, sh - 40 * s, 20 * s)
 
 	if g.truffle_count == len(g.truffles) && g.win_t < 6 {
 		label_centred("ALL THE GOLDEN TRUFFLES!", sw / 2, sh * 0.26, 54 * s, UI_YELLOW)
@@ -171,14 +171,8 @@ MENU_TEXT := [Menu_Item]cstring {
 	.Quit         = "QUIT",
 }
 
-PIXEL_TEXT := [Pixel_Detail]cstring {
-	.Chunky = "LOOK: PIXELS, CHUNKY",
-	.Medium = "LOOK: PIXELS, MEDIUM",
-	.Fine   = "LOOK: PIXELS, FINE",
-}
-
 look_text :: proc() -> cstring {
-	return look == .Toy ? "LOOK: TOY" : PIXEL_TEXT[pixel_detail]
+	return ui_format("PIXELS: %d / 5", i32(pixel_level + 1))
 }
 
 MENU_MAIN := [?]Menu_Item{.Play, .Look, .Quit}
@@ -226,9 +220,9 @@ draw_menu :: proc() {
 		y += 64 * s
 	}
 
-	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE     Switch look any time: V", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
+	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE     Pixel size any time: 1 to 5", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
 	if scene == .Menu {
 		// While paused, the game's own controls line is already showing.
-		label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab: hold F   Eat / push-ups: E", sw / 2, sh - 70 * s, 20 * s)
+		label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Eat / push-ups: E", sw / 2, sh - 70 * s, 20 * s)
 	}
 }

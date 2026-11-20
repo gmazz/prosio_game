@@ -63,22 +63,19 @@ Prosio :: struct {
 	lift_t:       f32, // time left until it is up over his head
 	lift_total:   f32,
 	held_t:       f32, // how long he has held it
-	snatching:      bool, // in the middle of snatching an animal round by its tail
-	snatch_t:       f32, // how long the snatch has lasted
-	snatch_total:   f32, // how long it takes
-	snatch_centre:  Vec2, // their shared centre of weight, which they turn about
-	snatch_start:   f32, // the animal's direction from him when it began
-	snatch_sweep:   f32, // how far round they turn (radians)
-	snatch_sign:    f32, // +1 or -1: which way round
-	snatch_reach_p: f32, // his distance from the centre
-	snatch_reach_a: f32, // the animal's distance from the centre
-	snatch_speed:   f32, // the speed the animal leaves at
-	snatch_heading: f32, // the way it is flung
-	snatch_rise:    f32, // the angle it leaves at: below 0 is down at the ground
-	snatch_tilt:    f32, // how far its rear was lifted when the snatch began
-	lunge_t:      f32, // a dragged animal is lunging while this is positive
-	throw_queued: bool, // the button was let go while still lifting
-	hand:         Vec3, // where his hands hold a tail
+	swinging:     bool, // swinging a held animal round, to bash with it or throw it
+	swing_throw:  bool, // the swing ends in a throw
+	swing_t:      f32, // how long the swing has lasted
+	swing_total:  f32, // how long it takes
+	swing_from:   Vec3, // where his hand points from his shoulder (in his own frame) at the start,
+	swing_via:    Vec3, // the way it sweeps round,
+	swing_to:     Vec3, // and where it ends
+	bash_queued:  bool, // SPACE was pressed again during a swing
+	strain:       f32, // 0 to 1: how hard he strains against a heavy animal
+	heave_t:      f32, // time left in a heave at an animal too heavy to swing
+	lunge_t:      f32, // a held animal is lunging while this is positive
+	throw_queued: bool, // F was pressed while still lifting a rock
+	hand:         Vec3, // where the hand that holds a tail is
 	fail:         Fail,
 	fail_t:       f32,
 	bubble:       cstring, // speech bubble text
@@ -95,6 +92,11 @@ fatness :: proc(kg: f32) -> f32 {
 // door. The hands swing beyond this torso radius.
 prosio_radius :: proc(kg: f32) -> f32 {
 	return 0.42 + (kg - KG_MIN) * 0.0055
+}
+
+// How wide his chest is. His arms hang from its sides.
+prosio_chest :: proc(kg: f32) -> f32 {
+	return min(prosio_radius(kg) - 0.12, 0.33 + 0.16 * fatness(kg))
 }
 
 // Everything below gets worse with weight, and the gap is deliberately wide.
@@ -334,16 +336,22 @@ update_prosio :: proc(dt: f32) {
 		// With a load, the same legs have more weight to move.
 		speed *= p.kg / total_kg()
 		target := move * speed
-		if p.dazed_t > 0 || p.pushups || p.eat_t > 0 || p.lift_t > 0 || p.snatching {
+		if p.dazed_t > 0 || p.pushups || p.eat_t > 0 || p.lift_t > 0 {
 			target = {}
+		}
+		if p.swinging {
+			target *= 0.5 // he can bash on the move, slowly
 		}
 		accel := lerp(55, 10, t)
 		if p.airborne {
 			accel *= 0.4 // only a little steering in the air
 		}
 		p.vel = approach2(p.vel, target, accel * dt)
-		if moving && target != {} {
+		// Straining against a heavy animal, he keeps facing it and backs away.
+		if moving && target != {} && p.strain < 0.4 {
 			p.facing = approach_angle(p.facing, math.atan2(move.x, move.y), 12 * dt)
+		}
+		if moving && target != {} {
 			if grounded {
 				p.kg -= WALK_BURN * dt
 			}

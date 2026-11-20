@@ -4,10 +4,8 @@ VARY vec3 local;
 VARY vec2 uv;
 uniform vec4 colDiffuse;
 uniform int surface;    // see Surface in platform.odin
-uniform int look;       // 0 = Toy, 1 = Pixel
 uniform float hitFlash;
 uniform float fade;     // 0 = solid, 1 = see-through
-uniform vec3 viewPos;
 
 float hash(vec2 p) {
     vec3 q = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
@@ -32,12 +30,9 @@ float bayer4(vec2 a) {
     return bayer2(0.5 * a) * 0.25 + bayer2(a);
 }
 
-// Toy: smooth. Pixel: a few flat steps, blended with the dither pattern.
+// A few flat steps, blended with the dither pattern.
 float steps(float t, float count, float dither) {
-    if (look == 1) {
-        return clamp(floor(t * count + dither) / count, 0.0, 1.0);
-    }
-    return t;
+    return clamp(floor(t * count + dither) / count, 0.0, 1.0);
 }
 
 vec3 meadow(vec2 p, float dither) {
@@ -50,24 +45,19 @@ vec3 meadow(vec2 p, float dither) {
     vec3 base = vec3(.45, .64, .31);
     vec3 sunny = vec3(.62, .75, .37);
     vec3 grass = tone < .5 ? mix(deep, base, tone * 2.0) : mix(base, sunny, tone * 2.0 - 1.0);
-    if (look == 0) {
-        grass *= .95 + .08 * wash(p * 7.0); // soft mottling
-    }
 
     // A winding footpath passes the picnic and fades into the far meadow.
     float offset = p.x - (1.0 + 2.2 * sin(p.y * .18) + .8 * sin(p.y * .42));
     float verge = abs(offset) + .72 * (wash(p * 1.3) - .5) + .25 * (fine - .5);
     float path = (1.0 - smoothstep(.41, 1.28, verge)) * smoothstep(-21.0, -11.0, p.y);
-    if (look == 1) {
-        path = step(.35 + .3 * dither, path);
-    }
+    path = step(.35 + .3 * dither, path);
     vec3 earth = mix(vec3(.66, .58, .42), vec3(.86, .77, .56), steps(.62 * broad + .38 * fine, 2.0, dither));
     return mix(grass, earth, path);
 }
 
 void main() {
     float dither = bayer4(gl_FragCoord.xy);
-    if (fade > 0.0 && bayer4(gl_FragCoord.xy * (look == 1 ? 1.0 : 0.5)) < fade) {
+    if (fade > 0.0 && bayer4(gl_FragCoord.xy) < fade) {
         discard;
     }
     if (surface == 1) {
@@ -75,16 +65,13 @@ void main() {
         return;
     }
     if (surface == 3 || surface == 7) {
-        // Soft blob shadows; in the Pixel look they have a hard edge.
+        // Blob shadows with a hard edge.
         vec2 q = uv * 2.0 - 1.0;
         float d = length(q);
         if (surface == 7) d = max(abs(q.x), abs(q.y));
         float opacity = (1.0 - smoothstep(.55, 1.0, d)) * (1.0 - .35 * d);
-        if (look == 1) {
-            if (opacity < .45) discard;
-            opacity = .8;
-        }
-        if (opacity < .015) discard;
+        if (opacity < .45) discard;
+        opacity = .8;
         OUT_COLOR = vec4(colDiffuse.rgb, colDiffuse.a * opacity);
         return;
     }
@@ -115,37 +102,18 @@ void main() {
         pigment *= .90 + .16 * mineral;
     }
     if (surface == 6) {
-        // Bias-cut lapel crossing the curved jacket, with a pale stitched edge.
+        // Bias-cut lapel crossing the curved jacket.
         float seam = local.x + .68 * local.y - .24;
         float front = smoothstep(.15, .4, local.z);
         float lapel = (1.0 - smoothstep(.09, .115, abs(seam))) * front;
         pigment = mix(pigment, vec3(.46, .33, .24), lapel * .91);
-        float stitch = (1.0 - smoothstep(.011, .029, abs(seam - .065))) *
-                       smoothstep(.27, .38, fract(local.y * 12.0));
-        pigment = mix(pigment, vec3(.98, .81, .54), stitch * front * (look == 1 ? 0.0 : 1.0));
     }
 
     vec3 bounce = vec3(.03, .04, .025) * (1.0 - smoothstep(-.6, .35, n.y));
-    vec3 color;
-    if (look == 1) {
-        // Pixel: three flat tones, then a limited palette.
-        vec3 tint = mix(vec3(.55, .62, .78), vec3(.85, .86, .86), step(-.22, light));
-        tint = mix(tint, vec3(1.05, 1.0, .9), step(.3, light));
-        color = pigment * tint + bounce;
-        color = floor(color * 14.0 + .5) / 14.0;
-    } else {
-        // Toy: soft light wrapping round like on clay, a bright rim at the
-        // edges, a faint sheen, and a little darkening where things meet the ground.
-        float wrap = clamp((light + .45) / 1.45, 0.0, 1.0);
-        vec3 tint = mix(vec3(.62, .66, .79), vec3(1.06, 1.0, .9), smoothstep(0.0, 1.0, wrap));
-        vec3 v = normalize(viewPos - position);
-        float edge = 1.0 - max(dot(n, v), 0.0);
-        float rim = edge * edge * edge * (.35 + .65 * wrap);
-        float sheen = pow(max(dot(n, normalize(sun + v)), 0.0), 24.0);
-        float contact = mix(.72, 1.0, smoothstep(0.0, .5, position.y));
-        contact = mix(1.0, contact, 1.0 - max(n.y, 0.0) * .7);
-        float grain = 1.0 + .04 * (hash(floor(local.xy * 31.0) + floor(local.z * 31.0)) - .5);
-        color = pigment * tint * contact * grain + vec3(1.0, .95, .85) * (rim * .2 + sheen * .1) + bounce;
-    }
+    // Three flat tones, then a limited palette.
+    vec3 tint = mix(vec3(.55, .62, .78), vec3(.85, .86, .86), step(-.22, light));
+    tint = mix(tint, vec3(1.05, 1.0, .9), step(.3, light));
+    vec3 color = pigment * tint + bounce;
+    color = floor(color * 14.0 + .5) / 14.0;
     OUT_COLOR = vec4(mix(color, vec3(1.0, .89, .68), hitFlash), colDiffuse.a);
 }

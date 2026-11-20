@@ -1,53 +1,72 @@
 package game
 
 import "core:math"
+import "core:math/linalg"
 
-// Grabbing, dragging, slamming and throwing. Everything happens while the
-// grab button is held, and the throw comes when it is let go.
+// Grabbing, dragging, bashing and throwing. F grabs, and F again throws:
+// nothing has to be held down.
 //
-//   Animals are grabbed by the tail and dragged, rear end up, front paws
-//   scraping. The tail is a rope: while it is taut, Prosio and the animal are
-//   pulled together and each moves by a share set by the other's weight (a
-//   digging animal counts DIG times its weight). So a heavy Prosio tows a fox
-//   along, while a fleeing boar hauls a lean Prosio backwards. Letting go of
-//   the button spins it round him like a hammer throw and lets it fly, at a
-//   slightly different direction and angle every time. When it hits the
-//   ground it is spinning, so it skips along, turning part of each fall into
-//   forward speed, and bowls over whatever it meets.
+//   Animals are caught by the tail with one hand and dragged along behind
+//   him as he walks. The animal is not stiff: its body is a short chain of
+//   points (the tail tip in his hand, the middle of its body, its shoulders)
+//   that swing, fall and drag on the ground under their own weight, and its
+//   legs dangle. So when he whacks it about it flops like a sack.
 //
-//   Rocks are lifted overhead and held there. Letting go hurls them down in
+//   The tail is a rope. While it is taut, Prosio and the animal are pulled
+//   together and each gives way by the other's share of their weight (an
+//   animal standing on its feet digs in, and counts DIG times its weight).
+//   A fox hardly slows him down. A boar weighs more than he does: it drags
+//   him about on his heels while he leans back and strains.
+//
+//   SPACE swings the animal like a club, roughly the way he is walking: over
+//   his head or round his side, slamming it into the ground in front of him
+//   and into anything standing there. Each swing goes a little differently.
+//   F hurls it away the way he is walking. Only something lighter than
+//   LIFT_LIMIT times his own weight can be swung or thrown; a boar can only
+//   be hung on to, until it pulls free or he lets go.
+//
+//   Rocks are lifted overhead and held there. F again hurls them down in
 //   front of him, and they skim across the ground.
 //
 // Nothing here is a yes-or-no rule; it all depends on how heavy the thing is
 // compared with Prosio:
 //
 //   lifting    takes longer and costs more stamina the heavier it is;
-//   holding    keeps draining stamina, and an animal wriggles free sooner
-//              the heavier it is;
+//   holding    keeps draining stamina, and a struggling animal pulls free
+//              sooner the heavier it is;
+//   swinging   takes longer the heavier it is, so it hits less hard;
 //   throwing   the push is proportional to Prosio's own weight, so the
-//              speed of what he throws or slams is
+//              speed of what he throws is
 //
-//                  speed = THROW_GAIN * Prosio's weight / its weight
+//                  speed = gain * Prosio's weight / its weight
 //
 // A carried rock's weight counts as his: on the pressure plate, on the
 // seesaws and when he lands. A dragged animal stands on its own feet, so it
 // does not.
 
-THROW_GAIN :: f32(2.6)
+THROW_GAIN :: f32(2.6) // for rocks
+ANIMAL_THROW_GAIN :: f32(3.2) // for animals, which he can wind up
 MAX_THROW :: f32(22)
 MAX_THROWN :: 4
 GRAB_REACH :: f32(0.85) // how far beyond touching he can reach: about an arm
 LIFT_TIME :: f32(0.35) // seconds to lift something of his own weight
-HOLD_TIME :: f32(3.0) // seconds he can hold an enemy of his own weight
-CARRY_DRAIN :: f32(5) // stamina per second for carrying his own weight
+CARRY_DRAIN :: f32(5) // stamina per second for holding his own weight
+LIFT_LIMIT :: f32(0.9) // he can swing or throw up to this share of his own weight
 // A rock of radius 0.3 weighs about 10 kg, 0.6 about 82 kg, and the big
 // boulders (0.9) about 280 kg: liftable only by a heavy, rested Prosio.
 ROCK_DENSITY :: f32(380)
-DIG :: f32(1.5) // a dragged animal digs in: it resists like this many times its weight
+DIG :: f32(1.5) // an animal on its feet digs in: it resists like this many times its weight
+DRAG_SLIDE :: f32(0.6) // a limp animal slides along the grass: it resists like this share of its weight
+PROSIO_GRIP :: f32(1.5) // and Prosio digs his heels in too
 LUNGE_SPEED :: f32(3) // how much faster a dragged animal pulls when it lunges
 SKIP_KEEP :: f32(0.82) // share of forward speed kept at each skip
 SKIP_BOUNCE :: f32(0.55) // share of falling speed that bounces back up
 SKIP_SPIN :: f32(0.18) // share of falling speed the spin turns into forward speed
+BASH_GAIN :: f32(1.6) // how much of the club's speed a struck animal or rock takes
+ARM_LEN :: f32(0.55) // from his shoulder to his hoof, arm outstretched
+HOLD_SIDE :: f32(1) // which hand holds a tail: +1 is the side his model's +x points to
+FOLLOW_THROUGH :: f32(0.12) // seconds his arm stays down after a swing lands
+KO_LIMP :: f32(9) // bashed until this limp, an animal is knocked out: four or five good whacks
 
 Carry :: enum {
 	Nothing,
@@ -72,6 +91,20 @@ ENEMY_THROW_KO := [Enemy_Kind]f32 {
 	.Boar = 1.5,
 }
 
+// The points of a held animal's body, in its own model (units of its
+// radius): the tip of its tail, the middle of its body and its shoulders.
+// The back half of the model hangs between the first two, the front half
+// between the last two.
+CHAIN_MODEL := [Enemy_Kind][3]Vec3 {
+	.Fox  = {{0, 1.57, -2.18}, {0, 1.0, -0.1}, {0, 1.05, 0.55}},
+	.Boar = {{0.05, 0.78, -1.32}, {0, 1.1, -0.1}, {0, 1.25, 0.6}},
+}
+// Where the tail leaves the body, in the same units.
+TAIL_ROOT := [Enemy_Kind]Vec3 {
+	.Fox  = {0, 1.08, -0.8},
+	.Boar = {0, 1.38, -1.07},
+}
+
 rock_kg :: proc(r: f32) -> f32 {
 	return ROCK_DENSITY * r * r * r
 }
@@ -82,8 +115,6 @@ total_kg :: proc() -> f32 {
 	p := &g.prosio
 	return p.kg + (p.carry == .Rock ? p.carry_kg : 0)
 }
-
-
 
 // An enemy with its feet on the ground, free to be bumped, grabbed or shoved.
 on_ground :: proc(e: ^Enemy) -> bool {
@@ -139,7 +170,7 @@ carry_radius :: proc() -> f32 {
 	return 0
 }
 
-// Where the carried thing is: it starts in front of him and ends overhead.
+// Where the carried rock is: it starts in front of him and ends overhead.
 carry_place :: proc() -> (pos: Vec2, height: f32) {
 	p := &g.prosio
 	lifted := smooth(1 - p.lift_t / max(p.lift_total, 0.001))
@@ -162,7 +193,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			return
 		}
 		ratio := target.kg / p.kg
-		cost := 6 + 25 * ratio
+		cost := 6 + 25 * min(ratio, 1)
 		if p.stamina < cost {
 			hint("Too tired to grab that!")
 			return
@@ -173,21 +204,19 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		p.carry_index = target.index
 		p.carry_kg = target.kg
 		p.held_t = 0
-		p.snatching = false
-		p.lunge_t = 0
+		p.swinging = false
+		p.bash_queued = false
 		p.throw_queued = false
+		p.lunge_t = 0
 
 		towards: Vec2
 		switch target.kind {
 		case .Enemy:
-			// Catching the tail is quick; it is the dragging that is hard.
-			p.lift_total = clamp(0.12 * ratio, 0.06, 0.3)
+			p.lift_total = 0.12 // catching a tail is quick; it is the dragging that is hard
 			e := &g.enemies[target.index]
 			towards = e.pos - p.pos
-			e.state = .Held
-			e.vel = {}
-			e.y = 0
-			say(ratio > 0.9 ? "Got your tail! Oof, heavy!" : "Got your tail!", 1)
+			start_hold(e)
+			say(ratio > LIFT_LIMIT ? "Got your tail! Uh-oh..." : "Got your tail!", 1)
 		case .Rock:
 			p.lift_total = clamp(LIFT_TIME * ratio, 0.08, 1.2)
 			p.vel = {}
@@ -208,393 +237,559 @@ update_grab :: proc(dt: f32, can_act: bool) {
 	// Holding.
 	ratio := p.carry_kg / p.kg
 	p.lift_t -= dt
-	p.held_t += dt
-	if p.snatching {
-		update_snatch(dt)
-		return
-	}
-	// Space while dragging: snatch it.
-	if p.carry == .Enemy && p.lift_t <= 0 && pressed(.Bump) {
-		begin_snatch()
-		return
-	}
-	p.stamina -= CARRY_DRAIN * ratio * dt
 	p.regen_delay = 0.5
 
-	if p.stamina <= 0 {
-		p.stamina = 0
-		drop_carry()
-		say("Too heavy! I can't hold on!", 1.4)
-		return
-	}
-	if p.carry == .Enemy && p.held_t > HOLD_TIME / ratio {
-		drop_carry()
-		p.safe_t = max(p.safe_t, 0.8)
-		say("It wriggled free!", 1.2)
-		return
-	}
-	if !button_down(.Grab) {
-		p.throw_queued = true
-	}
-	if p.throw_queued && p.lift_t <= 0 {
-		switch p.carry {
-		case .Enemy:
-			drop_carry() // letting go of a tail just lets it go
-			say("Off you go!", 0.8)
-		case .Rock:
-			throw_rock()
-		case .Nothing:
+	switch p.carry {
+	case .Enemy:
+		e := &g.enemies[p.carry_index]
+		struggling := e.limp <= 0 && !e.ko
+		p.stamina -= CARRY_DRAIN * ratio * (struggling ? 1 : 0.25) * dt
+		if p.stamina <= 0 {
+			p.stamina = 0
+			drop_carry()
+			say("Too heavy! I can't hold on!", 1.4)
+			return
 		}
+		// A struggling animal pulls free in the end: a heavy one sooner.
+		if struggling {
+			p.held_t += dt
+			if p.held_t > 9 / (ratio + 0.4) {
+				heavy := ratio > 1
+				drop_carry()
+				p.safe_t = max(p.safe_t, 0.8)
+				if heavy {
+					p.dazed_t = 0.5 // it yanks him off his feet
+					say("Whoa! It got away!", 1.2)
+				} else {
+					say("It wriggled free!", 1.2)
+				}
+				return
+			}
+		}
+		if p.lift_t > 0 {
+			return
+		}
+		too_heavy := ratio > LIFT_LIMIT
+		if pressed(.Grab) {
+			if too_heavy {
+				drop_carry()
+				say("Way too heavy to throw!", 1.2)
+				return
+			}
+			begin_swing(true)
+		} else if pressed(.Bump) {
+			switch {
+			case too_heavy:
+				heave(dt)
+			case !p.swinging:
+				begin_swing(false)
+			case !p.swing_throw:
+				p.bash_queued = true
+			}
+		}
+
+	case .Rock:
+		p.stamina -= CARRY_DRAIN * ratio * dt
+		if p.stamina <= 0 {
+			p.stamina = 0
+			drop_carry()
+			say("Too heavy! I can't hold on!", 1.4)
+			return
+		}
+		if pressed(.Grab) {
+			p.throw_queued = true
+		}
+		if p.throw_queued && p.lift_t <= 0 {
+			throw_rock()
+		}
+
+	case .Nothing:
 	}
 }
 
-// Where each animal's tail tip is, in its own model (units of its radius).
-TAIL_TIP := [Enemy_Kind]Vec3 {
-	.Fox  = {0, 1.57, -2.18},
-	.Boar = {0.05, 0.78, -1.32},
-}
-FRONT_PAW_Z :: f32(0.63) // how far forward its front paws are, in the same units
-HOLD_HEIGHT :: f32(1.15) // how high Prosio holds a tail
-SNATCH_HEIGHT :: f32(0.95) // the height a snatched animal sweeps round at
-AIM_SPREAD :: f32(0.6) // a throw goes up to this far (radians) either side of the aim
-
-// How far in front of his middle Prosio's hands are when he holds a tail.
-hold_reach :: proc() -> f32 {
-	return prosio_radius(g.prosio.kg) + 0.25
-}
-
-// How an animal hangs from its tail: the model is placed so that its tail
-// tip is exactly in Prosio's hands, then tipped nose-down by its tilt.
-held_matrix :: proc(e: ^Enemy) -> Mat4 {
+// The chain of a freshly grabbed animal: its points as it stands now.
+start_hold :: proc(e: ^Enemy) {
 	r := ENEMY_RADIUS[e.kind]
-	return translate(e.tip) * rot_y(e.facing) * rot_x(e.tilt) * scale({r, r, r}) * translate(-TAIL_TIP[e.kind])
-}
-
-// Hangs an animal from a tail held at tip, and updates where its body is.
-hang :: proc(e: ^Enemy, tip: Vec3, facing, tilt: f32) {
-	e.tip, e.facing, e.tilt = tip, facing, tilt
-	origin := held_matrix(e) * [4]f32{0, 0, 0, 1}
-	e.pos = origin.xz
-	e.y = origin.y
-}
-
-// How far its rear is lifted when its tail is held at this height and its
-// front paws stay on the ground. A small animal hangs almost nose-down; a
-// big one barely tips.
-drag_tilt :: proc(kind: Enemy_Kind, height: f32) -> f32 {
-	r := ENEMY_RADIUS[kind]
-	tip := TAIL_TIP[kind]
-	up := tip.y
-	along := FRONT_PAW_Z - tip.z
-	reach := math.sqrt(up * up + along * along)
-	need := height / r
-	if need >= reach {
-		return math.atan2(along, up) // even fully tipped, its paws are off the ground
+	m := translate({e.pos.x, e.y, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
+	for k in 0 ..< 3 {
+		point := m * [4]f32{CHAIN_MODEL[e.kind][k].x, CHAIN_MODEL[e.kind][k].y, CHAIN_MODEL[e.kind][k].z, 1}
+		e.chain[k] = point.xyz
+		e.chain_old[k] = point.xyz
 	}
-	return math.atan2(along, up) - math.acos(need / reach)
+	e.side = {math.cos(e.facing), 0, -math.sin(e.facing)}
+	e.state = .Held
+	e.vel = {}
+	e.vy = 0
+	e.limp = 0
+	e.skip = false
 }
 
-// Keeps a dragged animal hanging from his hands. Called after Prosio has
-// moved this step.
+// From his own frame (x to his side, y up from his feet, z ahead) to the world.
+prosio_to_world :: proc(local: Vec3) -> Vec3 {
+	p := &g.prosio
+	right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
+	xz := p.pos + right * local.x + facing_dir(p.facing) * local.z
+	return {xz.x, p.height + local.y, xz.y}
+}
+
+// A direction in the world, turned into his own frame.
+direction_to_prosio :: proc(v: Vec3) -> Vec3 {
+	p := &g.prosio
+	right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
+	return {dot2(v.xz, right), v.y, dot2(v.xz, facing_dir(p.facing))}
+}
+
+// The shoulder of the arm that holds a tail, in his own frame.
+holding_shoulder :: proc() -> Vec3 {
+	p := &g.prosio
+	return {HOLD_SIDE * prosio_chest(p.kg) * 0.86, SHOULDER_HEIGHT, 0.035}
+}
+
+// SPACE (bash = false) or F (bash = true... a throw): a swing of the held
+// animal. His hand sweeps from where it is, round through a waypoint, to
+// where the swing ends; the animal follows on the end of its tail.
+begin_swing :: proc(throw: bool) {
+	p := &g.prosio
+	e := &g.enemies[p.carry_index]
+	ratio := p.carry_kg / p.kg
+	cost := throw ? 4 + 12 * ratio : 3 + 10 * ratio
+	if p.stamina < cost {
+		hint("Too tired to swing it!")
+		return
+	}
+	p.stamina -= cost
+	p.kg -= DASH_BURN * 0.5
+
+	from := direction_to_prosio(p.hand - prosio_to_world(holding_shoulder()))
+	p.swing_from = linalg.normalize0(from)
+	if p.swing_from == {} {
+		p.swing_from = {0, -1, 0}
+	}
+	p.swinging = true
+	p.swing_throw = throw
+	p.swing_t = 0
+	p.bash_queued = false
+	// A heavier animal is slower to get round, so it hits less hard; a
+	// heavier Prosio is quicker with it.
+	p.swing_total = clamp(0.22 + 0.5 * ratio, 0.22, 0.7)
+	if throw {
+		// Back, over his head, and up and away in front.
+		p.swing_total *= 0.8
+		p.swing_via = {0, 1, -0.3}
+		p.swing_to = linalg.normalize(Vec3{0, 0.35, 1})
+		say("Aaand...", 0.5)
+		return
+	}
+	// Each bash goes a different way: over his head, round his side, or
+	// backhand across his front, and down at the ground somewhere ahead.
+	// His hand is off to one side, so aim a little across to land in front of him.
+	yaw := -0.3 * HOLD_SIDE + random_range(-0.5, 0.5)
+	pitch := random_range(-1.05, -0.6)
+	p.swing_to = {math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)}
+	pick := random()
+	switch {
+	case pick < 0.45:
+		p.swing_via = {random_range(-0.3, 0.3), 1, -0.1}
+	case pick < 0.8:
+		p.swing_via = {HOLD_SIDE, random_range(0.1, 0.6), 0.2}
+	case:
+		p.swing_via = {-HOLD_SIDE * 0.8, 0.5, 0.6}
+	}
+	e.limp = max(e.limp, 0.3) // swung off its feet
+}
+
+// Where his hand points during a swing (k from 0 to 1), in his own frame.
+swing_direction :: proc(k: f32) -> Vec3 {
+	p := &g.prosio
+	a, b := (1 - k) * (1 - k), 2 * k * (1 - k)
+	d := p.swing_from * a + p.swing_via * 1.6 * b + p.swing_to * k * k
+	return linalg.normalize0(d)
+}
+
+// SPACE with an animal too heavy to swing: he heaves with all he has, lifts
+// it a little, and it answers with a lunge.
+heave :: proc(dt: f32) {
+	p := &g.prosio
+	e := &g.enemies[p.carry_index]
+	if p.stamina < 10 {
+		hint("Too tired!")
+		return
+	}
+	p.stamina -= 10
+	p.heave_t = 0.6
+	lift := 6 * min(p.kg / p.carry_kg, 1)
+	e.chain_old[1].y -= lift * dt
+	p.lunge_t = 0.35
+	burst({p.pos.x, p.height + 1.6, p.pos.y}, 4, 2.5, COLOR_SWEAT, 0.06)
+	say("Hnnnngh! Way too heavy!", 1)
+}
+
+// Keeps a held animal moving: its body swings, falls and drags on its own,
+// hanging from his hand by the tail. Called after Prosio has moved this step.
 update_drag :: proc(dt: f32) {
 	p := &g.prosio
-	if p.carry != .Enemy || p.snatching {
+	p.heave_t -= dt
+	if p.carry != .Enemy {
+		p.strain = max(p.strain - dt * 3, 0)
 		return
 	}
 	e := &g.enemies[p.carry_index]
-	d := e.pos - p.pos
-	dist := length2(d)
-	u := dist > 1e-4 ? d / dist : facing_dir(p.facing)
+	r := ENEMY_RADIUS[e.kind]
+	kg := ENEMY_KG[e.kind]
+	ratio := kg / p.kg
+	tail_len, body_len := chain_lengths(e.kind)
+	e.limp -= dt
+	alive := e.limp <= 0 && !e.ko
+
+	// The swing runs its course.
+	if p.swinging {
+		p.swing_t += dt
+		if p.swing_t >= p.swing_total {
+			if p.swing_throw {
+				throw_animal()
+				return
+			}
+			if p.swing_t >= p.swing_total + FOLLOW_THROUGH {
+				p.swinging = false
+				if p.bash_queued {
+					begin_swing(false)
+				}
+			}
+		}
+	}
+
+	// Where his hand is: sweeping round in a swing, otherwise held out
+	// towards the animal at the end of his arm.
+	shoulder := prosio_to_world(holding_shoulder())
+	hand: Vec3
+	swing_aim: Vec3 // during a swing: where his arm and the tail point, in the world
+	if p.swinging {
+		k := min(p.swing_t / p.swing_total, 1)
+		k = math.pow(k, 1.6) // it speeds up all the way, like the crack of a whip
+		dir := swing_direction(k)
+		right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
+		world := right * dir.x + facing_dir(p.facing) * dir.z
+		swing_aim = Vec3{world.x, dir.y, world.y}
+		hand = shoulder + swing_aim * ARM_LEN
+	} else {
+		to := e.chain[1] - shoulder
+		hand = shoulder + linalg.normalize0(to) * ARM_LEN
+	}
+	hand.y = max(hand.y, p.height + 0.2)
+
+	// Its body falls and flies freely between steps.
+	standing := alive && !p.swinging
+	for k in 1 ..= 2 {
+		step := (e.chain[k] - e.chain_old[k]) * 0.995
+		e.chain_old[k] = e.chain[k]
+		e.chain[k] += step + Vec3{0, -GRAVITY * dt * dt, 0}
+	}
+	// In a swing he whips its back end round on the end of his arm, as if
+	// the tail were a handle; it lags behind his hand a little, and the front
+	// half just flops along after it.
+	if p.swinging {
+		ideal := hand + swing_aim * tail_len
+		e.chain[1] += (ideal - e.chain[1]) * 0.3
+	}
 
 	// It keeps trying to run away, now and then with a sudden lunge.
 	p.lunge_t -= dt
-	if p.lunge_t < -random_range(0.5, 1.1) {
+	if alive && p.lunge_t < -random_range(0.5, 1.1) {
 		p.lunge_t = 0.25
 	}
-	pull := ENEMY_SPEED[e.kind] * (p.lunge_t > 0 ? LUNGE_SPEED : 1)
-	e.pos += u * pull * dt
-	e.hop += dt * 14
+	away := normalize2(e.chain[2].xz - p.pos)
+	wander := 0.6 * math.sin(g.time * 1.3 + f32(p.carry_index))
+	run := Vec2{away.x * math.cos(wander) - away.y * math.sin(wander), away.x * math.sin(wander) + away.y * math.cos(wander)}
+	run *= ENEMY_SPEED[e.kind] * (p.lunge_t > 0 ? LUNGE_SPEED : 1)
 
-	// The held tail is a rope: when it is taut they are pulled together, and
-	// each moves by the other's share of their weight.
-	height := HOLD_HEIGHT
-	tilt := drag_tilt(e.kind, height)
-	probe := e^
-	hang(&probe, {0, height, 0}, 0, tilt)
-	length := hold_reach() + probe.pos.y // facing 0 is +z, so .y here is its distance beyond his hands
-	d = e.pos - p.pos
-	dist = length2(d)
-	if dist > length {
-		excess := dist - length
-		animal := ENEMY_KG[e.kind] * DIG
-		his_share := animal / (p.kg + animal)
-		u = d / dist
-		p.pos += u * excess * his_share
-		collide_static(&p.pos, prosio_radius(p.kg), p.height)
+	floors: [3]f32
+	for k in 1 ..= 2 {
+		ground, _ := ground_at(e.chain[k].xz)
+		floors[k] = ground + r * (standing ? CHAIN_MODEL[e.kind][k].y : (k == 1 ? 0.5 : 0.45))
 	}
-	d = e.pos - p.pos
-	if length2(d) > 1e-4 {
-		u = normalize2(d)
-	}
+	on_floor := e.chain[1].y <= floors[1] + 0.03 || e.chain[2].y <= floors[2] + 0.03
 
-	// He faces it, leaning back, with its tail in both hands.
-	reach := hold_reach()
-	tip := Vec3{p.pos.x + u.x * reach, p.height + height, p.pos.y + u.y * reach}
-	p.facing = math.atan2(u.x, u.y)
-	hang(e, tip, p.facing, tilt)
-	p.hand = tip
-
-	// Its front paws scrape along the ground.
-	e.timer -= dt
-	if e.timer <= 0 && (length2(p.vel) > 0.5 || p.lunge_t > 0) {
-		e.timer = 0.09
-		for side in ([2]f32{-1, 1}) {
-			paw := held_matrix(e) * [4]f32{side * 0.34, 0, FRONT_PAW_Z, 1}
-			burst({paw.x, 0.08, paw.z}, 1, 1.4, COLOR_DUST, 0.08)
-		}
-	}
-}
-
-// The snatch. While dragging, Space yanks the animal round and flings it the
-// way he is heading. It is a real two-body spin: Prosio and the animal turn
-// together about their shared centre of weight, and at the end his legs give
-// them equal and opposite pushes. So:
-//
-//   - a heavy Prosio barely moves and whips a fox round himself;
-//   - a boar weighs more than he does, so the pivot is near the boar: Prosio
-//     swings round it while it hardly budges, and he is the one sent reeling.
-//
-// The animal leaves at  SNATCH_GAIN * his weight / its weight, more the
-// further the snatch twists (up to half a turn); he recoils at the matching
-// speed the other way. Whatever the animal sweeps into on the way is hit, as
-// by a club.
-
-SNATCH_GAIN :: f32(2.6)
-BASH_GAIN :: f32(1.6) // how much of the club's speed a struck animal or rock takes
-
-// The arrows: where he is heading, and so where a snatch will fling it.
-arrow_aim :: proc() -> (aim: Vec2) {
-	if button_down(.Left) {aim.x -= 1}
-	if button_down(.Right) {aim.x += 1}
-	if button_down(.Up) {aim.y -= 1}
-	if button_down(.Down) {aim.y += 1}
-	return normalize2(aim)
-}
-
-// Where a snatch would fling the animal right now: the way he is heading,
-// or, standing still, straight past him to the far side.
-snatch_heading :: proc() -> f32 {
-	p := &g.prosio
-	if aim := arrow_aim(); aim != {} {
-		return math.atan2(aim.x, aim.y)
-	}
-	e := &g.enemies[p.carry_index]
-	d := p.pos - e.pos
-	return math.atan2(d.x, d.y)
-}
-
-angle_gap :: proc(a, b: f32) -> f32 {
-	d := math.mod(a - b + math.PI, math.TAU)
-	if d < 0 {
-		d += math.TAU
-	}
-	return abs(d - math.PI)
-}
-
-begin_snatch :: proc() {
-	p := &g.prosio
-	e := &g.enemies[p.carry_index]
-	heading := snatch_heading()
-	d := e.pos - p.pos
-	start := math.atan2(d.x, d.y)
-
-	// It flies off along its arc, so it must be let go a quarter turn before
-	// the heading: twist whichever way gets there sooner.
-	best_sweep := f32(1e9)
-	for sign in ([2]f32{-1, 1}) {
-		release := heading - sign * math.PI / 2
-		sweep := math.mod(sign * (release - start), math.TAU)
-		if sweep < 0 {
-			sweep += math.TAU
-		}
-		if sweep < best_sweep {
-			best_sweep = sweep
-			p.snatch_sign = sign
-		}
-	}
-	sweep := max(best_sweep, 0.35)
-
-	// Both turn about their shared centre of weight.
-	mp, ma := p.kg, ENEMY_KG[e.kind]
-	centre := (p.pos * mp + e.pos * ma) / (mp + ma)
-	apart := max(length2(d), 0.5)
-	p.snatch_centre = centre
-	p.snatch_start = start
-	p.snatch_sweep = sweep
-	p.snatch_reach_p = apart * ma / (mp + ma) // his distance from the centre
-	p.snatch_reach_a = apart * mp / (mp + ma) // the animal's
-	twist := 0.5 + 0.5 * min(sweep / math.PI, 1)
-	p.snatch_speed = min(SNATCH_GAIN * mp / ma * twist, MAX_THROW)
-	p.snatch_heading = heading
-	p.snatch_rise = random_range(-0.4, 0.15)
-	p.snatch_tilt = e.tilt
-	ratio := ma / mp
-	p.snatch_total = 0.12 + 0.1 * min(ratio, 3) + 0.03 * sweep // violent and quick; a heavy one takes longer
-	p.snatch_t = 0
-	p.snatching = true
-	p.vel = {}
-	say(ratio > 1 ? "Hnnnngh!" : "HUP!", 0.6)
-}
-
-update_snatch :: proc(dt: f32) {
-	p := &g.prosio
-	e := &g.enemies[p.carry_index]
-	p.snatch_t += dt
-	k := min(p.snatch_t / p.snatch_total, 1)
-	// It speeds up all the way, like the crack of a whip.
-	angle := p.snatch_start + p.snatch_sign * p.snatch_sweep * k * k
-	out := facing_dir(angle)
-	p.pos = p.snatch_centre - out * p.snatch_reach_p
-	collide_static(&p.pos, prosio_radius(p.kg), p.height)
-	p.facing = angle
-	reach := hold_reach()
-	height := p.height + lerp(HOLD_HEIGHT, SNATCH_HEIGHT, smooth(k * 2))
-	tip := Vec3{p.pos.x + out.x * reach, height, p.pos.y + out.y * reach}
-	hang(e, tip, angle, lerp(p.snatch_tilt, -0.15, smooth(k * 2)))
-	p.hand = tip
-
-	// What it sweeps into is hit, at the speed it is moving now.
-	if snatch_hits(p.snatch_speed * k) {
-		return // it bonked into something solid
-	}
-	if k >= 1 {
-		fling(p.snatch_speed, p.snatch_heading, true)
-	}
-}
-
-// The snatched animal hits like a club: whatever it strikes takes a share of
-// its speed set by their weights, as when two balls collide. Anything too
-// big to knock away stops it dead. Returns true if it did.
-snatch_hits :: proc(speed: f32) -> bool {
-	p := &g.prosio
-	e := &g.enemies[p.carry_index]
-	if speed < 1 {
-		return false
-	}
-	r := ENEMY_RADIUS[e.kind]
-	club := ENEMY_KG[e.kind]
-	angle := p.snatch_start + p.snatch_sign * p.snatch_sweep * min(p.snatch_t / p.snatch_total, 1)
-	along := facing_dir(angle + p.snatch_sign * math.PI / 2)
-	hit_dir := normalize2(along * 0.75 + facing_dir(angle) * 0.45)
-
-	for &o, i in g.enemies[:g.enemy_count] {
-		if i == p.carry_index || o.hit_t > 0 {
-			continue
-		}
-		if !on_ground(&o) && !(o.state == .Flying && o.y < 1.6) {
-			continue
-		}
-		if length2(o.pos - e.pos) >= r + ENEMY_RADIUS[o.kind] {
-			continue
-		}
-		other := ENEMY_KG[o.kind]
-		passed := BASH_GAIN * club / (club + other) * speed
-		launch_enemy(&o, hit_dir, passed, ENEMY_THROW_KO[o.kind])
-		o.skip = true
-		o.hit_t = 0.4
-		if speed >= ENEMY_THROW_KO[e.kind] {
-			e.ko = true // the club gets knocked out too
-		}
-		g.shake = max(g.shake, min(passed * other / 500, 0.7))
-		burst({o.pos.x, 0.8, o.pos.y}, 10, 4, COLOR_STAR, 0.13)
-		say(passed > 8 ? "BASH!" : "Bonk!", 0.7)
-	}
-
-	for &rd, i in g.rounds[:g.round_count] {
-		if rd.kind != .Rock || rd.r <= 0 || length2(rd.pos - e.pos) >= r + rd.r {
-			continue
-		}
-		rock := rock_kg(rd.r)
-		if rock > club * 2.5 {
-			continue // a boulder: it stops the snatch, below
-		}
-		passed := BASH_GAIN * club / (club + rock) * speed
-		for &t in g.thrown {
-			if !t.active {
-				t = Thrown_Rock{active = true, round = i, r = rd.r, kg = rock, pos = rd.pos, vel = hit_dir * passed, y = 0.05, vy = passed * 0.3}
-				rd.r = 0
-				break
+	moved_him: f32
+	for _ in 0 ..< 4 {
+		// The tail is a rope from his hand to its middle. When it is taut
+		// they pull against each other, each giving way by the other's share.
+		d := e.chain[1] - hand
+		dist := linalg.length(d)
+		if dist > tail_len {
+			if !p.swinging {
+				his_weight := 1 / (p.kg * PROSIO_GRIP)
+				its_weight := 1 / (kg * (!on_floor ? 1 : (standing ? DIG : DRAG_SLIDE)))
+				share := his_weight / (his_weight + its_weight)
+				shift := d.xz / dist * (dist - tail_len) * share
+				p.pos += shift
+				hand += {shift.x, 0, shift.y}
+				shoulder += {shift.x, 0, shift.y}
+				moved_him += length2(shift)
+				d = e.chain[1] - hand
+				dist = linalg.length(d)
+			}
+			e.chain[1] = hand + d / dist * tail_len
+		} else if dist < tail_len * 0.5 && !p.swinging {
+			// Too close: it is pushed out sideways, never lifted.
+			flat := normalize2(d.xz)
+			if flat == {} {
+				flat = normalize2(e.chain[1].xz - p.pos)
+			}
+			need := math.sqrt(max(tail_len * tail_len * 0.25 - d.y * d.y, 0))
+			if length2(d.xz) < need {
+				e.chain[1].x = hand.x + flat.x * need
+				e.chain[1].z = hand.z + flat.y * need
 			}
 		}
-		burst({rd.pos.x, 0.5, rd.pos.y}, 8, 3, COLOR_DUST, 0.12)
+		// Its body keeps its length; the middle is heavier than the front.
+		d = e.chain[2] - e.chain[1]
+		dist = linalg.length(d)
+		if dist > 1e-4 {
+			fix := d * (dist - body_len) / dist
+			e.chain[1] += fix * 0.4
+			e.chain[2] -= fix * 0.6
+		}
+		for k in 1 ..= 2 {
+			e.chain[k].y = max(e.chain[k].y, floors[k])
+		}
+	}
+	if moved_him > 0 {
+		collide_static(&p.pos, prosio_radius(p.kg), p.height)
 	}
 
-	// Walls, trees, boulders: BONK. It drops off, dazed, bouncing back.
-	probe := e.pos
-	if hit, n := collide_static(&probe, r * 0.85, e.y, true); hit {
-		if speed >= ENEMY_THROW_KO[e.kind] {
-			e.ko = true
+	// On the ground: it scrabbles along on its feet, or slides limply. A fast
+	// fall onto the ground is a slam.
+	hit_something := false
+	for k in 1 ..= 2 {
+		point := &e.chain[k]
+		old := &e.chain_old[k]
+		vel := (point^ - old^) / dt
+		if point.y <= floors[k] + 0.02 {
+			bounce: f32 = 0
+			if vel.y < -5 && p.swinging {
+				slam(e, point^ + {0, -r * 0.4, 0}, -vel.y)
+				hit_something = true
+				bounce = -vel.y * 0.25
+			}
+			flat := approach2(vel.xz, standing ? run : {}, (standing ? 40 : 14) * dt)
+			old^ = point^ - Vec3{flat.x, bounce, flat.y} * dt
 		}
-		g.shake = max(g.shake, min(speed * club / 600, 0.6))
-		burst({e.pos.x, e.y + r, e.pos.y}, 10, 3.5, COLOR_STAR, 0.13)
-		say("BONK!", 0.7)
-		fling(speed * 0.3, math.atan2(n.x, n.y), false)
-		return true
+		// It cannot go through trees and walls, or through Prosio.
+		xz := point.xz
+		if hit, _ := collide_static(&xz, r * 0.55, point.y - r * 0.5, true); hit {
+			speed := linalg.length(vel)
+			if p.swinging && speed > 5 && !hit_something {
+				slam(e, point^, speed)
+				hit_something = true
+				g.shake = max(g.shake, 0.3)
+				say("BONK!", 0.6)
+			}
+		}
+		if point.y < p.height + 1.6 {
+			push_out_circle(&xz, r * 0.45, p.pos, prosio_radius(p.kg))
+		}
+		// Being pushed out moves it, but must not fling it: the push is not
+		// speed. Nor can anything else make it faster than a thrown animal.
+		push := xz - point.xz
+		point.x, point.z = xz.x, xz.y
+		old.x += push.x
+		old.z += push.y
+		step := point^ - old^
+		if fast := linalg.length(step); fast > MAX_THROW * dt {
+			old^ = point^ - step * (MAX_THROW * dt / fast)
+		}
 	}
-	return false
+	e.chain[0] = hand
+	p.hand = hand
+
+	// Swung, it hits like a club.
+	if p.swinging {
+		bash_hits(e, dt)
+	}
+
+	// Its pose: where it is, which way it points, which way is up for it, and
+	// how its legs dangle.
+	e.pos = e.chain[1].xz
+	e.y = max(e.chain[1].y - r * CHAIN_MODEL[e.kind][1].y, 0)
+	along := e.chain[2] - e.chain[1]
+	e.facing = math.atan2(along.x, along.z)
+	axis := linalg.normalize0(along)
+	carried := e.side - axis * linalg.dot(e.side, axis)
+	upright := linalg.cross(Vec3{0, 1, 0}, axis)
+	side := linalg.normalize0(carried)
+	if linalg.length(upright) > 0.2 {
+		// On its feet it stays upright; limp, it rolls only slowly back.
+		side = linalg.normalize0(side + (linalg.normalize(upright) - side) * (standing ? 0.3 : 0.03))
+	}
+	if side != {} {
+		e.side = side
+	}
+	for half in 0 ..< 2 {
+		vel := (e.chain[half + 1] - e.chain_old[half + 1]) / dt
+		e.dangle[half] = linalg.normalize0(Vec3{0, -1, 0} - vel * 0.09)
+	}
+	e.hop += dt * (alive ? (on_floor ? 16 : 30) : 0)
+
+	// How hard he strains: he leans back and digs in against a heavy animal.
+	want: f32 = alive ? clamp((ratio - 0.4) * 0.9, 0, 1) : 0
+	if p.heave_t > 0 {
+		want = 1
+	}
+	p.strain += (want - p.strain) * (1 - math.exp(-6 * dt))
+	if p.strain > 0.4 && !p.swinging {
+		to := e.pos - p.pos
+		p.facing = approach_angle(p.facing, math.atan2(to.x, to.y), 6 * dt)
+	}
+
+	// Paws scrape and his heels plough the grass.
+	e.timer -= dt
+	if e.timer <= 0 && (moved_him > 0.01 * dt || (standing && p.lunge_t > 0)) {
+		e.timer = 0.09
+		for k in 1 ..= 2 {
+			burst({e.chain[k].x, 0.08, e.chain[k].z}, 1, 1.4, COLOR_DUST, 0.07)
+		}
+		if p.strain > 0.4 {
+			burst({p.pos.x, p.height + 0.08, p.pos.y}, 2, 1.6, COLOR_DUST, 0.09)
+		}
+	}
 }
 
-// Lets go: the animal flies off, and Prosio recoils with equal and opposite
-// momentum (the same push, divided by his weight).
-fling :: proc(speed, heading: f32, recoil: bool) {
+// How long its tail is (from his hand to its middle) and its body.
+chain_lengths :: proc(kind: Enemy_Kind) -> (tail, body: f32) {
+	r := ENEMY_RADIUS[kind]
+	c := CHAIN_MODEL[kind]
+	return r * linalg.length(c[1] - c[0]), r * linalg.length(c[2] - c[1])
+}
+
+// The held animal is slammed into the ground or into something solid at
+// this speed. Enough of these knock it out.
+slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
+	if e.hit_t > 0 {
+		return // one bounce of the same whack does not count again
+	}
+	e.hit_t = 0.2
+	kg := ENEMY_KG[e.kind]
+	g.shake = max(g.shake, min(speed * kg / 1200, 0.4))
+	burst({at.x, at.y + 0.1, at.z}, 3 + int(speed * 0.4), 1.5 + speed * 0.15, COLOR_DUST, 0.11)
+	pain_stars({at.x, at.y + ENEMY_RADIUS[e.kind], at.z}, speed)
+	e.limp = min(max(e.limp, 0) + 0.8 + speed * 0.12, KO_LIMP + 1)
+	if e.limp >= KO_LIMP || speed >= ENEMY_THROW_KO[e.kind] * 1.5 {
+		e.ko = true
+	}
+	if speed > 6 {
+		WORDS := [?]cstring{"WHACK!", "THUD!", "SPLAT!", "BONK!", "WHUMP!"}
+		say(WORDS[int(random() * len(WORDS)) % len(WORDS)], 0.5)
+	}
+}
+
+// Whatever the swung animal hits takes a share of its speed set by their
+// weights, as when two balls collide.
+bash_hits :: proc(e: ^Enemy, dt: f32) {
+	p := &g.prosio
+	r := ENEMY_RADIUS[e.kind]
+	club := ENEMY_KG[e.kind]
+	for k in 1 ..= 2 {
+		point := e.chain[k]
+		vel := (point - e.chain_old[k]) / dt
+		speed := linalg.length(vel)
+		if speed < 3 {
+			continue
+		}
+		for &o, i in g.enemies[:g.enemy_count] {
+			if i == p.carry_index || o.hit_t > 0 || !on_ground(&o) {
+				continue
+			}
+			ro := ENEMY_RADIUS[o.kind]
+			if length2(o.pos - point.xz) >= r * 0.6 + ro || point.y > ro * 2.2 {
+				continue
+			}
+			other := ENEMY_KG[o.kind]
+			passed := BASH_GAIN * club / (club + other) * speed
+			dir := normalize2(normalize2(vel.xz) * 0.7 + normalize2(o.pos - point.xz) * 0.5)
+			if dir == {} {
+				dir = facing_dir(p.facing)
+			}
+			o.hit_t = 0.4
+			if passed < WEAK_HIT {
+				// Too heavy to knock over: it only rocks, and stops the club dead.
+				o.state = .Dizzy
+				o.timer = 0.6
+				o.vel = dir * passed
+			} else {
+				launch_enemy(&o, dir, passed, ENEMY_THROW_KO[o.kind])
+				o.skip = true
+			}
+			// The club loses what it passed on, and gets hurt too.
+			e.chain_old[k] = point - vel * dt * (club - other) / (club + other)
+			slam(e, point, speed * 0.6)
+			pain_stars({o.pos.x, ro * 1.8, o.pos.y}, passed)
+			g.shake = max(g.shake, min(passed * other / 500, 0.6))
+			say(passed > 8 ? "BASH!" : "Bonk!", 0.6)
+		}
+		for &rd, i in g.rounds[:g.round_count] {
+			if rd.kind != .Rock || rd.r <= 0 || length2(rd.pos - point.xz) >= r * 0.6 + rd.r || point.y > rd.r * 2 {
+				continue
+			}
+			rock := rock_kg(rd.r)
+			if rock > club * 2.5 {
+				continue // a boulder: the club just bonks off it (collide_static)
+			}
+			passed := BASH_GAIN * club / (club + rock) * speed
+			for &t in g.thrown {
+				if !t.active {
+					t = Thrown_Rock{active = true, round = i, r = rd.r, kg = rock, pos = rd.pos, vel = normalize2(vel.xz) * passed, y = 0.05, vy = passed * 0.3}
+					rd.r = 0
+					break
+				}
+			}
+			burst({rd.pos.x, 0.5, rd.pos.y}, 8, 3, COLOR_DUST, 0.12)
+		}
+	}
+}
+
+// The end of a throw: the animal flies off the way he is walking, and he
+// recoils with the same push (divided by his weight).
+throw_animal :: proc() {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
-	out := facing_dir(heading)
+	r := ENEMY_RADIUS[e.kind]
+	kg := ENEMY_KG[e.kind]
+	dir := facing_dir(p.facing)
+	speed := min(ANIMAL_THROW_GAIN * p.kg / kg, MAX_THROW)
+	rise := random_range(0.15, 0.4)
 	knocked := e.ko
-	launch_enemy(e, out, speed, ENEMY_THROW_KO[e.kind])
+	e.pos = p.pos + dir * (prosio_radius(p.kg) + r * 0.9)
+	collide_static(&e.pos, r, 0.5, true)
+	launch_enemy(e, dir, speed, ENEMY_THROW_KO[e.kind])
 	e.ko = e.ko || knocked
-	e.vel = out * speed * math.cos(p.snatch_rise)
-	e.vy = speed * math.sin(p.snatch_rise)
+	e.vel = dir * speed * math.cos(rise)
+	e.vy = speed * math.sin(rise)
+	e.y = 0.6
 	e.skip = true
-	e.tilt = 0
+	e.facing = math.atan2(dir.x, dir.y)
 	e.spin = random_range(0, math.TAU)
-	e.y = max(e.y, 0.1)
-	collide_static(&e.pos, ENEMY_RADIUS[e.kind], e.y, true)
+	e.limp = 0
 
-	if recoil {
-		p.vel = -out * min(speed * ENEMY_KG[e.kind] / p.kg, 12)
-	}
+	p.vel -= dir * min(speed * kg / p.kg, 6)
 	p.carry = .Nothing
 	p.carry_kg = 0
-	p.snatching = false
+	p.swinging = false
 	p.stretch_vel -= 3
 	p.kg -= DASH_BURN
-	g.shake = max(g.shake, min(speed * ENEMY_KG[e.kind] / 600, 0.7))
-	if recoil {
-		say(speed > 9 ? "HAI-YA!" : (ENEMY_KG[e.kind] > p.kg ? "Whoa-oa-oa!" : "Hup!"), 0.9)
-	}
+	g.shake = max(g.shake, min(speed * kg / 600, 0.6))
+	say(speed > 11 ? "HAI-YA!" : "Hup!", 0.9)
+	burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
 }
 
-// While he drags an animal: an arrow on the ground showing where a snatch
-// would fling it.
-draw_snatch_aim :: proc() {
-	p := &g.prosio
-	if p.carry != .Enemy || p.snatching || p.lift_t > 0 {
-		return
+// A little spray of pain stars: a few, small, each its own size and way.
+pain_stars :: proc(pos: Vec3, strength: f32) {
+	count := 2 + int(random() * 3) + int(min(strength, 12) / 5)
+	for _ in 0 ..< count {
+		a := random_range(0, math.TAU)
+		s := random_range(0.8, 2.6)
+		vel := Vec3{math.cos(a) * s, random_range(1.5, 4), math.sin(a) * s}
+		spawn_particle(pos + {random_range(-0.15, 0.15), random_range(0, 0.2), random_range(-0.15, 0.15)}, vel, random_range(0.3, 0.7), random_range(0.035, 0.07), random() < 0.25 ? COLOR_WHITE : COLOR_STAR)
 	}
-	heading := snatch_heading()
-	dir := facing_dir(heading)
-	aimed := arrow_aim() != {}
-	color := aimed ? Color{255, 220, 70, 230} : Color{255, 255, 255, 150}
-	ground := p.height + 0.06
-	outlines_enabled = false
-	for k in 0 ..< 4 {
-		at := p.pos + dir * (1.2 + f32(k) * 0.42)
-		tube(IDENTITY, {at.x, ground, at.y}, 0.1, 0.01, color)
-	}
-	head := p.pos + dir * 3.0
-	draw_shape(.Cone, translate({head.x, ground, head.y}) * rot_y(heading) * rot_x(math.PI / 2) * scale({0.3, 0.42, 0.02}), color)
-	outlines_enabled = true
 }
 
 // Letting go of a rock overhead: it is hurled down in front of him.
@@ -629,25 +824,25 @@ throw_rock :: proc() {
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 }
 
-// Lets go of whatever he holds; it ends up on the ground in front of him.
+// Lets go of whatever he holds; it ends up on the ground.
 drop_carry :: proc() {
 	p := &g.prosio
 	dir := facing_dir(p.facing)
 	pr := prosio_radius(p.kg)
 	switch p.carry {
 	case .Enemy:
-		// Let go of the tail: it stays where it is, a little dazed.
+		// Let go of the tail: it lies where it is, dazed for as long as it
+		// was limp. A knocked-out one stays down.
 		e := &g.enemies[p.carry_index]
-		if p.snatching {
-			e.pos = p.pos + dir * (pr + ENEMY_RADIUS[e.kind] + 0.05)
-		}
+		e.pos = e.chain[1].xz
 		e.y = 0
 		e.vy = 0
-		e.tilt = 0
+		e.vel = {}
 		e.state = .Dizzy
-		e.ko = false
-		e.timer = 0.8
+		e.timer = max(0.8, e.limp)
+		e.limp = 0
 		collide_static(&e.pos, ENEMY_RADIUS[e.kind], 0, true)
+		push_out_circle(&e.pos, ENEMY_RADIUS[e.kind], p.pos, pr)
 	case .Rock:
 		rd := &g.rounds[p.carry_index]
 		rd.pos = p.pos + dir * (pr + p.carry_r + 0.05)
@@ -657,7 +852,7 @@ drop_carry :: proc() {
 	}
 	p.carry = .Nothing
 	p.carry_kg = 0
-	p.snatching = false
+	p.swinging = false
 }
 
 update_thrown :: proc(dt: f32) {

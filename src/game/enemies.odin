@@ -43,9 +43,13 @@ Enemy :: struct {
 	timer:  f32, // attack pause, dizzy time or time until it comes back
 	ko:     bool, // knocked out: it disappears after landing
 	skip:   bool, // slammed down spinning: it skips along the ground
-	tip:    Vec3, // while held: the point where Prosio holds its tail
-	tilt:   f32, // while held: how far its rear is lifted (radians)
 	hit_t:  f32, // just hit by a swung animal: not hit again until this runs out
+	// While held by the tail its body is a floppy chain (see grab.odin):
+	chain:     [3]Vec3, // the tail tip in Prosio's hand, the middle of its body, its shoulders
+	chain_old: [3]Vec3, // where they were a step ago
+	side:      Vec3, // which way its side points
+	dangle:    [2]Vec3, // which way the hind and the front legs hang
+	limp:      f32, // bashed about: limp for this long
 }
 
 // Weight goes with volume: the boar is about 2.1 times the fox's size, so it
@@ -270,11 +274,11 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 		} else if can_shove && e.timer <= 0 && p.safe_t <= 0 {
 			// The enemy shoves Prosio. A lean Prosio flies further, and a rock
 			// is knocked out of his hands. A tail he keeps hold of, and in the
-			// middle of a snatch he cannot be pushed off course.
+			// middle of a swing he cannot be pushed off course.
 			if p.carry == .Rock {
 				drop_carry()
 			}
-			if !p.snatching {
+			if !p.swinging {
 				p.vel = -away * min(BONK * ENEMY_KG[e.kind] / p.kg, 12)
 			}
 			p.stamina -= 12

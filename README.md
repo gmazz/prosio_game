@@ -32,13 +32,13 @@ The goal is to collect all five golden truffles. Each one sits behind a puzzle t
 | Bump (belly charge) | `Space` |
 | Jump | `J` or `X` |
 | Sprint | hold `Shift` while moving |
-| Grab (hold), throw (let go) | `F` or `L` |
-| Snatch a held animal the way you are heading | `Space` while holding `F` |
+| Grab; press again to throw | `F` or `L` |
+| Bash with a held animal | `Space` |
 | Eat (next to food) | `E` or `K` |
 | Push-ups (anywhere else) | hold `E` or `K` |
 | Pause menu | `Esc` or `P` |
 | Try again after fainting | `Enter` or `R` |
-| Switch look | `V` or `F1`, any time, or from the menus: cycles chunky, medium and fine pixels, then Toy |
+| Pixel size | `1` (chunkiest) to `5` (finest), any time, or from the menus |
 | Menus | up / down to choose, `Enter` or `Space` to select |
 
 There is no gamepad or touch support yet.
@@ -138,51 +138,42 @@ Flying enemies bounce off walls, sail over low ones, and bowl over any enemy the
 
 ### Being shoved
 
-An enemy that reaches Prosio shoves him at `31 x enemy's weight / Prosio's weight` (at most 12), takes 12 stamina and knocks a carried rock out of his hands (a tail he keeps hold of; mid-snatch he cannot be pushed off course). After a shove he flashes warm gold and cannot be shoved again for 1.2 seconds. If his stamina reaches zero he is dizzy for under a second, then gets up with 30 stamina and three seconds of safety, so a crowd cannot pin him down.
+An enemy that reaches Prosio shoves him at `31 x enemy's weight / Prosio's weight` (at most 12), takes 12 stamina and knocks a carried rock out of his hands (a tail he keeps hold of; mid-swing he cannot be pushed off course). After a shove he flashes warm gold and cannot be shoved again for 1.2 seconds. If his stamina reaches zero he is dizzy for under a second, then gets up with 30 stamina and three seconds of safety, so a crowd cannot pin him down.
 
 ## Grabbing and throwing
 
-Hold `F` to grab; letting go of a rock throws it, letting go of a tail just drops the animal. Grabbing reaches about an arm's length (0.85) beyond touching.
+`F` grabs whatever is within about an arm's length (0.85) beyond touching. Nothing has to be held down: `F` again throws it.
 
-- **Animals** are grabbed by the tail and dragged, held up by the tail in both hooves, rear end lifted and front paws scraping the ground. While dragging, the arrows still move him, and an arrow on the ground shows where a snatch would fling the animal: the way he is heading (yellow), or straight past him to the far side when he stands still (pale).
-  - **Space while dragging: snatch it.** One violent, quick yank: the animal is whipped round through an arc and flung the way he is heading. Whatever it sweeps into on the way is hit as if by a club.
-- **Rocks**, boulders included, are lifted overhead and held there. Letting go hurls them down in front of him, and they skim across the ground.
+- **Animals** are caught by the tail with one hoof and dragged along behind him as he walks.
+  - **`Space`: bash with it.** He swings the animal like a club, roughly the way he is walking, and slams it into the ground in front of him and into anything standing there. Each swing goes a different way: over his head, round his side, or backhand across his front, landing somewhere ahead and a little to either side. Press `Space` again during a swing to queue the next one.
+  - **`F`: throw it.** A quick wind-up over his head, and it flies off the way he is walking.
+- **Rocks**, boulders included, are lifted overhead and held there. `F` again hurls them down in front of him, and they skim across the ground.
 
-Nothing about it is a yes-or-no rule. Everything scales with the *ratio* between the thing's weight and Prosio's:
+**A floppy body.** A held animal is not stiff. Its body is a short chain of three points (the tail tip in his hoof, the middle of its body, its shoulders) that swing, fall and slide on the ground under their own weight, and its back and front halves are drawn between them, so it bends in the middle. Its legs dangle with gravity and trail behind as it moves. While it is still fighting it stands on its feet and scrabbles to get away, with a sudden lunge every second or so; once it has been bashed it goes limp, with a few small pain stars round its head, and it is simply dragged along the grass.
+
+**Dragging is a tug of war.** The tail is a rope. While it is taut, Prosio and the animal are pulled together, and each gives way by the *other's* share of their weight. An animal on its feet digs in (1.5 times its weight), a limp one slides (0.6 times), and Prosio digs his heels in too (1.5 times his). So a fox barely slows him down, while the 190 kg boar drags even a big Prosio about: he leans back with gritted teeth, his free arm flung out, heels ploughing the grass, and keeps facing it while he backs away.
+
+**Only something lighter than 0.9 times his own weight can be swung or thrown.** That is any fox, but never the boar. With the boar, `Space` is a heave: he strains with all he has, lifts its rear a little, and it answers with a lunge. `F` just lets go. He can hang on until his stamina runs out or it pulls free.
+
+Everything else scales with the *ratio* between the animal's weight and Prosio's:
 
 | | Rule |
 |---|---|
-| Stamina to grab | 6 + 25 x ratio (so a lean Prosio cannot grab the 190 kg boar at all) |
-| Time to catch a tail | 0.12 s x ratio |
-| Time to lift a rock | 0.35 s x ratio |
-| Stamina drain while holding | 5 per second x ratio |
-| Animal breaks free after | 3 s / ratio |
-| Snatch or throw speed | 2.6 x his weight / its weight (at most 22) |
+| Stamina to grab | 6 + 25 x ratio (at most 31) |
+| Stamina drain while holding | 5 per second x ratio, a quarter of that once it is limp |
+| A struggling animal pulls free after | 9 s / (ratio + 0.4): about 14 s for a fox, 3 to 5 s for the boar |
+| Stamina per bash | 3 + 10 x ratio |
+| How long a swing takes | 0.22 + 0.5 x ratio seconds: a heavier Prosio swings faster, so he hits harder |
+| Throw speed | 3.2 x his weight / its weight (at most 22) |
 
-**Dragging is a tug of war.** The tail is a rope of fixed length. While it is taut, Prosio and the animal are pulled together, and each moves by a share set by the *other's* weight. A digging animal counts 1.5 times its weight. The animal keeps trying to run away, with a sudden lunge every second or so, so a heavy Prosio tows a fox along at a brisk walk, while a boar drags even a big Prosio about.
+**Bashing.** His hoof sweeps round from his shoulder, speeding up all the way like the crack of a whip, and drags the animal's body round on the end of its tail; its front half flops along after it. Hitting the ground hard is a slam (WHACK, THUD, SPLAT...): dust, a little shake, and the animal goes limper. Whatever it hits on the way takes `1.6 x its weight / (its + the other's weight)` of its speed, as when two balls collide: struck foxes fly off spinning and skip along, small rocks are batted away, and the boar only rocks on its feet. Trees and walls stop it with a BONK. Enough slams knock it out:
 
-**How it hangs.** The animal is placed so that its tail tip is exactly in Prosio's hands, at 1.15 high, and it tips nose-down until its front paws reach the ground. A light animal hangs steeply, a heavy one barely tips. Prosio faces it and leans back. He never lets go of a tail when shoved (a carried rock is still knocked out of his hands).
-
-**The snatch is a real two-body spin.** Prosio and the animal turn together about their shared centre of weight, the further one way or the other that gets the animal released heading the right way (a quarter turn before the heading). At the end his legs give them equal and opposite pushes: the animal leaves at `2.6 x his weight / its weight`, times a twist bonus from 0.5 (a tiny twist) to 1 (half a turn or more), and he recoils the other way with the same momentum. So a heavy Prosio barely moves while he whips a fox round himself, but with the boar (heavier than him) the pivot sits near the boar: **Prosio is the one swung round**, the boar hardly budges, and he goes reeling. A snatch takes from about 0.15 s (a fox) to 0.4 s (the boar). Each one leaves at a slightly random angle, between 23 degrees down at the ground and 9 degrees up.
-
-Measured:
-
-| Snatch | Prosio's distance from the pivot | Animal's distance | Animal leaves at | Prosio recoils at |
-|---|---|---|---|---|
-| Fox, 125 kg Prosio | 0.25 | 1.54 | up to 16.3 | about 2.6 |
-| Boar, 125 kg Prosio | 1.34 | 0.88 | 1.7, knocked out | 2.6 |
-| Boar, 85 kg Prosio | 1.38 | 0.62 | 1.2 | 2.6 |
-
-**The club.** Whatever the swinging animal hits takes `1.6 x its weight / (its + the other's weight)` of its current speed. Struck animals fly off spinning and skip along. Rocks up to 2.5 times its weight are batted away. Anything solid and bigger (walls, trees, boulders) stops the snatch with a BONK: the animal drops off, bouncing back. A hit or bonk at the animal's own knock-out speed knocks it out too.
-
-**Landing.** A flung animal is spinning, so at every skip it keeps 82% of its forward speed, bounces back up with 55% of its falling speed, and the spin turns another 18% of the fall into forward speed. It knocks over any other animal it hits and bounces off walls, trees and rocks.
-
-| Fling speed (half-turn snatch) | 45 kg Prosio | 85 kg | 125 kg |
+| Bashing a fox | 40 kg Prosio | 80 kg | 125 kg |
 |---|---|---|---|
-| Fox (20 kg) | 5.9 | 11.1 | 16.3, knocked out |
-| Boar (190 kg) | cannot grab it | 1.2 | 1.7, knocked out |
+| Knocked out after | more than four bashes | about four | about two |
+| Then thrown at | 6.4 | 12.8, knocked out | 20 |
 
-Animals are knocked out by a fling at 12 for a fox (a full-strength snatch by a Prosio of about 92 kg or more) and 1.5 for the boar (about 110 kg or more).
+A thrown animal is knocked out if it leaves at its knock-out speed (12 for a fox), or if it was knocked out already. It is spinning, so at every skip it keeps 82% of its forward speed, bounces back up with 55% of its falling speed, and the spin turns another 18% of the fall into forward speed. It knocks over any other animal it hits and bounces off walls, trees and rocks.
 
 **Rocks** weigh `380 x radius cubed`: about 10 kg for a small one (radius 0.3), 82 kg at radius 0.6, and about 280 kg for the big boulders. A thrown rock skims while it is still moving faster than 3, bouncing back with 45% of its falling speed and keeping 80% of its forward speed. It knocks over animals in its path, passing on more of its speed the heavier it is, and comes to rest as an ordinary rock again.
 
@@ -192,7 +183,7 @@ Animals are knocked out by a fling at 12 for a fox (a full-strength snatch by a 
 | 130 kg boulder | too heavy to lift (not enough stamina) | 1.6, drops 1 m in front | 2.5, drops 1.3 m in front |
 
 - **A carried rock's weight is his.** It counts on the pressure plate, on both seesaws and when he lands, and it lowers his jump. A dragged animal stands on its own feet, so it does not count.
-- He cannot bump, sprint, eat or do push-ups with his hands full, and cannot jump while holding a tail.
+- He cannot bump, sprint, eat or do push-ups with his hands full, and cannot jump while holding a tail. He can bash on the move, at half speed.
 
 ## The meadow and its puzzles
 
@@ -280,7 +271,7 @@ src/
   game/              the game itself
     platform.odin    the only file that calls raylib: window, input, shapes,
                      shaders, outlines, text
-    shaders/         the scene shader: both looks, ground, leaves, bark, stone,
+    shaders/         the scene shader: pixel shading, ground, leaves, bark, stone,
                      fabric, shadows, wind and the see-through fade
     game.odin        the Game state, scenes (menu, playing, paused), the frame
                      loop and the camera
@@ -288,7 +279,8 @@ src/
                      which keeps anything round out of everything solid
     prosio.odin      Prosio: weight, movement, jump, sprint, stamina
     enemies.odin     enemies, bumps, shoves and stomps
-    grab.odin        grabbing, carrying, throwing, rocks in flight
+    grab.odin        grabbing, dragging, bashing, throwing, the floppy held
+                     animal, rocks in flight
     seesaw.odin      the lever physics, catapult and boulder
     draw.odin        everything drawn in the world
     ui.odin          bars, prompts, speech bubbles, menus
@@ -303,12 +295,10 @@ lib/                 raylib compiled for the web
 A few choices shape the rest:
 
 - **One file touches raylib.** The game draws with a few primitive meshes (sphere, hemisphere, cube, cylinder, cone, torus, planes, and a tapered cylinder built at start-up for limbs) placed by matrices, and asks about a dozen named buttons.
-- **Bodies** are built from those shapes. Arms and legs are tapered segments (thigh, shin, upper arm, forearm) that narrow towards the hooves, with round joints between; Prosio's shorts sit over two separate buttocks. He is built short and stocky: short legs, a compact body and a big head. Swapping raylib for another library would mean rewriting `platform.odin` only.
+- **Bodies** are built from those shapes. Arms and legs are tapered segments (thigh, shin, upper arm, forearm) that narrow towards the hooves, with round joints between; Prosio's shorts sit high over two small buttocks, so his legs show below them, and his arms are plump with a round biceps. He is built short and stocky: short legs, a compact body and a big head. When he eats, it is his belly that grows, forwards and sideways; his bottom hardly changes. Swapping raylib for another library would mean rewriting `platform.odin` only.
 - **No memory allocation in the game.** Everything lives in one `Game` struct of fixed-size arrays, which is also why the web build needs no allocator.
 - **Physics on the ground plane, plus height.** Positions are 2D; things that jump or fly also have a height and a vertical speed. Physics runs in fixed steps of at most 1/120 of a second.
-- **Two looks** draw the same 3D scene, switchable at any time:
-  - *Toy*: soft light that wraps round like on clay, a bright rim at the edges, a faint sheen and darkening where things meet the ground, drawn straight to the screen.
-  - *Pixel* (the default): three flat tones, a limited palette, dithered ground and one-pixel outlines, drawn into a small image that is enlarged without smoothing. It comes in three densities, aiming at about 240, 360 (the default) and 480 rows of pixels; each game pixel is a whole number of real screen pixels, so the actual count is the nearest that fits the window (263, 329 and 439 on a 1316-pixel-tall window). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
+- **Pixel art from 3D.** The scene is lit with three flat tones and a limited palette, with dithered ground and one-pixel outlines, and drawn into a small image that is enlarged without smoothing. There are five pixel sizes (keys `1` to `5`), aiming at about 180, 240, 320 (the default), 420 and 560 rows of pixels. Each game pixel is a whole number of real screen pixels, so the actual count is the nearest that fits the window, and each level is kept at least one step finer than the one below it as far as the window allows (on a small window the finest levels can end up the same). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
 - **Surface detail is calculated, not painted:** grass tones and the footpath, leaf clumps, bark grain and moss are all noise in the shader. Leaves sway in the wind.
 - **Trees** are a trunk plus clusters of round leafy lumps, in three species (broadleaf, blossom, pine). A tree standing between the camera and Prosio fades to a see-through pattern where it covers him.
 - **Only what is near the camera is drawn.**
@@ -329,16 +319,15 @@ The desktop build takes options that script a run, save a picture and quit. They
 | `--shot name.png` | save a picture, then quit |
 | `--frame 150` | which frame to take the picture on |
 | `--menu` | show the menu instead of starting the game |
-| `--crowd` | put three foxes and a boar round Prosio at the start, for trying snatches |
-| `--toy` | start in the Toy look |
-| `--detail 3` | pixel density: 1 chunky, 2 medium (default), 3 fine |
+| `--crowd` | put three foxes and a boar round Prosio at the start, for trying the club |
+| `--detail 3` | pixel size: 1 chunkiest to 5 finest (default 3) |
 
 Button letters: `l r u d` to move, `b` bump, `j` jump, `s` sprint, `a` eat or push-ups, `g` grab or throw.
 
-For example, a 125 kg Prosio waits for a fox, grabs its tail on frame 22, holds on, lets go on frame 92 and throws it:
+For example, Prosio grabs a fox from the crowd on frame 12, walks off dragging it, bashes on frame 50, and the picture is taken mid-swing:
 
 ```bash
-./build/desktop/prosio --kg 125 --pos -5 0.15 --hold g --tap g --tap-at 22 --release-at 92 --shot throw.png --frame 116
+./build/desktop/prosio --crowd --tap g --tap-at 12 --hold d --tap2 b --tap2-at 50 --shot bash.png --frame 62
 ```
 
 ## Tuning
@@ -350,7 +339,7 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | Weight limits and zones, food and exercise amounts | `prosio.odin`, `world.odin` (`FOOD_KG`) |
 | Speeds, sprint, stamina costs and recovery, jump energy | `prosio.odin` (`walk_speed`, `dash_cost`, `JUMP_ENERGY`, ...) |
 | How hard bumps and shoves are, enemy weights and grips | `enemies.odin` |
-| Throw strength, lift time, hold time, rock weight | `grab.odin` |
+| Throw and bash strength, lift limit, dragging grip, how fast animals go limp, rock weight | `grab.odin` |
 | Seesaw sizes and weights, where the crate stands | `seesaw.odin` |
 | World size, door width, plate weight | `world.odin` |
 | Colours | `draw.odin`, `ui.odin` |
