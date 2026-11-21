@@ -12,12 +12,17 @@ KG_DANGER :: f32(7) // warning zone width at each end
 
 STAMINA_MAX :: f32(100)
 DASH_TIME :: f32(0.28)
-PUSHUP_TIME :: f32(0.6) // seconds per push-up
-PUSHUP_KG :: f32(2.5) // weight lost per push-up
-WALK_BURN :: f32(0.05) // kg lost per second of walking
-SPRINT_BURN :: f32(0.2) // kg lost per second of sprinting
-DASH_BURN :: f32(0.3) // kg lost per bump
-JUMP_BURN :: f32(0.15) // kg lost per jump
+PICK_TIME :: f32(0.5) // stooping to pick something up and putting it in the sack
+
+// Everything he does burns some of his weight, a little for everyday things
+// and more for fighting. Walking and running burn in proportion to his
+// weight: these are for an 80 kg Prosio.
+WALK_BURN :: f32(0.02) // kg per second of walking
+SPRINT_BURN :: f32(0.06) // kg per second of sprinting
+GATHER_BURN :: f32(0.08) // kg per thing picked up
+JUMP_BURN :: f32(0.06) // kg per jump
+FIGHT_BURN :: f32(0.2) // kg per bump, grab, bash or throw
+HURT_BURN :: f32(0.35) // kg per shove or peck taken
 
 // His legs put the same energy into every jump, so height = energy / weight:
 // a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3.
@@ -34,8 +39,6 @@ Prosio :: struct {
 	height:       f32, // how far his feet are above the meadow
 	vy:           f32, // vertical speed while in the air
 	airborne:     bool,
-	on_seesaw:    int, // the seesaw he stands on, or -1
-	dive:         bool, // an aimed jump from the tower; no steering until he lands
 	facing:       f32,
 	kg:           f32,
 	stamina:      f32,
@@ -47,10 +50,8 @@ Prosio :: struct {
 	dazed_t:      f32, // time left seeing stars
 	safe_t:       f32, // time left during which enemies cannot shove him again
 	eat_t:        f32, // time left in the munching animation
-	pushups_on:   bool, // the action button started a push-up session
-	pushups:      bool, // doing push-ups right now
-	pushup_phase: f32,
-	pushup_reps:  int,
+	pick_t:       f32, // time left picking something up
+	pick_item:    Item, // what he is picking up
 	walk_phase:   f32,
 	wobble:       f32, // belly jiggle, a small spring
 	wobble_vel:   f32,
@@ -90,8 +91,7 @@ fatness :: proc(kg: f32) -> f32 {
 	return clamp((kg - KG_MIN) / (KG_MAX - KG_MIN), 0, 1)
 }
 
-// Prosio's size on the ground. This is what does or does not fit through a
-// door. The hands swing beyond this torso radius.
+// Prosio's size on the ground. The hands swing beyond this torso radius.
 prosio_radius :: proc(kg: f32) -> f32 {
 	return 0.42 + (kg - KG_MIN) * 0.0055
 }
@@ -126,16 +126,17 @@ jump_cost :: proc(kg: f32) -> f32 {
 	return lerp(4, 22, fatness(kg))
 }
 
-pushup_cost :: proc(kg: f32) -> f32 {
-	return lerp(5, 11, fatness(kg))
-}
-
 stamina_regen :: proc(kg: f32) -> f32 {
 	return lerp(50, 8, math.pow(fatness(kg), 0.8)) // stamina per second
 }
 
 jump_height :: proc(kg: f32) -> f32 {
 	return JUMP_ENERGY / kg
+}
+
+// Weight burned. Fights and knocks are the dearest; see the *_BURN numbers.
+burn :: proc(kg: f32) {
+	g.prosio.kg -= kg
 }
 
 say :: proc(text: cstring, seconds: f32 = 1.6) {
@@ -153,14 +154,11 @@ hint :: proc(text: cstring) {
 
 reset_prosio :: proc() {
 	g.prosio = Prosio {
-		pos       = {0, 6.5},
-		kg        = KG_START,
-		stamina   = STAMINA_MAX,
-		on_seesaw = -1,
+		pos     = HOME + {0, 4},
+		kg      = KG_START,
+		stamina = STAMINA_MAX,
 	}
 }
-
-COUNT_TEXT := [?]cstring{"1!", "2!", "3!", "4!", "5!", "6!", "7!", "8!", "9!", "10!", "So many!"}
 
 update_prosio :: proc(dt: f32) {
 	p := &g.prosio
@@ -171,20 +169,18 @@ update_prosio :: proc(dt: f32) {
 	p.dazed_t -= dt
 	p.safe_t -= dt
 	p.eat_t -= dt
+	p.pick_t -= dt
 	p.wobble_vel += (-180 * p.wobble - 9 * p.wobble_vel) * dt
 	p.wobble += p.wobble_vel * dt
 	p.stretch_vel += (-260 * p.stretch - 16 * p.stretch_vel) * dt
 	p.stretch += p.stretch_vel * dt
 
-	// Lying down he takes up more room, so he is kept that much further from walls.
-	lying := p.pushups || p.fail != .None
-	body_r := lying ? max(r, 1.0) : r
-
 	if p.fail != .None {
+		// Lying down he takes up more room, so he is kept that much further from walls.
 		p.fail_t += dt
 		p.vel = approach2(p.vel, {}, 25 * dt)
 		p.pos += p.vel * dt
-		collide_static(&p.pos, body_r, p.height)
+		collide_static(&p.pos, max(r, 1.0), p.height)
 		prosio_vertical(dt)
 		if p.fail_t > 1 && pressed(.Restart) {
 			sack := p.sack // the sack is still there when he comes round
@@ -204,7 +200,8 @@ update_prosio :: proc(dt: f32) {
 	moving := move != {}
 
 	grounded := !p.airborne
-	can_act := p.dazed_t <= 0 && p.dash_t <= 0
+	busy := p.eat_t > 0 || p.pick_t > 0
+	can_act := p.dazed_t <= 0 && p.dash_t <= 0 && !busy
 	food := food_in_reach(p.pos, r + 0.75)
 	bush := bush_in_reach(p.pos, r + 0.6)
 	oven := oven_in_reach(p.pos, r)
@@ -229,69 +226,21 @@ update_prosio :: proc(dt: f32) {
 	if pressed(.Sack_Prev) {
 		sack_step(-1)
 	}
-	if grounded && can_act && !carrying && !p.pushups && pressed(.Eat) {
+	if grounded && can_act && !carrying && pressed(.Eat) {
 		eat_from_sack()
 	}
 
-	// Push-ups: hold the action button anywhere else.
-	if grounded && food == nil && bush == nil && !oven && !carrying && pressed(.Action) && can_act && !p.pushups_on {
-		p.pushups_on = true
-		p.pushup_phase = 0
-		p.pushup_reps = 0
-	}
-	if !button_down(.Action) {
-		p.pushups_on = false
-	}
-	p.pushups = p.pushups_on && grounded && can_act && !carrying && !moving && p.eat_t <= 0
-	if p.pushups {
-		cost := pushup_cost(p.kg)
-		if p.stamina < cost {
-			p.pushups_on = false
-			p.pushups = false
-			say("Phew! I need a rest!")
-		} else {
-			p.pushup_phase += dt / PUSHUP_TIME
-			if p.pushup_phase >= 1 {
-				p.pushup_phase -= 1
-				p.kg -= PUSHUP_KG
-				p.stamina -= cost
-				p.regen_delay = 0.5
-				say(COUNT_TEXT[min(p.pushup_reps, len(COUNT_TEXT) - 1)], 0.6)
-				p.pushup_reps += 1
-				burst({p.pos.x, p.height + 1, p.pos.y}, 4, 2.5, COLOR_SWEAT, 0.07)
-			}
-		}
-	}
-
 	// Jump. A lighter Prosio goes higher, and a load weighs him down.
-	if grounded && can_act && !p.pushups && p.lift_t <= 0 && p.carry != .Enemy && pressed(.Jump) {
+	if grounded && can_act && p.lift_t <= 0 && p.carry != .Enemy && pressed(.Jump) {
 		cost := jump_cost(p.kg)
 		if p.stamina >= cost {
 			p.stamina -= cost
 			p.regen_delay = 0.4
-			p.kg -= JUMP_BURN
+			burn(JUMP_BURN)
 			p.vy = math.sqrt(2 * GRAVITY * jump_height(total_kg()))
 			p.airborne = true
 			p.stretch_vel += 4
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
-			// From the tower, the jump is aimed at the catapult's landing pad.
-			if on_tower(p.pos, p.height) {
-				pad := catapult_pad()
-				fall := max(p.height - pad_rest_height(), 0)
-				air_time := (p.vy + math.sqrt(p.vy * p.vy + 2 * GRAVITY * fall)) / GRAVITY
-				p.vel = (pad - p.pos) / air_time
-				// He must be past the tower's edge before he drops below its top,
-				// without flying over the short end of the plank.
-				s := &g.seesaws[CATAPULT]
-				edge := g.platforms[g.tower].hi.x
-				back_at_top := 2 * p.vy / GRAVITY
-				needed := (edge + 0.05 - p.pos.x) / back_at_top
-				most := (s.pivot.x - 0.2 - p.pos.x) / air_time
-				p.vel.x = clamp(max(p.vel.x, needed), 0, most)
-				p.dive = true
-				p.facing = math.atan2(p.vel.x, p.vel.y)
-			}
-			p.on_seesaw = -1
 			grounded = false
 		} else {
 			hint("Too tired to jump!")
@@ -299,7 +248,7 @@ update_prosio :: proc(dt: f32) {
 	}
 
 	// Bump: a short belly charge. Costs more stamina the heavier he is.
-	if grounded && can_act && !p.pushups && !carrying && pressed(.Bump) {
+	if grounded && can_act && !carrying && pressed(.Bump) {
 		cost := dash_cost(p.kg)
 		if p.stamina >= cost {
 			dir := moving ? move : facing_dir(p.facing)
@@ -309,7 +258,7 @@ update_prosio :: proc(dt: f32) {
 			// A bump out of a sprint keeps the extra speed.
 			p.vel = dir * max(dash_speed(p.kg), length2(p.vel) + 2)
 			p.facing = math.atan2(dir.x, dir.y)
-			p.kg -= DASH_BURN
+			burn(FIGHT_BURN)
 			p.wobble_vel -= 2
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2, COLOR_DUST, 0.12)
 		} else {
@@ -322,11 +271,11 @@ update_prosio :: proc(dt: f32) {
 	if p.winded && p.stamina > 30 {
 		p.winded = false
 	}
-	p.sprinting = button_down(.Sprint) && moving && grounded && can_act && !carrying && !p.pushups && p.eat_t <= 0 && !p.winded
+	p.sprinting = button_down(.Sprint) && moving && grounded && p.dazed_t <= 0 && !busy && !carrying && !p.winded
 	if p.sprinting {
 		p.stamina -= sprint_drain(p.kg) * dt
 		p.regen_delay = lerp(0.3, 1.0, t)
-		p.kg -= SPRINT_BURN * dt
+		burn(SPRINT_BURN * p.kg / KG_START * dt)
 		p.dust_t -= dt
 		if p.dust_t <= 0 {
 			p.dust_t = 0.1
@@ -343,7 +292,7 @@ update_prosio :: proc(dt: f32) {
 	// Movement. A heavy Prosio is slower and takes longer to get going.
 	if p.dash_t > 0 {
 		p.dash_t -= dt
-	} else if !p.dive {
+	} else {
 		speed := walk_speed(p.kg)
 		if p.sprinting {
 			speed *= sprint_boost(p.kg)
@@ -351,7 +300,7 @@ update_prosio :: proc(dt: f32) {
 		// With a load, the same legs have more weight to move.
 		speed *= p.kg / total_kg()
 		target := move * speed
-		if p.dazed_t > 0 || p.pushups || p.eat_t > 0 || p.lift_t > 0 {
+		if p.dazed_t > 0 || busy || p.lift_t > 0 {
 			target = {}
 		}
 		if p.swinging {
@@ -366,18 +315,16 @@ update_prosio :: proc(dt: f32) {
 		if moving && target != {} && p.strain < 0.4 {
 			p.facing = approach_angle(p.facing, math.atan2(move.x, move.y), 12 * dt)
 		}
-		if moving && target != {} {
-			if grounded {
-				p.kg -= WALK_BURN * dt
-			}
+		if moving && target != {} && grounded && !p.sprinting {
+			burn(WALK_BURN * p.kg / KG_START * dt)
 		}
 	}
 	p.pos += p.vel * dt
-	if hit, n := collide_static(&p.pos, body_r, p.height); hit && !p.dive {
+	if hit, n := collide_static(&p.pos, r, p.height); hit {
 		into := dot2(p.vel, n)
 		if p.dash_t > 0 && into < -2 {
 			// Bumping a tree shakes it, and down come the apples.
-			shake_trees_near(p.pos, body_r + 0.3, -into * p.kg / 60)
+			shake_trees_near(p.pos, r + 0.3, -into * p.kg / 60)
 		}
 		if into < 0 {
 			p.vel -= n * into
@@ -395,38 +342,10 @@ update_prosio :: proc(dt: f32) {
 	}
 
 	// Stamina comes back much faster when he is lean.
-	if p.dash_t <= 0 && !p.pushups && !p.sprinting && p.carry == .Nothing {
+	if p.dash_t <= 0 && !p.sprinting && p.carry == .Nothing {
 		p.regen_delay -= dt
 		if p.regen_delay <= 0 {
 			p.stamina = min(p.stamina + stamina_regen(p.kg) * dt, STAMINA_MAX)
-		}
-	}
-
-	// The skinny door.
-	near_door := abs(p.pos.x - g.door_pos.x) < 1.4 && p.pos.y > g.door_pos.y && p.pos.y - g.door_pos.y < 1.5
-	if near_door && r > DOOR_GAP / 2 && button_down(.Up) {
-		hint("I'm too chubby for this door!")
-	}
-
-	// The pressure plate.
-	if !g.gates[0].open && !p.airborne && length2(p.pos - g.plate_pos) < 0.9 {
-		if total_kg() >= PLATE_KG {
-			g.gates[0].open = true
-			g.shake = 0.5
-			say("CLICK! Heavy enough!", 2)
-			burst({g.plate_pos.x, 0.2, g.plate_pos.y}, 14, 4, COLOR_STAR, 0.12)
-		} else {
-			hint("I'm not heavy enough!")
-		}
-	}
-
-	// Golden truffles.
-	for &tr in g.truffles {
-		if tr.visible && !tr.taken && length2(tr.pos - p.pos) < r + 0.5 {
-			tr.taken = true
-			g.truffle_count += 1
-			say("A golden truffle!", 2.2)
-			burst({tr.pos.x, 0.8, tr.pos.y}, 24, 5, COLOR_GOLD, 0.13)
 		}
 	}
 
@@ -439,7 +358,7 @@ update_prosio :: proc(dt: f32) {
 	} else if p.kg < KG_MIN + KG_DANGER {
 		hint(sack_has_food() ? "So hungry... Q: eat from my sack!" : "So hungry... I must find food!")
 	} else if p.kg > KG_MAX - KG_DANGER {
-		hint("So full... I must exercise!")
+		hint("So full... no more food for now!")
 	}
 	if p.fail != .None {
 		if p.carry != .Nothing {
@@ -447,44 +366,32 @@ update_prosio :: proc(dt: f32) {
 		}
 		p.fail_t = 0
 		p.bubble_t = 0
-		p.pushups = false
-		p.pushups_on = false
 		p.sprinting = false
 		p.dash_t = 0
 		g.shake = 0.4
 	}
 }
 
-// Falling, landing and following the ground under his feet.
+// Falling and landing. The meadow is flat.
 prosio_vertical :: proc(dt: f32) {
 	p := &g.prosio
-	// An aimed jump off the tower lands on the catapult, never back on the tower.
-	ground, seesaw := ground_at(p.pos, !p.dive)
-	if p.airborne {
-		p.vy -= GRAVITY * dt
-		p.height += p.vy * dt
-		if p.vy <= 0 && p.height <= ground {
-			speed := -p.vy
-			p.height = ground
-			p.vy = 0
-			p.airborne = false
-			p.dive = false
-			p.on_seesaw = seesaw
-			prosio_lands(speed, seesaw)
-		}
-	} else if p.height - ground > DROP {
-		// Walked off an edge.
-		p.airborne = true
+	if !p.airborne {
+		p.height = 0
+		return
+	}
+	p.vy -= GRAVITY * dt
+	p.height += p.vy * dt
+	if p.vy <= 0 && p.height <= 0 {
+		speed := -p.vy
+		p.height = 0
 		p.vy = 0
-		p.on_seesaw = -1
-	} else {
-		p.height = ground
-		p.on_seesaw = seesaw
+		p.airborne = false
+		prosio_lands(speed)
 	}
 }
 
 // He hits the ground at this speed. The thump grows with weight times speed.
-prosio_lands :: proc(speed: f32, seesaw: int) {
+prosio_lands :: proc(speed: f32) {
 	p := &g.prosio
 	if speed < 1.5 {
 		return
@@ -494,9 +401,5 @@ prosio_lands :: proc(speed: f32, seesaw: int) {
 	p.stretch_vel -= min(speed * 0.5, 5)
 	p.wobble_vel += speed * 0.5 * fatness(p.kg)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 4 + int(impact / 150), 2 + impact / 600, COLOR_DUST, 0.12)
-	if seesaw >= 0 {
-		seesaw_impact(seesaw, speed)
-	} else {
-		stomp_enemies(speed)
-	}
+	stomp_enemies(speed)
 }

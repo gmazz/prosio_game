@@ -6,6 +6,13 @@ uniform vec4 colDiffuse;
 uniform int surface;    // see Surface in platform.odin
 uniform float hitFlash;
 uniform float fade;     // 0 = solid, 1 = see-through
+// The layout of the meadow (see set_ground_layout in game.odin).
+uniform vec4 fields[8]; // ploughed fields: x0, z0, x1, z1
+uniform int fieldCount;
+uniform vec4 paths[6];  // paths from home: x0, z0, x1, z1
+uniform int pathCount;
+uniform vec4 forest;    // centre x, z and radii of the forest
+uniform vec4 hills;     // and of the goat hills
 
 float hash(vec2 p) {
     vec3 q = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
@@ -35,6 +42,19 @@ float steps(float t, float count, float dither) {
     return clamp(floor(t * count + dither) / count, 0.0, 1.0);
 }
 
+float segment_distance(vec2 p, vec2 a, vec2 b) {
+    vec2 ab = b - a;
+    float t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
+    return length(p - a - ab * t);
+}
+
+// How far inside an ellipse, with a ragged edge: 1 inside, 0 outside.
+float area(vec2 p, vec4 e, float dither) {
+    float d = length((p - e.xy) / e.zw);
+    float edge = d + .12 * (wash(p * .21) - .5) + .05 * (wash(p * .9) - .5);
+    return step(edge, .97 + .05 * (dither - .5));
+}
+
 vec3 meadow(vec2 p, float dither) {
     float broad = wash(p * .18);
     float middle = wash(p * .7 + 3.1);
@@ -46,13 +66,41 @@ vec3 meadow(vec2 p, float dither) {
     vec3 sunny = vec3(.62, .75, .37);
     vec3 grass = tone < .5 ? mix(deep, base, tone * 2.0) : mix(base, sunny, tone * 2.0 - 1.0);
 
-    // A winding footpath passes the picnic and fades into the far meadow.
-    float offset = p.x - (1.0 + 2.2 * sin(p.y * .18) + .8 * sin(p.y * .42));
-    float verge = abs(offset) + .72 * (wash(p * 1.3) - .5) + .25 * (fine - .5);
-    float path = (1.0 - smoothstep(.41, 1.28, verge)) * smoothstep(-21.0, -11.0, p.y);
-    path = step(.35 + .3 * dither, path);
+    // The forest floor is darker, strewn with brown leaves.
+    float wood = area(p, forest, dither);
+    vec3 floor_tone = mix(vec3(.25, .38, .21), vec3(.36, .46, .25), tone);
+    floor_tone = mix(floor_tone, vec3(.47, .37, .23), step(.74, fine) * step(.4, middle));
+    grass = mix(grass, floor_tone, wood);
+    // The hills are dry and stony.
+    float hill = area(p, hills, dither);
+    vec3 dry = mix(vec3(.5, .55, .32), vec3(.66, .66, .42), tone);
+    dry = mix(dry, vec3(.6, .58, .54), step(.7, wash(p * 1.7)) * .8);
+    grass = mix(grass, dry, hill);
+
+    // Footpaths wind out from home to each part of the meadow, from a bare
+    // yard round the house.
+    vec2 w = p + vec2(1.6 * sin(p.y * .17) + .6 * sin(p.y * .41), 1.4 * sin(p.x * .15) + .5 * sin(p.x * .37));
+    float d = length(p) - 4.5;
+    for (int i = 0; i < 6; i++) {
+        if (i >= pathCount) break;
+        d = min(d, segment_distance(w, paths[i].xy, paths[i].zw));
+    }
+    float verge = d + .72 * (wash(p * 1.3) - .5) + .25 * (fine - .5);
+    float path = step(.35 + .3 * dither, 1.0 - smoothstep(.41, 1.28, verge));
     vec3 earth = mix(vec3(.66, .58, .42), vec3(.86, .77, .56), steps(.62 * broad + .38 * fine, 2.0, dither));
     vec3 ground = mix(grass, earth, path);
+
+    // Ploughed fields, in rows.
+    for (int i = 0; i < 8; i++) {
+        if (i >= fieldCount) break;
+        vec4 f = fields[i];
+        vec2 ragged = vec2(.25 * (wash(p * 2.1) - .5));
+        if (all(greaterThan(p + ragged, f.xy)) && all(lessThan(p + ragged, f.zw))) {
+            float furrow = step(.5, fract(p.y * 1.3 + .15 * sin(p.x * .7)));
+            vec3 soil = mix(vec3(.42, .3, .2), vec3(.53, .39, .26), furrow);
+            ground = mix(soil, vec3(.36, .26, .18), step(.82, fine) * .6);
+        }
+    }
     // Warm sunlight falls in broad soft patches, as through gaps in leaves.
     float sun = smoothstep(.55, .8, wash(p * .09 + 7.3) * .7 + wash(p * .23) * .3);
     ground *= mix(vec3(.94, .96, 1.0), vec3(1.1, 1.05, .9), steps(sun, 2.0, dither));
@@ -68,20 +116,14 @@ void main() {
         OUT_COLOR = vec4(meadow(position.xz, dither), 1.0);
         return;
     }
-    if (surface == 3 || surface == 7) {
-        // Blob shadows with a hard edge.
-        vec2 q = uv * 2.0 - 1.0;
-        float d = length(q);
-        if (surface == 7) d = max(abs(q.x), abs(q.y));
-        float opacity = (1.0 - smoothstep(.55, 1.0, d)) * (1.0 - .35 * d);
-        if (opacity < .45) discard;
-        opacity = .8;
-        OUT_COLOR = vec4(colDiffuse.rgb, colDiffuse.a * opacity);
+    if (surface == 3) {
+        // A shadow, flattened on the ground: drawn flat into the shadow image.
+        OUT_COLOR = vec4(colDiffuse.rgb, 1.0);
         return;
     }
 
     vec3 n = normalize(normal);
-    vec3 sun = normalize(vec3(-.62, .89, .43));
+    vec3 sun = normalize(vec3(-.62, .89, .43)); // must match SUN in platform.odin
     float light = dot(n, sun);
     vec3 pigment = colDiffuse.rgb;
 

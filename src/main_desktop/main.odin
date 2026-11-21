@@ -13,7 +13,7 @@ main :: proc() {
 	//   --pos -11 0       start at this place
 	//   --shot name.png   save a picture after a moment, then quit
 	//   --frame 90        which frame to take the picture on
-	//   --hold ub         hold buttons from frame 10: l r u d, b = bump, a = action,
+	//   --hold ub         hold buttons from frame 10: l r u d, b = bump, a = pick up or oven,
 	//                     j = jump, s = sprint, g = grab or throw, q = eat,
 	//                     z c = choose in the sack, e = enter
 	//   --tap j           press buttons once on frame 10 (same letters)
@@ -24,7 +24,6 @@ main :: proc() {
 	//   --menu            show the menu instead of starting the game
 	//   --crowd           put turkeys and goats round Prosio at the start
 	//   --stock           start with a sack full of food
-	//   --last-truffle    four truffles found already, the last one at his feet
 	//   --detail 4        pixel size: 1 chunkiest ... 6 finest (default 4)
 	opts: game.Options
 	args := os.args
@@ -81,8 +80,6 @@ main :: proc() {
 			opts.crowd = true
 		case "--stock":
 			opts.stock = true
-		case "--last-truffle":
-			opts.last_truffle = true
 		case "--menu":
 			opts.menu = true
 		case "--tap":

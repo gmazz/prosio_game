@@ -4,13 +4,15 @@ import "core:math"
 
 // Food is gathered, not eaten on the spot: E puts it in Prosio's sack, and
 // he eats from the sack when he likes (Q), choosing what with Z and C.
-// Whatever he eats puts on weight by its calories.
+// Whatever he eats puts on weight by its calories, slowly: food has to be
+// gathered steadily to make up for what walking, picking things up and
+// fighting burn (see the *_BURN numbers in prosio.odin).
 //
 // At the oven he bakes what he has gathered into pies, muffins and bread.
 // Cooking makes more of the calories in food available to the body, so a
 // baked dish counts COOK_BONUS times the calories of what went into it.
 
-KCAL_PER_KG :: f32(60) // calories eaten for each kilogram he puts on
+KCAL_PER_KG :: f32(200) // calories eaten for each kilogram he puts on
 COOK_BONUS :: f32(1.4)
 SACK_MAX :: 9 // of each thing
 BAKE_TIME :: f32(6)
@@ -63,6 +65,16 @@ GATHER_TEXT := #partial [Item]cstring {
 	.Pumpkin  = "A pumpkin for the sack!",
 	.Wheat    = "Wheat for the sack!",
 	.Egg      = "An egg for the sack!",
+}
+
+// The colour of each, for the thing in his hoof as he picks it up.
+ITEM_COLOR := #partial [Item]Color {
+	.Apple    = {222, 44, 48, 255},
+	.Berries  = {124, 62, 176, 255},
+	.Mushroom = {196, 64, 46, 255},
+	.Pumpkin  = {232, 128, 40, 255},
+	.Wheat    = {230, 190, 88, 255},
+	.Egg      = {246, 236, 214, 255},
 }
 
 EAT_TEXT := [Item]cstring {
@@ -221,7 +233,10 @@ gather :: proc(food: ^Food, bush: ^Round) {
 		burst({at.x, 0.7, at.y}, 6, 2, BERRY_COLOR, 0.06)
 	}
 	say(GATHER_TEXT[item], 1.2)
-	p.eat_t = 0.25 // a moment to stoop and pick it up
+	p.pick_t = PICK_TIME // a moment to stoop and pick it up
+	p.pick_item = item
+	p.vel = {}
+	burn(GATHER_BURN)
 	to := at - p.pos
 	p.facing = math.atan2(to.x, to.y)
 }
@@ -378,17 +393,55 @@ draw_oven :: proc() {
 	}
 	// What is ready waits on the sill.
 	if o.ready {
-		tube(m, {0, 0.5, OVEN_RADIUS + 0.12}, 0.26, 0.09, {226, 178, 104, 255})
-		tube(m, {0, 0.55, OVEN_RADIUS + 0.12}, 0.2, 0.06, o.dish == .Pumpkin_Pie ? Color{232, 128, 40, 255} : Color{176, 120, 60, 255})
+		draw_dish(m * translate({0, 0.5, OVEN_RADIUS + 0.14}), o.dish)
 	}
 	// Chimney at the back.
 	tube(m, {-0.4, 1.25, -0.35}, 0.17, 0.9, BRICK_DARK)
 	tube(m, {-0.4, 2.1, -0.35}, 0.22, 0.08, BRICK_DARK)
-	// Logs for the fire.
-	for k in 0 ..< 3 {
-		y := 0.12 + f32(k / 2) * 0.22
-		x := OVEN_RADIUS + 0.35 + f32(k % 2) * 0.26 - f32(k / 2) * 0.13
-		limb(m, {x, y, 0.1}, {x, y, 0.85}, 0.12, COLOR_TRUNK)
+}
+
+CRUST :: Color{230, 182, 108, 255}
+CRUST_DARK :: Color{190, 130, 66, 255}
+
+// A baked dish, as it comes out of the oven.
+draw_dish :: proc(m: Mat4, dish: Item) {
+	#partial switch dish {
+	case .Apple_Pie:
+		// A golden crust with a lattice over red apple filling.
+		tube(m, {}, 0.27, 0.09, CRUST)
+		tube(m, {}, 0.22, 0.1, {200, 52, 48, 255})
+		for k in 0 ..< 3 {
+			off := (f32(k) - 1) * 0.12
+			box(m, {off, 0.105, 0}, {0.045, 0.02, 0.42}, CRUST)
+			box(m, {0, 0.11, off}, {0.42, 0.02, 0.045}, CRUST)
+		}
+	case .Pumpkin_Pie:
+		// Orange filling in a crust, with a dollop of cream.
+		tube(m, {}, 0.27, 0.09, CRUST)
+		tube(m, {}, 0.23, 0.1, {226, 124, 40, 255})
+		ball(m, {0, 0.13, 0}, {0.08, 0.06, 0.08}, COLOR_WHITE)
+	case .Berry_Muffins:
+		// Three muffins in pink paper cups, dotted with berries.
+		for k in 0 ..< 3 {
+			a := f32(k) * math.TAU / 3 + 0.5
+			c := m * translate({math.cos(a) * 0.15, 0, math.sin(a) * 0.15})
+			draw_shape(.Frustum, c * translate({0, 0.12, 0}) * rot_x(math.PI) * scale({0.1, 0.12, 0.1}), {244, 156, 176, 255})
+			ball(c, {0, 0.14, 0}, {0.11, 0.08, 0.11}, {204, 142, 82, 255})
+			ball(c, {0.04, 0.2, 0.03}, {0.025, 0.025, 0.025}, {124, 62, 176, 255})
+			ball(c, {-0.04, 0.19, -0.02}, {0.025, 0.025, 0.025}, {124, 62, 176, 255})
+		}
+	case .Mushroom_Pie:
+		// A domed crust with a mushroom on top.
+		tube(m, {}, 0.27, 0.06, CRUST_DARK)
+		draw_shape(.Hemisphere, m * translate({0, 0.05, 0}) * scale({0.25, 0.14, 0.25}), CRUST)
+		tube(m, {0, 0.17, 0}, 0.03, 0.06, {240, 228, 206, 255})
+		draw_shape(.Hemisphere, m * translate({0, 0.22, 0}) * scale({0.07, 0.05, 0.07}), {196, 64, 46, 255})
+	case .Bread:
+		// A long loaf with slashes across the top.
+		ball(m, {0, 0.1, 0}, {0.17, 0.12, 0.3}, {216, 160, 92, 255})
+		for k in 0 ..< 3 {
+			box(m * translate({0, 0.2, (f32(k) - 1) * 0.12}) * rot_y(0.5), {}, {0.16, 0.02, 0.03}, CRUST_DARK)
+		}
 	}
 }
 
@@ -590,43 +643,72 @@ draw_icon :: proc(item: Item, x, y, size: f32) {
 }
 
 SACK_BOX :: Color{246, 236, 214, 255}
+SACK_SLOTS :: 6 // boxes shown at most; beyond that the sack scrolls round
 
-// The sack along the bottom of the screen: a box for each kind of thing in
-// it, with how many under the box, and the chosen one's name and calories
-// above.
-draw_sack :: proc(s: f32) {
-	sw, sh := screen_size()
+// The sack, at the top of the screen from x: a box for each kind of thing
+// in it, with how many under the box, and the chosen one's name and
+// calories above. With more kinds than fit, the boxes go round in a circle,
+// the chosen one always third.
+draw_sack :: proc(x, y, s: f32) {
 	p := &g.prosio
 	buf: [len(Item)]Item
 	owned := owned_items(&buf)
-	size := 54 * s
-	gap := 12 * s
-	y := sh - 180 * s
-	if len(owned) == 0 {
-		label_centred("SACK: empty", sw / 2, y + size * 0.45, 20 * s, UI_WHITE)
+	n := len(owned)
+	size := 34 * s
+	gap := 6 * s
+	pad := 9 * s
+	text := 16 * s
+	arrow := 14 * s
+	scrolling := n > SACK_SLOTS
+	slots := clamp(n, 1, SACK_SLOTS)
+
+	// Wide enough for the longest name with its calories.
+	widest: f32
+	for it in Item {
+		w := ui_text_width(ITEM_NAME[it], text) + 10 * s + ui_text_width(ui_format("%d kcal", i32(item_kcal(it))), text)
+		widest = max(widest, w)
+	}
+	boxes := f32(slots) * size + f32(slots - 1) * gap + (scrolling ? 2 * arrow : 0)
+	width := max(widest, boxes) + 2 * pad
+	height := pad + text + 6 * s + size + text + pad
+	ui_round_rect(x, y, width, height, UI_PANEL, 0.2)
+	centre := x + width / 2
+	if n == 0 {
+		label_centred("SACK: empty", centre, y + height / 2 - text / 2, text, UI_WHITE)
 		return
 	}
-	total := f32(len(owned)) * size + f32(len(owned) - 1) * gap
-	x := sw / 2 - total / 2
-	ui_round_rect(x - 16 * s, y - 50 * s, total + 32 * s, size + 84 * s, UI_PANEL, 0.2)
+
+	name := ITEM_NAME[p.sack_sel]
+	kcal := ui_format("%d kcal", i32(item_kcal(p.sack_sel)))
+	name_w := ui_text_width(name, text)
+	left := centre - (name_w + 10 * s + ui_text_width(kcal, text)) / 2
+	label(name, left, y + pad, text)
+	label(kcal, left + name_w + 10 * s, y + pad, text, UI_YELLOW)
+
+	at := 0
 	for it, i in owned {
-		bx := x + f32(i) * (size + gap)
+		if it == p.sack_sel {
+			at = i
+		}
+	}
+	first := scrolling ? at - 2 : 0
+	top := y + pad + text + 6 * s
+	bx := centre - boxes / 2 + (scrolling ? arrow : 0)
+	if scrolling {
+		label("<", bx - arrow, top + size / 2 - text / 2, text, UI_YELLOW)
+		label(">", bx + f32(slots) * (size + gap) - gap + 4 * s, top + size / 2 - text / 2, text, UI_YELLOW)
+	}
+	for k in 0 ..< slots {
+		it := owned[((first + k) % n + n) % n]
 		chosen := it == p.sack_sel
 		if chosen {
-			ui_round_rect(bx - 5 * s, y - 5 * s, size + 10 * s, size + 10 * s, UI_YELLOW, 0.25)
+			ui_round_rect(bx - 3 * s, top - 3 * s, size + 6 * s, size + 6 * s, UI_YELLOW, 0.25)
 		}
-		ui_round_rect(bx, y, size, size, SACK_BOX, 0.2)
-		draw_icon(it, bx + 6 * s, y + 6 * s, size - 12 * s)
-		label_centred(ui_format("%d", i32(p.sack[it])), bx + size / 2, y + size + 6 * s, 18 * s, chosen ? UI_YELLOW : UI_WHITE)
+		ui_round_rect(bx, top, size, size, SACK_BOX, 0.2)
+		draw_icon(it, bx + 4 * s, top + 4 * s, size - 8 * s)
+		label_centred(ui_format("%d", i32(p.sack[it])), bx + size / 2, top + size + 3 * s, text * 0.9, chosen ? UI_YELLOW : UI_WHITE)
+		bx += size + gap
 	}
-	// The chosen one: its name and calories.
-	name := ITEM_NAME[p.sack_sel]
-	name_w := ui_text_width(name, 22 * s)
-	kcal := ui_format("%d kcal", i32(item_kcal(p.sack_sel)))
-	kcal_w := ui_text_width(kcal, 22 * s)
-	left := sw / 2 - (name_w + 18 * s + kcal_w) / 2
-	label(name, left, y - 36 * s, 22 * s)
-	label(kcal, left + name_w + 18 * s, y - 36 * s, 22 * s, UI_YELLOW)
 }
 
 // The oven's menu: what can be baked, what it needs and what it is worth.

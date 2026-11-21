@@ -2,7 +2,10 @@ package game
 
 import "core:math"
 
-MAX_ENEMIES :: 24
+MAX_ENEMIES :: 40
+EGG_EVERY :: Vec2{100, 220} // a turkey lays an egg every so many seconds, at random in this range
+SHAKE_EGG :: f32(0.2) // chance that shaking a held turkey shakes an egg out of it
+AWAKE :: f32(42) // animals further than this from Prosio rest
 
 // A bump hits with Prosio's momentum: his weight times his speed. An enemy
 // digs in and soaks up the first part of that (its grip); only what is left
@@ -17,8 +20,8 @@ BONK :: f32(31)
 // Throws slower than this do not get an enemy off its feet.
 WEAK_HIT :: f32(3)
 
-// Bad-tempered turkeys roam the meadow, and a few goats keep to their patch
-// in the north, led by a big billy goat.
+// Bad-tempered turkeys live in Turkey Meadow and roam the open meadow, laying
+// eggs as they go; goats keep to the goat hills, led by a big billy goat.
 Enemy_Kind :: enum {
 	Turkey,
 	Goat,
@@ -73,6 +76,7 @@ Enemy :: struct {
 	side:      Vec3, // which way its side points
 	dangle:    [2]Vec3, // which way the hind and the front legs hang
 	limp:      f32, // bashed about: limp for this long
+	egg_t:     f32, // a turkey lays an egg when this runs out
 }
 
 // A big farm turkey, a goat, and the billy goat, who weighs more than an
@@ -114,19 +118,33 @@ add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
 		home = home,
 		turn = g.enemy_count % 2 == 0 ? 1 : -1,
 		hunt_t = random_range(1.5, 3),
+		egg_t = random_range(EGG_EVERY.x * 0.3, EGG_EVERY.y),
 	}
 	g.enemy_count += 1
 }
 
 spawn_enemies :: proc() {
-	add_enemy(.Turkey, {-5, -2})
-	add_enemy(.Turkey, {5, -3})
-	add_enemy(.Turkey, {-12, -0.5})
-	add_enemy(.Turkey, {10, 8})
-	add_enemy(.Billy, {0, -22})
-	add_enemy(.Goat, {-2.6, -20.5})
-	add_enemy(.Goat, {2.4, -21})
-	add_enemy(.Goat, {0.5, -24.5})
+	// Most turkeys in their meadow, some wandering the open meadow.
+	for placed, tries := 0, 0; placed < 22 && tries < 3000; tries += 1 {
+		pos := placed < 14 ? spot_in(.Turkeys, 0.9) : random_spot()
+		if region, in_region := region_at(pos); placed >= 14 && in_region && region != .Turkeys {
+			continue
+		}
+		if clear_spot(pos, 1) {
+			add_enemy(.Turkey, pos)
+			placed += 1
+		}
+	}
+	// The goats, round their billy goat.
+	hills := REGIONS[.Hills].centre
+	add_enemy(.Billy, hills)
+	for placed, tries := 0, 0; placed < 5 && tries < 500; tries += 1 {
+		pos := spot_in(.Hills, 0.6)
+		if clear_spot(pos, 1) {
+			add_enemy(.Goat, pos)
+			placed += 1
+		}
+	}
 }
 
 // How fast a hit with this much momentum throws an enemy.
@@ -152,15 +170,13 @@ update_enemies :: proc(dt: f32) {
 		e.hit_t -= dt
 		switch e.state {
 		case .Gone:
-			if e.kind != .Billy {
-				e.timer -= dt
-				if e.timer <= 0 && length2(p.pos - e.home) > 3 {
-					e.state = .Chase
-					e.pos = e.home
-					e.vel = {}
-					e.y = 0
-					burst({e.pos.x, 0.5, e.pos.y}, 10, 3, COLOR_DUST, 0.14)
-				}
+			e.timer -= dt
+			if e.timer <= 0 && length2(p.pos - e.home) > 3 {
+				e.state = .Chase
+				e.pos = e.home
+				e.vel = {}
+				e.y = 0
+				burst({e.pos.x, 0.5, e.pos.y}, 10, 3, COLOR_DUST, 0.14)
 			}
 
 		case .Held:
@@ -169,6 +185,22 @@ update_enemies :: proc(dt: f32) {
 		case .Chase:
 			e.timer -= dt
 			e.turn_lock -= dt
+			// Now and then a turkey lays an egg where it stands.
+			if e.kind == .Turkey {
+				e.egg_t -= dt
+				if e.egg_t <= 0 {
+					e.egg_t = random_range(EGG_EVERY.x, EGG_EVERY.y)
+					behind := e.pos - facing_dir(e.facing) * ENEMY_RADIUS[e.kind] * 0.8
+					if drop_egg(behind, 0.3) {
+						burst({behind.x, 0.4, behind.y}, 3, 1.5, TURKEY_TIP, 0.06)
+					}
+				}
+			}
+			// Far from Prosio, it rests.
+			if length2(p.pos - e.pos) > AWAKE {
+				e.vel = {}
+				continue
+			}
 			target := chase_velocity(&e, index, dt)
 			accel: f32 = e.kind == .Turkey ? 14 : 10
 			e.vel = approach2(e.vel, target, accel * dt)
@@ -205,7 +237,7 @@ update_enemies :: proc(dt: f32) {
 				e.stuck_t = 0
 				e.stuck_from = e.pos
 			}
-			e.y, _ = ground_at(e.pos, true)
+			e.y = 0
 			touch_prosio(&e, true)
 
 		case .Flying:
@@ -240,9 +272,8 @@ update_enemies :: proc(dt: f32) {
 					}
 				}
 			}
-			floor, _ := ground_at(e.pos, true)
-			if e.y <= floor && e.vy < 0 {
-				e.y = floor
+			if e.y <= 0 && e.vy < 0 {
+				e.y = 0
 				burst({e.pos.x, 0.1, e.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 				if e.skip && e.vy < -4 {
 					// Slammed down spinning: the spin turns part of the fall into
@@ -269,7 +300,7 @@ update_enemies :: proc(dt: f32) {
 			e.vel = approach2(e.vel, {}, 14 * dt)
 			e.pos += e.vel * dt
 			collide_static(&e.pos, r, e.y, true)
-			e.y, _ = ground_at(e.pos, true)
+			e.y = 0
 			e.timer -= dt
 			touch_prosio(&e, false)
 			if e.state == .Dizzy && e.timer <= 0 {
@@ -277,9 +308,6 @@ update_enemies :: proc(dt: f32) {
 					e.state = .Gone
 					e.timer = 12
 					burst({e.pos.x, 0.6, e.pos.y}, 18, 5, COLOR_STAR, 0.15)
-					if e.kind == .Billy && !g.truffles[2].visible {
-						g.truffles[2] = {pos = e.pos, visible = true}
-					}
 				} else {
 					e.state = .Chase
 					e.timer = 0.5
@@ -340,16 +368,6 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 		}
 		return {}
 	}
-	// He is up on the tower: go round by the ramp.
-	if way, ok := way_up(e, p.pos, p.height); ok {
-		return normalize2(way - e.pos) * speed * 1.2
-	}
-	if e.y > 0.3 {
-		// Up on the ramp or the tower there is no room to circle, so it goes
-		// straight for him.
-		return e.timer > 0 ? Vec2{} : to / max(dist, 0.001) * speed
-	}
-
 	e.hunt_t -= dt
 	toward := to / max(dist, 0.001)
 	if goat {
@@ -500,30 +518,6 @@ angle_diff :: proc(a, b: f32) -> f32 {
 	return d - math.PI
 }
 
-// When its target stands up on a platform it cannot step onto, the place to
-// head for instead: the foot of the ramp, then up it. ok is false when it
-// can go straight there.
-way_up :: proc(e: ^Enemy, target: Vec2, target_height: f32) -> (way: Vec2, ok: bool) {
-	if target_height < e.y + STEP_UP {
-		return {}, false
-	}
-	for &pl in g.platforms[:g.platform_count] {
-		if !pl.ramp {
-			continue
-		}
-		centre := (pl.lo.x + pl.hi.x) / 2
-		if inside(e.pos, pl.lo, pl.hi) {
-			return {centre, pl.lo.y - 0.6}, true // on the ramp: keep climbing
-		}
-		foot := Vec2{centre, pl.hi.y + 0.7}
-		if length2(e.pos - foot) < 0.5 {
-			return {centre, pl.lo.y}, true
-		}
-		return foot, true
-	}
-	return {}, false
-}
-
 // Everything that happens when an enemy on the ground and Prosio touch:
 // his bump lands, or it shoves him, and either way they end up side by side.
 touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
@@ -555,8 +549,8 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 			}
 			p.stamina -= 12
 			p.regen_delay = 0.4
+			burn(HURT_BURN)
 			p.wobble_vel += 3
-			p.pushups_on = false
 			// After a shove he cannot be shoved again for a moment, so a
 			// crowd of enemies cannot keep him pinned down.
 			p.safe_t = 1.2

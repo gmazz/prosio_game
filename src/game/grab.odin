@@ -194,7 +194,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 	p := &g.prosio
 
 	if p.carry == .Nothing {
-		if p.airborne || !can_act || p.pushups || !pressed(.Grab) {
+		if p.airborne || !can_act || !pressed(.Grab) {
 			return
 		}
 		target, found := grab_target()
@@ -210,6 +210,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		}
 		p.stamina -= cost
 		p.regen_delay = 0.5
+		burn(FIGHT_BURN)
 		p.carry = target.kind
 		p.carry_index = target.index
 		p.carry_kg = target.kg
@@ -375,7 +376,7 @@ begin_swing :: proc(throw: bool) {
 		return
 	}
 	p.stamina -= cost
-	p.kg -= DASH_BURN * 0.5
+	burn(FIGHT_BURN)
 
 	from := direction_to_prosio(p.hand - prosio_to_world(holding_shoulder()))
 	p.swing_from = linalg.normalize0(from)
@@ -408,6 +409,11 @@ begin_swing :: proc(throw: bool) {
 	p.swing_to = {math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)}
 	p.swing_via = {random_range(-0.25, 0.25), -random_range(0, 0.9), 1}
 	e.limp = max(e.limp, 0.3) // swung off its feet
+	// Shaken about, a turkey sometimes lets go of an egg.
+	if e.kind == .Turkey && random() < SHAKE_EGG && drop_egg(e.chain[1].xz, e.chain[1].y) {
+		burst(e.chain[1], 4, 2, TURKEY_TIP, 0.07)
+		say("An egg fell out!", 1.2)
+	}
 }
 
 // Where his hand points during a swing (k from 0 to 1), in his own frame.
@@ -533,8 +539,7 @@ update_drag :: proc(dt: f32) {
 
 	floors: [3]f32
 	for k in 1 ..= 2 {
-		ground, _ := ground_at(e.chain[k].xz)
-		floors[k] = ground + r * (standing ? CHAIN_MODEL[e.kind][k].y : (k == 1 ? 0.5 : 0.45))
+		floors[k] = r * (standing ? CHAIN_MODEL[e.kind][k].y : (k == 1 ? 0.5 : 0.45))
 	}
 	on_floor := e.chain[1].y <= floors[1] + 0.03 || e.chain[2].y <= floors[2] + 0.03
 
@@ -821,7 +826,7 @@ throw_animal :: proc() {
 	p.carry_kg = 0
 	p.swinging = false
 	p.stretch_vel -= 3
-	p.kg -= DASH_BURN
+	burn(FIGHT_BURN)
 	g.shake = max(g.shake, min(speed * kg / 600, 0.6))
 	say(speed > 11 ? "HAI-YA!" : "Hup!", 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
@@ -865,7 +870,7 @@ throw_rock :: proc() {
 	p.carry = .Nothing
 	p.carry_kg = 0
 	p.stretch_vel -= 3
-	p.kg -= DASH_BURN
+	burn(FIGHT_BURN)
 	say(speed > 9 ? "HAI-YA!" : "Oof!", 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 }
@@ -936,10 +941,7 @@ update_thrown :: proc(dt: f32) {
 		}
 
 		if t.y <= 0 && t.vy < 0 {
-			// Down. A heavy enough rock also smashes the crate.
-			if !g.crate_broken && length2(t.pos - g.crate_pos) < CRATE_HIT_RADIUS && t.kg * (speed - t.vy) > 250 {
-				smash_crate()
-			}
+			// Down.
 			g.shake = max(g.shake, min(t.kg * -t.vy * 0.0015, 0.5))
 			burst({t.pos.x, 0.2, t.pos.y}, 10, 3, COLOR_DUST, 0.14)
 			// Still fast: it skims on, a little lower and slower each time.
@@ -976,7 +978,6 @@ draw_grab :: proc() {
 	}
 	for t in g.thrown {
 		if t.active {
-			shadow(t.pos, t.r, 0, t.y)
 			draw_rock(translate({t.pos.x, t.y + t.r * 0.75, t.pos.y}) * rot_x(t.spin), t.r)
 		}
 	}

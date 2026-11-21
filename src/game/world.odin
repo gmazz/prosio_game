@@ -3,48 +3,28 @@ package game
 import "core:math"
 
 GRAVITY :: f32(25)
-STEP_UP :: f32(0.36) // the highest ledge Prosio can simply walk onto
-DROP :: f32(0.4) // walking off anything taller than this is a fall
 
-WORLD_HALF :: Vec2{44, 30} // the meadow reaches this far from the centre
-WALL_HEIGHT :: f32(1.3) // taller than Prosio's highest jump
-DOOR_GAP :: f32(1.2) // width of the skinny door
-PLATE_KG :: f32(105) // weight needed on the pressure plate
+// The meadow reaches this far from the centre, inside a fence. Prosio's home
+// with its oven is in the middle; each kind of food grows in its own part of
+// the meadow (see REGIONS), so he has to go out and fetch it.
+WORLD_HALF :: Vec2{100, 70}
+HOME :: Vec2{0, 0}
 BERRY_REGROW :: f32(9) // seconds for a bush to grow another bunch
 MAX_BERRIES :: 3
 MAX_APPLES :: 4 // apples hanging on one tree
 APPLE_LIFE :: f32(45) // seconds a fallen apple lies there before it rots away
-TOWER_HEIGHT :: f32(2.0) // the jumping tower next to the catapult
+EGG_LIFE :: f32(90) // seconds a laid egg lies there before it is gone
+MAX_EGGS :: 10 // eggs lying about at once, all over the meadow
 
-MAX_WALLS :: 32
-MAX_ROUNDS :: 230
-MAX_FOODS :: 120
+MAX_ROUNDS :: 640
+MAX_FOODS :: 360
 MAX_PARTICLES :: 256
-MAX_PLATFORMS :: 4
-MAX_DECOR :: 420
-
-Wall_Style :: enum {
-	Brick,
-	Fence,
-}
-
-Wall :: struct {
-	lo, hi: Vec2,
-	height: f32,
-	color:  Color,
-	gate:   int, // index of the gate this wall is, or -1 for a plain wall
-	style:  Wall_Style,
-}
-
-Gate :: struct {
-	open: bool,
-	anim: f32, // 0 closed, 1 fully sunk into the ground
-}
+MAX_DECOR :: 2400
+MAX_FIELDS :: 8
 
 Round_Kind :: enum {
 	Tree,
 	Rock,
-	Crate,
 	Bush,
 	Oven,
 }
@@ -67,19 +47,86 @@ Round :: struct {
 	shake_t: f32, // just shaken: the leaves are still trembling
 }
 
-// Something to stand on: a flat block, or a ramp that rises from its south
-// edge (hi.y) to its north edge (lo.y).
-Platform :: struct {
-	lo, hi: Vec2,
-	height: f32,
-	ramp:   bool,
+// The parts of the meadow, each with its own food. They are ellipses.
+Region_Kind :: enum {
+	Home,
+	Forest,
+	Fields,
+	Garden,
+	Turkeys,
+	Hills,
 }
 
-// Food is found, not served: apples fall from apple trees, mushrooms grow
-// in the shade under trees, pumpkins in patches out in the open, wheat in
-// little fields, and turkeys lay eggs in their nests. Berries are picked
-// straight off the bushes (see Round). All of it goes into Prosio's sack
-// (see kitchen.odin).
+Region :: struct {
+	name:   cstring,
+	about:  cstring, // what is found there
+	centre: Vec2,
+	radius: Vec2,
+	sign:   cstring, // what its signpost by the house says
+}
+
+REGIONS := [Region_Kind]Region {
+	.Home    = {"HOME", "the oven", HOME, {13, 11}, ""},
+	.Forest  = {"THE FOREST", "berries, wild apples, mushrooms", {-62, -10}, {33, 50}, "FOREST"},
+	.Fields  = {"THE WHEAT FIELDS", "wheat", {58, 26}, {27, 20}, "WHEAT"},
+	.Garden  = {"THE PUMPKIN PATCH", "pumpkins", {-14, 48}, {17, 15}, "PUMPKINS"},
+	.Turkeys = {"TURKEY MEADOW", "eggs... and angry turkeys", {14, -46}, {25, 18}, "TURKEYS"},
+	.Hills   = {"GOAT HILLS", "rocks... and goats", {70, -42}, {26, 22}, "GOATS"},
+}
+
+// The region a place is in, if any.
+region_at :: proc(pos: Vec2) -> (kind: Region_Kind, ok: bool) {
+	for r, k in REGIONS {
+		d := (pos - r.centre) / r.radius
+		if d.x * d.x + d.y * d.y < 1 {
+			return k, true
+		}
+	}
+	return {}, false
+}
+
+// How deep inside a region a place is: 0 at its edge or outside, 1 at its centre.
+inside_region :: proc(pos: Vec2, kind: Region_Kind) -> f32 {
+	r := REGIONS[kind]
+	d := (pos - r.centre) / r.radius
+	return max(1 - math.sqrt(d.x * d.x + d.y * d.y), 0)
+}
+
+// A random place in a region, no further out than edge (1 is its edge).
+spot_in :: proc(kind: Region_Kind, edge: f32 = 0.92) -> Vec2 {
+	r := REGIONS[kind]
+	a := random_range(0, math.TAU)
+	k := math.sqrt(random()) * edge
+	return r.centre + Vec2{math.cos(a), math.sin(a)} * r.radius * k
+}
+
+// Paths from home out to each region, as straight segments; they wander a
+// little when drawn.
+PATH_ENDS := [Region_Kind]Vec2 {
+	.Home    = HOME,
+	.Forest  = {-30, -8},
+	.Fields  = {36, 18},
+	.Garden  = {-10, 34},
+	.Turkeys = {10, -29},
+	.Hills   = {50, -30},
+}
+
+// Where the signpost for a region stands, beside its path a little way from home.
+signpost_pos :: proc(kind: Region_Kind) -> Vec2 {
+	dir := normalize2(PATH_ENDS[kind] - HOME)
+	side := Vec2{-dir.y, dir.x}
+	return HOME + dir * 8.5 + side * 1.6
+}
+
+// A ploughed field of wheat or a pumpkin bed: bare soil in rows.
+Field :: struct {
+	lo, hi: Vec2,
+	crop:   Food_Kind,
+}
+
+// Food is found, not served: wheat in the fields, pumpkins in the pumpkin
+// patch, apples, berries and mushrooms in the forest, and eggs wherever the
+// turkeys lay them. All of it goes into Prosio's sack (see kitchen.odin).
 Food_Kind :: enum {
 	Apple,
 	Mushroom,
@@ -89,14 +136,14 @@ Food_Kind :: enum {
 }
 
 Food :: struct {
-	kind:      Food_Kind,
-	pos:       Vec2,
-	y, vy:     f32, // a falling apple's height and speed
-	respawn:   f32, // seconds until it grows back; 0 means it is there
-	fallen:    bool, // an apple off a tree: once eaten (or rotten) it is gone for good
-	gone:      bool, // this slot is free
-	life:      f32, // a fallen apple rots away when this runs out
-	tree:      int, // the tree a fallen apple came from
+	kind:    Food_Kind,
+	pos:     Vec2,
+	y, vy:   f32, // a falling apple's or egg's height and speed
+	respawn: f32, // seconds until it grows back; 0 means it is there
+	fallen:  bool, // an apple off a tree or a laid egg: once taken (or gone off) it is gone for good
+	gone:    bool, // this slot is free
+	life:    f32, // a fallen apple rots away, and an egg goes, when this runs out
+	tree:    int, // the tree a fallen apple came from
 }
 
 // What each becomes in the sack.
@@ -112,7 +159,7 @@ FOOD_RESPAWN := [Food_Kind]f32 {
 	.Mushroom = 25,
 	.Pumpkin  = 40,
 	.Wheat    = 30,
-	.Egg      = 35, // the turkey lays another
+	.Egg      = 0, // the turkeys lay new ones
 }
 // How big each is on the ground. Only a pumpkin is big enough to bump into.
 FOOD_SIZE := [Food_Kind]f32 {
@@ -120,18 +167,12 @@ FOOD_SIZE := [Food_Kind]f32 {
 	.Mushroom = 0.14,
 	.Pumpkin  = 0.34,
 	.Wheat    = 0.22,
-	.Egg      = 0.16,
+	.Egg      = 0.1,
 }
 
-// Food lying on the ground, ready to eat.
+// Food lying on the ground, ready to pick up.
 food_ready :: proc(f: ^Food) -> bool {
 	return !f.gone && f.respawn <= 0 && f.y <= 0.01
-}
-
-Truffle :: struct {
-	pos:     Vec2,
-	visible: bool,
-	taken:   bool,
 }
 
 Decor_Kind :: enum {
@@ -155,28 +196,6 @@ Particle :: struct {
 	color:    Color,
 }
 
-add_wall :: proc(lo, hi: Vec2, height: f32, color: Color, gate := -1, style := Wall_Style.Brick) {
-	g.walls[g.wall_count] = Wall{lo, hi, height, color, gate, style}
-	g.wall_count += 1
-}
-
-// A walled room with an opening in the middle of its south side.
-// If gate is not -1, that gate closes the opening.
-add_room :: proc(centre, half: Vec2, gap: f32, color: Color, gate := -1) {
-	T :: f32(0.5)
-	H :: WALL_HEIGHT
-	lo := centre - half
-	hi := centre + half
-	add_wall({lo.x, lo.y}, {hi.x, lo.y + T}, H, color)
-	add_wall({lo.x, lo.y}, {lo.x + T, hi.y}, H, color)
-	add_wall({hi.x - T, lo.y}, {hi.x, hi.y}, H, color)
-	add_wall({lo.x, hi.y - T}, {centre.x - gap / 2, hi.y}, H, color)
-	add_wall({centre.x + gap / 2, hi.y - T}, {hi.x, hi.y}, H, color)
-	if gate >= 0 {
-		add_wall({centre.x - gap / 2, hi.y - T + 0.1}, {centre.x + gap / 2, hi.y - 0.1}, H, COLOR_GATE, gate)
-	}
-}
-
 add_round :: proc(pos: Vec2, r: f32, kind: Round_Kind) -> int {
 	if g.round_count >= MAX_ROUNDS {
 		return -1
@@ -186,35 +205,44 @@ add_round :: proc(pos: Vec2, r: f32, kind: Round_Kind) -> int {
 	return g.round_count - 1
 }
 
-// A tree: mostly broadleaves and pines, with some apple trees and blossoms.
-add_tree :: proc(pos: Vec2, species: Maybe(Tree_Species) = nil) {
+add_tree :: proc(pos: Vec2, species: Tree_Species) {
 	i := add_round(pos, 0.32, .Tree)
 	if i < 0 {
 		return
 	}
 	t := &g.rounds[i]
-	if fixed, ok := species.?; ok {
-		t.species = fixed
-	} else {
-		roll := random()
-		switch {
-		case roll < 0.18:
-			t.species = .Apple
-		case roll < 0.3:
-			t.species = .Blossom
-		case roll < 0.62:
-			t.species = .Pine
-		case:
-			t.species = .Broadleaf
-		}
-	}
-	if t.species == .Apple {
+	t.species = species
+	if species == .Apple {
 		t.fruit = 2 + int(random() * 3)
 		t.fruit_t = random_range(2, 8)
 	}
 }
 
-// A berry bush, eaten from where it stands.
+// A forest tree: mostly broadleaves and pines, with wild apple trees.
+forest_species :: proc() -> Tree_Species {
+	roll := random()
+	switch {
+	case roll < 0.2:
+		return .Apple
+	case roll < 0.55:
+		return .Pine
+	}
+	return .Broadleaf
+}
+
+// A lone tree out in the meadow: no fruit out here.
+meadow_species :: proc() -> Tree_Species {
+	roll := random()
+	switch {
+	case roll < 0.25:
+		return .Blossom
+	case roll < 0.5:
+		return .Pine
+	}
+	return .Broadleaf
+}
+
+// A berry bush, picked from where it stands.
 add_bush :: proc(pos: Vec2) {
 	i := add_round(pos, random_range(0.45, 0.6), .Bush)
 	if i >= 0 {
@@ -242,123 +270,50 @@ add_food :: proc(kind: Food_Kind, pos: Vec2) -> ^Food {
 	return &g.foods[slot]
 }
 
-add_platform :: proc(lo, hi: Vec2, height: f32, ramp := false) -> int {
-	g.platforms[g.platform_count] = Platform{lo, hi, height, ramp}
-	g.platform_count += 1
-	return g.platform_count - 1
+// A field, sown in rows step apart.
+add_field :: proc(lo, hi: Vec2, crop: Food_Kind, step: Vec2) {
+	g.fields[g.field_count] = Field{lo, hi, crop}
+	g.field_count += 1
+	for y := lo.y + step.y * 0.6; y < hi.y - step.y * 0.4; y += step.y {
+		for x := lo.x + step.x * 0.6; x < hi.x - step.x * 0.4; x += step.x {
+			add_food(crop, {x + random_range(-0.1, 0.1), y + random_range(-0.08, 0.08)})
+		}
+	}
+}
+
+in_field :: proc(pos: Vec2, margin: f32) -> bool {
+	for f in g.fields[:g.field_count] {
+		if pos.x > f.lo.x - margin && pos.x < f.hi.x + margin && pos.y > f.lo.y - margin && pos.y < f.hi.y + margin {
+			return true
+		}
+	}
+	return false
 }
 
 build_world :: proc() {
-	// Fence around the meadow.
-	w := WORLD_HALF
-	F :: f32(0.4)
-	add_wall({-w.x - F, -w.y - F}, {w.x + F, -w.y}, 0.8, COLOR_FENCE, -1, .Fence)
-	add_wall({-w.x - F, w.y}, {w.x + F, w.y + F}, 0.8, COLOR_FENCE, -1, .Fence)
-	add_wall({-w.x - F, -w.y}, {-w.x, w.y}, 0.8, COLOR_FENCE, -1, .Fence)
-	add_wall({w.x, -w.y}, {w.x + F, w.y}, 0.8, COLOR_FENCE, -1, .Fence)
-
-	// The skinny shack: only a lean Prosio fits through its door.
-	shack := Vec2{-24, -14}
-	add_room(shack, {3.5, 3}, DOOR_GAP, COLOR_SHACK)
-	g.door_pos = {shack.x, shack.y + 3 - 0.25}
-	g.truffles[0] = {pos = shack + {0, -0.6}, visible = true}
-
-	// The heavy vault: its gate opens when enough weight stands on the plate.
-	vault := Vec2{22, -16}
-	add_room(vault, {3.5, 3}, 2.6, COLOR_VAULT, 0)
-	g.plate_pos = {vault.x, vault.y + 6.5}
-	g.truffles[1] = {pos = vault + {0, -0.6}, visible = true}
-
-	// The third truffle appears when the big billy goat is knocked out,
-	// the fourth when the catapult's boulder smashes the crate.
-
-	// The cage: its gate opens when the lever tips.
-	cage := Vec2{36, 8}
-	add_room(cage, {1.7, 1.7}, 1.7, COLOR_VAULT, 1)
-	g.truffles[4] = {pos = cage + {0, -0.2}, visible = true}
-
-	// Near the start: an apple tree, a berry bush, a few pumpkins, the oven
-	// with a little wheat field beside it, and a turkey's nest.
-	add_tree({3.6, 11.2}, Tree_Species.Apple)
-	add_bush({-3.2, 9.6})
-	add_food(.Pumpkin, {-1.5, 10.6})
-	add_food(.Pumpkin, {1.2, 11.1})
-	g.oven.pos = {-7, 8.5}
+	// Home: the oven, by the start.
+	g.oven.pos = HOME + {-4, -2.5}
 	add_round(g.oven.pos, OVEN_RADIUS, .Oven)
-	for k in 0 ..< 6 {
-		add_food(.Wheat, {-12.4 + f32(k % 3) * 0.95, 7.9 + f32(k / 3) * 0.95 + f32(k % 2) * 0.2})
-	}
-	add_food(.Egg, {8.6, 9.6})
-	// And something to eat near each building.
-	add_bush({-25, 4})
-	add_food(.Pumpkin, {17, -7})
-	add_bush({0, -4})
 
-	trees := [?]Vec2{{-18, -12}, {-6, -12.5}, {5, -12}, {18, -12}, {-22.5, 2}, {13, 13.6}, {-8, 3}, {7.5, 5.5}, {-13, 12.5}, {12, 11.5}, {-3, -1}}
-	for t in trees {
-		add_tree(t)
-	}
-	rocks := [?]Vec3{{-5, 3.5, 0.7}, {5.5, 0.5, 0.9}, {-15, -11.5, 0.8}, {15.5, 4.5, 0.6}, {2.5, -7.5, 0.7}, {-10.5, 13.5, 0.55}}
-	for r in rocks {
-		add_round({r.x, r.y}, r.z, .Rock)
-	}
-
-	build_seesaws()
-	spawn_enemies()
-
-	// The rest of the meadow is filled at random, leaving the puzzles, the
-	// start and the catapult's firing line clear.
-	// Little woods: groves of trees standing close together, with bushes
-	// round their edges and mushrooms in their shade.
-	for grove := 0; grove < 9; {
-		centre := random_spot()
-		if !clear_spot(centre, 3.5) {
-			continue
-		}
-		grove += 1
-		count := 6 + int(random() * 5)
-		for tries := 0; tries < 60 && count > 0; tries += 1 {
-			a := random_range(0, math.TAU)
-			pos := centre + Vec2{math.cos(a), math.sin(a)} * random_range(0, 4.8)
-			if clear_spot(pos, 1.05) {
-				add_tree(pos)
-				count -= 1
-			}
-		}
-		for k := 0; k < 2; k += 1 {
-			a := random_range(0, math.TAU)
-			pos := centre + Vec2{math.cos(a), math.sin(a)} * random_range(4.5, 6)
-			if clear_spot(pos, 0.9) {
-				add_bush(pos)
-			}
-		}
-	}
-	// Single trees all over the meadow.
-	for placed := 0; placed < 26; {
-		pos := random_spot()
-		if clear_spot(pos, 1.8) {
-			add_tree(pos)
+	// The forest: trees close together, with berry bushes in the gaps and
+	// round its edge, wild apple trees among them, and mushrooms in the shade.
+	for placed, tries := 0, 0; placed < 230 && tries < 4000; tries += 1 {
+		pos := spot_in(.Forest, 0.97)
+		if clear_spot(pos, 1.0) {
+			add_tree(pos, forest_species())
 			placed += 1
 		}
 	}
-	for placed := 0; placed < 18; {
-		pos := random_spot()
-		if clear_spot(pos, 1.8) {
-			add_round(pos, random_range(0.3, 0.6), .Rock)
-			placed += 1
-		}
-	}
-	for placed := 0; placed < 14; {
-		pos := random_spot()
-		if clear_spot(pos, 1.2) {
+	for placed, tries := 0, 0; placed < 46 && tries < 3000; tries += 1 {
+		pos := spot_in(.Forest, 1.02)
+		if clear_spot(pos, 1.1) {
 			add_bush(pos)
 			placed += 1
 		}
 	}
-	// Mushrooms in the shade of trees.
-	for placed, tries := 0, 0; placed < 18 && tries < 400; tries += 1 {
+	for placed, tries := 0, 0; placed < 45 && tries < 2000; tries += 1 {
 		t := g.rounds[int(random() * f32(g.round_count)) % g.round_count]
-		if t.kind != .Tree {
+		if t.kind != .Tree || inside_region(t.pos, .Forest) <= 0 {
 			continue
 		}
 		a := random_range(0, math.TAU)
@@ -368,51 +323,74 @@ build_world :: proc() {
 			placed += 1
 		}
 	}
-	// Little fields of wheat.
-	for field := 0; field < 4; {
-		centre := random_spot()
-		if !clear_spot(centre, 2) {
-			continue
-		}
-		field += 1
-		for k in 0 ..< 4 {
-			add_food(.Wheat, centre + {f32(k % 2) * 0.95 - 0.5, f32(k / 2) * 0.9 - 0.45})
-		}
-	}
-	// Pumpkin patches out in the open.
-	for patch := 0; patch < 4; {
-		centre := random_spot()
-		if !clear_spot(centre, 2) {
-			continue
-		}
-		patch += 1
-		for k in 0 ..< 3 {
-			a := f32(k) * 2.1 + random_range(0, 0.8)
-			add_food(.Pumpkin, centre + Vec2{math.cos(a), math.sin(a)} * random_range(0.6, 1.1))
-		}
-	}
-	// Turkeys, most of them with a nest of eggs near by.
-	for placed := 0; placed < 10; {
-		pos := random_spot()
-		if clear_spot(pos, 1.5) && length2(pos - g.prosio.pos) > 14 {
-			if placed < 7 {
-				a := random_range(0, math.TAU)
-				nest := pos + Vec2{math.cos(a), math.sin(a)} * 1.4
-				probe := nest
-				if hit, _ := collide_static(&probe, 0.3, 0, true); !hit {
-					add_food(.Egg, nest)
-				}
-			}
-			add_enemy(.Turkey, pos)
+
+	// The wheat fields, and the pumpkin patch.
+	add_field({40, 13}, {50, 21}, .Wheat, {1.3, 1.15})
+	add_field({56, 9}, {68, 16}, .Wheat, {1.3, 1.15})
+	add_field({48, 28}, {60, 37}, .Wheat, {1.3, 1.15})
+	add_field({66, 24}, {75, 32}, .Wheat, {1.3, 1.15})
+	add_field({-24, 40}, {-15, 46}, .Pumpkin, {1.5, 1.6})
+	add_field({-9, 42}, {-1, 48}, .Pumpkin, {1.5, 1.6})
+	add_field({-20, 51}, {-10, 57}, .Pumpkin, {1.5, 1.6})
+	// A few shady trees round the fields.
+	for placed, tries := 0, 0; placed < 8 && tries < 400; tries += 1 {
+		pos := spot_in(.Fields, 1.05)
+		if clear_spot(pos, 2) {
+			add_tree(pos, .Broadleaf)
 			placed += 1
 		}
 	}
 
+	// The goat hills: rocks large and small, and a few pines.
+	for placed, tries := 0, 0; placed < 34 && tries < 2000; tries += 1 {
+		pos := spot_in(.Hills, 0.98)
+		size := random() < 0.3 ? random_range(0.9, 1.5) : random_range(0.35, 0.8)
+		if clear_spot(pos, size + 1.2) {
+			add_round(pos, size, .Rock)
+			placed += 1
+		}
+	}
+	for placed, tries := 0, 0; placed < 10 && tries < 400; tries += 1 {
+		pos := spot_in(.Hills, 0.95)
+		if clear_spot(pos, 2) {
+			add_tree(pos, .Pine)
+			placed += 1
+		}
+	}
+
+	// Turkey meadow: open grass with a few shady trees.
+	for placed, tries := 0, 0; placed < 9 && tries < 400; tries += 1 {
+		pos := spot_in(.Turkeys, 0.95)
+		if clear_spot(pos, 3) {
+			add_tree(pos, meadow_species())
+			placed += 1
+		}
+	}
+
+	// The open meadow in between: lone trees and rocks, but no food.
+	for placed, tries := 0, 0; placed < 70 && tries < 3000; tries += 1 {
+		pos := random_spot()
+		if _, in_region := region_at(pos); !in_region && clear_spot(pos, 2.5) {
+			add_tree(pos, meadow_species())
+			placed += 1
+		}
+	}
+	for placed, tries := 0, 0; placed < 40 && tries < 3000; tries += 1 {
+		pos := random_spot()
+		if region, in_region := region_at(pos); (!in_region || region == .Turkeys) && clear_spot(pos, 2) {
+			add_round(pos, random_range(0.3, 0.7), .Rock)
+			placed += 1
+		}
+	}
+
+	spawn_enemies()
+
 	// Scatter tufts and flowers where nothing else stands.
-	for g.decor_count < MAX_DECOR {
+	w := WORLD_HALF
+	for tries := 0; g.decor_count < MAX_DECOR && tries < MAX_DECOR * 3; tries += 1 {
 		pos := Vec2{random_range(-w.x + 0.5, w.x - 0.5), random_range(-w.y + 0.5, w.y - 0.5)}
 		probe := pos
-		if hit, _ := collide_static(&probe, 0.5, 0, true); hit {
+		if hit, _ := collide_static(&probe, 0.5, 0, true); hit || in_field(pos, 0.3) {
 			continue
 		}
 		g.decor[g.decor_count] = Decor {
@@ -429,26 +407,14 @@ random_spot :: proc() -> Vec2 {
 	return {random_range(-w.x + 2, w.x - 2), random_range(-w.y + 2, w.y - 2)}
 }
 
-// True if a spot is free: nothing solid within r, and not in an area that
-// has to stay open.
+// True if a spot is free: nothing solid within r, not on a field, and not
+// where home or the paths need to stay open.
 clear_spot :: proc(pos: Vec2, r: f32) -> bool {
-	Keep_Out :: struct {
-		centre: Vec2,
-		radius: f32,
+	if length2(pos - HOME) < 12 + r || in_field(pos, r + 0.5) {
+		return false
 	}
-	catapult := g.seesaws[CATAPULT].pivot
-	lever := g.seesaws[LEVER].pivot
-	keep_out := [?]Keep_Out {
-		{{0, 8}, 7}, // the start
-		{g.oven.pos + {-3, 0.3}, 4}, // the oven and its wheat field
-		{g.door_pos + {0, 2}, 4}, // in front of the skinny door
-		{g.plate_pos, 5}, // the pressure plate and the vault's gate
-		{catapult + {2, 1}, 10}, // catapult, tower, ramp and firing line
-		{lever + {1, -3}, 7}, // lever and cage
-		{{0, -22}, 5}, // the goats' patch
-	}
-	for k in keep_out {
-		if length2(pos - k.centre) < k.radius + r {
+	for kind in Region_Kind {
+		if kind != .Home && near_segment(pos, HOME, PATH_ENDS[kind], 2.2 + r) {
 			return false
 		}
 	}
@@ -462,77 +428,37 @@ clear_spot :: proc(pos: Vec2, r: f32) -> bool {
 	return !hit
 }
 
-platform_height :: proc(pl: ^Platform, pos: Vec2) -> f32 {
-	if !pl.ramp {
-		return pl.height
-	}
-	t := clamp((pl.hi.y - pos.y) / (pl.hi.y - pl.lo.y), 0, 1)
-	return pl.height * t
+near_segment :: proc(p, a, b: Vec2, reach: f32) -> bool {
+	ab := b - a
+	t := clamp(dot2(p - a, ab) / max(dot2(ab, ab), 1e-6), 0, 1)
+	return length2(p - (a + ab * t)) < reach
 }
 
-inside :: proc(pos, lo, hi: Vec2) -> bool {
-	return pos.x >= lo.x && pos.x <= hi.x && pos.y >= lo.y && pos.y <= hi.y
-}
-
-// The height of whatever is underfoot at a place, and which seesaw it is (or -1).
-ground_at :: proc(pos: Vec2, platforms := true) -> (height: f32, seesaw: int) {
-	seesaw = -1
-	for i in 0 ..< (platforms ? g.platform_count : 0) {
-		pl := &g.platforms[i]
-		if inside(pos, pl.lo, pl.hi) {
-			height = max(height, platform_height(pl, pos))
-		}
-	}
-	for &s, i in g.seesaws {
-		lo, hi := seesaw_rect(&s)
-		if inside(pos, lo, hi) {
-			h := plank_height(&s, seesaw_along(&s, pos))
-			if h > height {
-				height, seesaw = h, i
-			}
-		}
-	}
-	return
-}
-
-// Keeps a circle out of everything solid: walls, trees, rocks, food, platforms,
-// seesaws and the edge of the world.
+// Keeps a circle out of everything solid: trees, rocks, bushes, the oven,
+// pumpkins and the fence round the meadow.
 //
 // feet is how high off the ground the circle is: things fly or jump over
-// obstacles lower than that. Prosio can also stand on platforms and planks,
-// so those only block him where they are too high to step onto, and the same
-// goes for animals (enemy = true). Animals cannot climb the seesaw planks.
+// obstacles lower than that.
 collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: bool, normal: Vec2) {
 	// Two passes, so a push out of one thing cannot leave the circle inside another.
 	for _ in 0 ..< 2 {
-		for i in 0 ..< g.wall_count {
-			w := &g.walls[i]
-			if w.gate >= 0 && g.gates[w.gate].open {
-				continue
-			}
-			if feet >= w.height {
-				continue
-			}
-			if h, n := push_out_box(pos, r, w.lo, w.hi); h {
-				hit, normal = true, n
-			}
-		}
 		for i in 0 ..< g.round_count {
 			rd := &g.rounds[i]
+			if rd.r <= 0 || abs(rd.pos.x - pos.x) > rd.r + r || abs(rd.pos.y - pos.y) > rd.r + r {
+				continue
+			}
 			top: f32
 			switch rd.kind {
 			case .Tree:
 				top = 3
 			case .Rock:
 				top = rd.r * 1.05
-			case .Crate:
-				top = 1.2
 			case .Bush:
 				top = 0.8
 			case .Oven:
 				top = 2.2
 			}
-			if feet >= top || rd.r <= 0 {
+			if feet >= top {
 				continue
 			}
 			if h, n := push_out_circle(pos, r, rd.pos, rd.r); h {
@@ -544,57 +470,6 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: b
 				continue
 			}
 			if h, n := push_out_circle(pos, r, f.pos, FOOD_SIZE[f.kind]); h {
-				hit, normal = true, n
-			}
-		}
-		if enemy {
-			for &t in g.truffles {
-				if t.visible && !t.taken && feet < 1 {
-					if h, n := push_out_circle(pos, r, t.pos, 0.3); h {
-						hit, normal = true, n
-					}
-				}
-			}
-		}
-		for i in 0 ..< g.platform_count {
-			if !enemy && g.prosio.dive {
-				break // mid-dive he sails past the tower's edge
-			}
-			pl := &g.platforms[i]
-			nearest := Vec2{clamp(pos.x, pl.lo.x, pl.hi.x), clamp(pos.y, pl.lo.y, pl.hi.y)}
-			if length2(pos^ - nearest) >= r {
-				continue
-			}
-			top := platform_height(pl, nearest)
-			blocked := top > feet + STEP_UP // animals climb ramps and steps like Prosio
-			if blocked {
-				if h, n := push_out_box(pos, r, pl.lo, pl.hi); h {
-					hit, normal = true, n
-				}
-			}
-		}
-		for &s in g.seesaws {
-			lo, hi := seesaw_rect(&s)
-			nearest := Vec2{clamp(pos.x, lo.x, hi.x), clamp(pos.y, lo.y, hi.y)}
-			if length2(pos^ - nearest) < r {
-				top := plank_height(&s, seesaw_along(&s, nearest))
-				blocked := enemy ? feet < top + 0.5 : top > feet + STEP_UP
-				if blocked {
-					if h, n := push_out_box(pos, r, lo, hi); h {
-						hit, normal = true, n
-					}
-				}
-			}
-			// The lever's iron weight is a solid block.
-			if s.kind == .Lever && feet < 1.4 {
-				block_lo, block_hi := iron_rect(&s)
-				if h, n := push_out_box(pos, r, block_lo, block_hi); h {
-					hit, normal = true, n
-				}
-			}
-		}
-		if g.boulder.state != .Flying && feet < g.boulder.y + 0.7 {
-			if h, n := push_out_circle(pos, r, g.boulder.pos, BOULDER_RADIUS); h {
 				hit, normal = true, n
 			}
 		}
@@ -678,6 +553,32 @@ drop_apple :: proc(t: int) {
 	}
 }
 
+eggs_lying :: proc() -> (n: int) {
+	for &f in g.foods[:g.food_count] {
+		if !f.gone && f.kind == .Egg {
+			n += 1
+		}
+	}
+	return
+}
+
+// An egg drops from a turkey at this place and height.
+drop_egg :: proc(pos: Vec2, height: f32) -> bool {
+	if eggs_lying() >= MAX_EGGS {
+		return false
+	}
+	probe := pos
+	collide_static(&probe, 0.12, 0, true)
+	f := add_food(.Egg, probe)
+	if f == nil {
+		return false
+	}
+	f.fallen = true
+	f.life = EGG_LIFE
+	f.y = max(height, 0.05)
+	return true
+}
+
 // Something hit the trees near pos this hard: they shake, and apple trees
 // drop some of their apples.
 shake_trees_near :: proc(pos: Vec2, reach: f32, strength: f32) {
@@ -700,7 +601,7 @@ update_world :: proc(dt: f32) {
 			continue
 		}
 		if f.fallen {
-			// Falling, with a little bounce, then lying until it rots.
+			// Falling, with a little bounce, then lying until it goes.
 			if f.y > 0 || f.vy != 0 {
 				f.vy -= GRAVITY * dt
 				f.y += f.vy * dt
@@ -765,15 +666,8 @@ update_world :: proc(dt: f32) {
 			}
 		}
 	}
-	for &gate in g.gates {
-		target: f32 = gate.open ? 1 : 0
-		gate.anim += clamp(target - gate.anim, -dt * 1.5, dt * 1.5)
-	}
 	update_oven(dt)
 	g.shake = max(g.shake - dt * 2.5, 0)
-	if g.truffle_count == len(g.truffles) {
-		g.win_t += dt
-	}
 }
 
 spawn_particle :: proc(pos, vel: Vec3, life, size: f32, color: Color, gravity: f32 = 14) {

@@ -108,6 +108,7 @@ camera: rl.Camera3D
 @(private = "file")
 pixel_view: struct {
 	target:     rl.RenderTexture2D,
+	shadows:    rl.RenderTexture2D, // the same size: white, and grey where shadows fall
 	width:      i32, // size of the image, including a border of PIXEL_MARGIN
 	height:     i32,
 	scale:      f32, // screen points per image pixel
@@ -129,26 +130,71 @@ when IS_WEB {
 }
 
 // How the shader paints a surface. The numbers must match scene.frag.
-Surface :: enum i32 { Solid, Meadow, Leaf, Shadow, Bark, Stone, Jacket, Rect_Shadow }
+Surface :: enum i32 { Solid, Meadow, Leaf, Shadow_Mask, Bark, Stone, Jacket }
 flash_location: i32
 surface_location: i32
 @(private = "file")
 uniforms: struct {
 	fade, wind_time, sway: i32,
+	fields, field_count, paths, path_count, forest, hills: i32,
 }
 active_surface: Surface
 set_surface :: proc(surface: Surface) {
-	if surface != active_surface {
+	if surface != active_surface && !shadow_pass {
 		active_surface = surface
 		rl.SetShaderValue(material.shader, surface_location, &active_surface, .INT)
 	}
 }
 
 // Hides part of what follows with a fine see-through pattern (0 = solid,
-// 1 = gone). Used for trees standing between the camera and Prosio.
+// 1 = gone). Used for trees standing between the camera and Prosio. Their
+// shadows stay whole.
 set_fade :: proc(amount: f32) {
+	if shadow_pass {
+		return
+	}
 	value := amount
 	rl.SetShaderValue(material.shader, uniforms.fade, &value, .FLOAT)
+}
+
+// Shadows. Everything is first drawn flattened onto the ground along the
+// sunlight, in grey, into an image of its own. The ground is then drawn, and
+// that image multiplied over it: so a shadow is the colour of whatever it
+// falls on, only darker, whatever its shape, and where shadows overlap they
+// are no darker than one.
+SUN :: Vec3{-0.62, 0.89, 0.43} // towards the sun; must match scene.frag
+SHADOW_INK :: Color{150, 150, 166, 255} // how much of the light a shadow lets through
+@(private = "file")
+shadow_pass: bool
+@(private = "file")
+FLATTEN :: Mat4 {
+	1, -SUN.x / SUN.y, 0, 0,
+	0, 0, 0, 0.02,
+	0, -SUN.z / SUN.y, 1, 0,
+	0, 0, 0, 1,
+}
+
+drawing_shadows :: proc() -> bool {
+	return shadow_pass
+}
+
+// Where the fields, paths and regions are, for painting the ground. Each
+// field and region is {x0, z0, x1, z1} or {centre x, centre z, radius x,
+// radius z}; each path is a segment {x0, z0, x1, z1}.
+set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills: [4]f32) {
+	sh := material.shader
+	fc, pc := i32(len(fields)), i32(len(paths))
+	if fc > 0 {
+		rl.SetShaderValueV(sh, uniforms.fields, raw_data(fields), .VEC4, fc)
+	}
+	if pc > 0 {
+		rl.SetShaderValueV(sh, uniforms.paths, raw_data(paths), .VEC4, pc)
+	}
+	rl.SetShaderValue(sh, uniforms.field_count, &fc, .INT)
+	rl.SetShaderValue(sh, uniforms.path_count, &pc, .INT)
+	f, h := forest, hills
+	rl.SetShaderValue(sh, uniforms.forest, &f, .VEC4)
+	rl.SetShaderValue(sh, uniforms.hills, &h, .VEC4)
 }
 
 // How far what follows sways in the wind at its top (leaves).
@@ -175,7 +221,7 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	rl.InitWindow(width, height, title)
 	rl.SetExitKey(.KEY_NULL)
 
-	meshes[.Terrain] = rl.GenMeshPlane(2, 2, 44, 30)
+	meshes[.Terrain] = rl.GenMeshPlane(2, 2, 80, 56)
 	meshes[.Plane] = rl.GenMeshPlane(2, 2, 1, 1)
 	meshes[.Sphere] = rl.GenMeshSphere(1, 20, 28)
 	meshes[.Hemisphere] = rl.GenMeshHemiSphere(1, 12, 28)
@@ -192,6 +238,12 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	uniforms.fade = rl.GetShaderLocation(material.shader, "fade")
 	uniforms.wind_time = rl.GetShaderLocation(material.shader, "windTime")
 	uniforms.sway = rl.GetShaderLocation(material.shader, "sway")
+	uniforms.fields = rl.GetShaderLocation(material.shader, "fields")
+	uniforms.field_count = rl.GetShaderLocation(material.shader, "fieldCount")
+	uniforms.paths = rl.GetShaderLocation(material.shader, "paths")
+	uniforms.path_count = rl.GetShaderLocation(material.shader, "pathCount")
+	uniforms.forest = rl.GetShaderLocation(material.shader, "forest")
+	uniforms.hills = rl.GetShaderLocation(material.shader, "hills")
 }
 
 // How much a tapered limb narrows from one end to the other.
@@ -249,6 +301,7 @@ gen_frustum :: proc(top: f32, slices: int) -> rl.Mesh {
 platform_shutdown :: proc() {
 	if pixel_view.width > 0 {
 		rl.UnloadRenderTexture(pixel_view.target)
+		rl.UnloadRenderTexture(pixel_view.shadows)
 	}
 	for mesh in meshes {
 		rl.UnloadMesh(mesh)
@@ -288,6 +341,8 @@ end_frame :: proc() {
 	rl.EndDrawing()
 }
 
+// Starts a frame of the world, with the shadow pass: until begin_ground,
+// everything drawn is a shadow.
 begin_world :: proc(eye, target: Vec3, fov_y: f32, time: f32) {
 	snapped_eye, snapped_target, wide_fov := begin_pixel_view(eye, target, fov_y)
 	camera = rl.Camera3D {
@@ -297,13 +352,42 @@ begin_world :: proc(eye, target: Vec3, fov_y: f32, time: f32) {
 		fovy       = wide_fov,
 		projection = .PERSPECTIVE,
 	}
-	rl.BeginMode3D(camera)
-
 	wind := time
 	no_fade: f32 = 0
 	rl.SetShaderValue(material.shader, uniforms.wind_time, &wind, .FLOAT)
 	rl.SetShaderValue(material.shader, uniforms.fade, &no_fade, .FLOAT)
 	rl.SetShaderValue(material.shader, uniforms.sway, &no_fade, .FLOAT)
+
+	rl.BeginTextureMode(pixel_view.shadows)
+	rl.ClearBackground(rl.WHITE)
+	rl.BeginMode3D(camera)
+	set_surface(.Shadow_Mask)
+	shadow_pass = true
+	// Flattened, a shape may face either way: draw both sides.
+	rlgl.DisableBackfaceCulling()
+}
+
+// The shadows are done: now the world itself, starting with the ground.
+begin_ground :: proc() {
+	rl.EndMode3D()
+	rl.EndTextureMode()
+	rlgl.EnableBackfaceCulling()
+	shadow_pass = false
+	set_surface(.Solid)
+	v := &pixel_view
+	rl.BeginTextureMode(v.target)
+	rl.ClearBackground(rl.Color(v.clear))
+	rl.BeginMode3D(camera)
+}
+
+// Darkens the ground drawn so far wherever a shadow falls.
+apply_shadows :: proc() {
+	rl.EndMode3D()
+	v := &pixel_view
+	rl.BeginBlendMode(.MULTIPLIED)
+	rl.DrawTextureRec(v.shadows.texture, {0, 0, f32(v.width), -f32(v.height)}, {0, 0}, rl.WHITE)
+	rl.EndBlendMode()
+	rl.BeginMode3D(camera)
 }
 
 // Sets up the small image, and returns the camera to draw
@@ -342,9 +426,12 @@ begin_pixel_view :: proc(eye, target: Vec3, fov_y: f32) -> (Vec3, Vec3, f32) {
 	if w != v.width || h != v.height {
 		if v.width > 0 {
 			rl.UnloadRenderTexture(v.target)
+			rl.UnloadRenderTexture(v.shadows)
 		}
 		v.target = rl.LoadRenderTexture(w, h)
+		v.shadows = rl.LoadRenderTexture(w, h)
 		rl.SetTextureFilter(v.target.texture, .POINT)
+		rl.SetTextureFilter(v.shadows.texture, .POINT)
 		v.width, v.height = w, h
 	}
 
@@ -362,8 +449,6 @@ begin_pixel_view :: proc(eye, target: Vec3, fov_y: f32) -> (Vec3, Vec3, f32) {
 	// Outlines about one pixel wide, measured where the camera looks.
 	outline_width = texel * 0.9
 
-	rl.BeginTextureMode(v.target)
-	rl.ClearBackground(rl.Color(v.clear))
 	wide := 2 * math.atan(math.tan(half_fov) * f32(h) / f32(inner_h)) * math.DEG_PER_RAD
 	return eye + shift, target + shift, wide
 }
@@ -379,6 +464,13 @@ end_world :: proc() {
 }
 
 draw_shape :: proc(shape: Shape, transform: Mat4, color: Color) {
+	if shadow_pass {
+		if shape != .Terrain && shape != .Plane {
+			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(SHADOW_INK)
+			rl.DrawMesh(meshes[shape], material, rl.Matrix(FLATTEN * transform))
+		}
+		return
+	}
 	if outlines_enabled && outline_width > 0 && color.a == 255 && shape != .Torus && shape != .Plane && shape != .Terrain {
 		draw_outline(shape, transform)
 	}

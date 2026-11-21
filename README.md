@@ -1,10 +1,10 @@
 # Prosio
 
-Prosio is a small 2.5D top-view action game about a pig explorer whose weight is the whole game. He gathers food into his sack and bakes it into pies at an oven; eating makes him fatter, exercise makes him leaner, and almost everything he can do depends on how heavy he is at that moment: how fast he runs, how high he jumps, what fits through a door, how far an enemy flies when he bumps it, and what he can pick up and throw.
+Prosio is a small 2.5D top-view action game about a pig explorer whose weight is the whole game. He roams a big meadow gathering food into his sack and bakes it into pies at his oven. Everything he does burns a little weight and everything he eats puts some back, and almost everything he can do depends on how heavy he is at that moment: how fast he runs, how high he jumps, how far an enemy flies when he bumps it, and what he can pick up and throw.
 
 It is written in [Odin](https://odin-lang.org) on top of [raylib](https://www.raylib.com), runs natively on the desktop and in the browser through WebAssembly, and is aimed at children of about seven.
 
-This is a proof of concept: one meadow, five golden truffles to find, no story yet.
+This is a proof of concept: one meadow, no goal yet beyond keeping Prosio fed and healthy.
 
 ## Contents
 
@@ -14,7 +14,7 @@ This is a proof of concept: one meadow, five golden truffles to find, no story y
 - [Moving, jumping and stamina](#moving-jumping-and-stamina)
 - [Fighting](#fighting)
 - [Grabbing and throwing](#grabbing-and-throwing)
-- [The meadow and its puzzles](#the-meadow-and-its-puzzles)
+- [The meadow](#the-meadow)
 - [Building](#building)
 - [How the code is organised](#how-the-code-is-organised)
 - [Testing without playing](#testing-without-playing)
@@ -23,7 +23,7 @@ This is a proof of concept: one meadow, five golden truffles to find, no story y
 
 ## Playing
 
-The goal is to collect all five golden truffles. Each one sits behind a puzzle that needs Prosio to be the right weight, or to use his weight the right way. With the fifth the game ends: "Congratulations, Prosio! You collected all the golden truffles!", with his finishing weight, the dishes he baked and the time taken, and a choice of playing again or going back to the menu.
+Keep Prosio's energy in balance. Walking, picking things up, fighting and being pecked or butted all burn a little of his weight; food puts it back, but slowly, so he has to keep going out to gather it. Each kind of food grows in its own part of the meadow, so he has to know where to look, and the best food is what he bakes from it.
 
 ### Controls
 
@@ -35,9 +35,8 @@ The goal is to collect all five golden truffles. Each one sits behind a puzzle t
 | Sprint | hold `Shift` while moving |
 | Grab; press again to throw | `F` or `L` |
 | Bash with a held animal | `Space` |
-| Put food in the sack (next to food or a berry bush) | `E` or `K` |
+| Pick up food into the sack (next to food or a berry bush) | `E` or `K` |
 | Use the oven (next to it) | `E` or `K` |
-| Push-ups (anywhere else) | hold `E` or `K` |
 | Choose in the sack | `Z` (back) and `C` (on) |
 | Eat what is chosen in the sack | `Q` |
 | Pause menu | `Esc` or `P` |
@@ -49,10 +48,10 @@ There is no gamepad or touch support yet.
 
 ### The screen
 
-- **Weight bar** (top left): where Prosio is between 35 and 135 kg. Green is lean, yellow is chubby, orange is huge, and the red ends are danger zones. A yellow `+N` under the number is the weight of whatever he is carrying.
+- **Weight bar** (top left): where Prosio is between 35 and 135 kg. Green is lean, yellow is chubby, orange is huge, and the red ends are danger zones. A yellow `+N` under the number is the weight of a rock he is carrying.
 - **Stamina bar**: the notch shows what one bump costs right now. It turns red when he is out of breath.
-- **Truffle count** (top right).
-- **Sack** (bottom): a box for each kind of thing in the sack, with its picture, and how many under the box. The chosen one is outlined in yellow, with its name and calories above.
+- **Sack** (top, beside the weight): a box for each kind of thing in the sack, with its picture, and how many under the box. The chosen one is outlined in yellow, with its name and calories above. The panel is always wide enough for the longest name. It grows as new kinds go in, up to six boxes; with more than six, the boxes go round in a circle as `Z` and `C` choose (the chosen one always third, with `<` and `>` either side).
+- **Where he is** (top right): the part of the meadow he is in, and what is found there.
 - **Prompt** (bottom): what `E` and `F` would do at this spot.
 
 ### Menus
@@ -71,57 +70,58 @@ Prosio weighs between **35 and 135 kg** and starts at 80 kg.
 | Huge | 105 kg or more |
 | Heart attack | 135 kg or more |
 
-Fainting and the heart attack both end the attempt; `Enter` puts Prosio back at the start at 80 kg, and the meadow keeps its progress. So does his sack.
+Fainting and the heart attack both end the attempt; `Enter` puts Prosio back at home at 80 kg, and the meadow stays as it was. So does his sack.
 
 ### Gaining and losing weight
 
-Whatever he eats from his sack puts on weight by its calories: **1 kg for every 60 kcal** (see [The sack and the oven](#the-sack-and-the-oven) for each food).
+Whatever he eats from his sack puts on weight by its calories, slowly: **1 kg for every 200 kcal** (see [The sack and the oven](#the-sack-and-the-oven) for each food). Everything he does burns some, from very little for walking to more for fighting and most for being hurt. There is no exercise to do: keeping busy is enough.
 
 | What | Change |
 |---|---|
-| One push-up | -2.5 kg |
-| Walking | -0.05 kg per second |
-| Sprinting | -0.2 kg per second |
-| One bump or throw | -0.3 kg |
-| One jump | -0.15 kg |
+| Walking | -0.02 kg per second (about 1.2 kg a minute), times his weight / 80 kg |
+| Sprinting | -0.06 kg per second, times his weight / 80 kg |
+| Picking something up | -0.08 kg |
+| One jump | -0.06 kg |
+| One bump, grab, bash or throw | -0.2 kg |
+| Being pecked or butted | -0.35 kg |
+
+So a bunch of berries (+0.25 kg) is worth picking but not by much, an apple (+0.47 kg) is better, and a pie (+4 to +6 kg) is best of all. Ten seconds in the middle of an angry flock of turkeys can cost him 2 kg.
 
 ## The sack and the oven
 
-Food is not eaten where it is found. `E` next to it puts it in Prosio's sack (up to nine of each thing), and he eats from the sack when he likes: `Z` and `C` choose, `Q` eats.
+Food is not eaten where it is found. `E` next to it and Prosio stoops, picks it up and drops it over his shoulder into the sack on his back (up to nine of each thing). He eats from the sack when he likes: `Z` and `C` choose, `Q` eats.
 
-All of it is found in the meadow, not served:
+Each kind of food grows in its own part of the meadow (see [The meadow](#the-meadow)):
 
-- **Berry bushes** grow a new bunch every 9 seconds, up to three; berries are picked straight off the bush.
-- **Apple trees** (a smaller tree with a round crown and red apples) grow up to four apples, and now and then one drops and rolls to a stop under the tree. A fallen apple rots away after 45 seconds. **Bump an apple tree** (or slam an animal or throw one into it) and it shakes, and down come some of its apples: the harder the hit, the more.
-- **Mushrooms** grow in the shade under trees and come back 25 seconds after being eaten.
-- **Pumpkins** grow in patches out in the open and come back after 40 seconds. They are big enough to bump into.
-- **Wheat** grows in little fields, one of them next to the oven, and comes back after 30 seconds.
-- **Eggs** are laid in nests near most of the turkeys' homes; the turkey lays another 35 seconds after one is taken. One nest is near the start.
+- **The forest:** berry bushes, wild apple trees and mushrooms. Bushes grow a new bunch of berries every 9 seconds, up to three. Apple trees grow up to four apples, and now and then one drops; a fallen apple rots away after 45 seconds. **Bump an apple tree** (or slam an animal or throw one into it) and it shakes, and down come some of its apples: the harder the hit, the more. Mushrooms grow in the shade under the trees and come back 25 seconds after being picked.
+- **The wheat fields:** wheat, in rows in four ploughed fields; it grows back after 30 seconds.
+- **The pumpkin patch:** pumpkins, in three beds; they grow back after 40 seconds and are big enough to bump into.
+- **Eggs** come from the turkeys. Each turkey lays one now and then (every 100 to 220 seconds), wherever it is, mostly in Turkey Meadow; an egg lies there for 90 seconds, and no more than ten lie about at once. A turkey held by the legs and shaken with `Space` lets an egg drop one time in five.
 
-Nothing runs out for good, so no puzzle can be made impossible.
+Nothing runs out for good.
 
 | Raw food | kcal | Weight |
 |---|---|---|
-| Bunch of berries | 50 | +0.8 kg |
-| Apple | 95 | +1.6 kg |
-| Mushroom | 30 | +0.5 kg |
-| Pumpkin | 400 | +6.7 kg |
-| Wheat (a sheaf, about a cup of flour) | 340 | +5.7 kg |
-| Egg | 130 | +2.2 kg |
+| Bunch of berries | 50 | +0.25 kg |
+| Apple | 95 | +0.47 kg |
+| Mushroom | 30 | +0.15 kg |
+| Pumpkin | 400 | +2.0 kg |
+| Wheat (a sheaf, about a cup of flour) | 340 | +1.7 kg |
+| Egg | 130 | +0.65 kg |
 
-**The oven** stands by the start, a round brick oven with a wheat field beside it. `E` next to it opens its menu (the game waits meanwhile): every recipe, what it needs and what is in the sack, and its calories. `Up`/`Down` choose, `E` or `Enter` bakes, `Esc` closes. Baking takes 6 seconds, with a fire in the oven and smoke from the chimney; then it says "Ding!", and the dish waits on the sill until Prosio takes it out with `E`, into the sack.
+**The oven** stands at home, by the start: a round brick oven with a chimney. `E` next to it opens its menu (the game waits meanwhile): every recipe, what it needs and what is in the sack, and its calories. `Up`/`Down` choose, `E` or `Enter` bakes, `Esc` closes. Baking takes 6 seconds, with a fire in the oven and smoke from the chimney; then it says "Ding!", and the dish waits in the oven's mouth, where you can see what it is, until Prosio takes it out with `E`, into the sack.
 
 Cooking makes more of the calories in food available to the body, so **a baked dish counts 1.4 times the calories of what went into it**:
 
 | Dish | Needs | Raw | Baked | Weight |
 |---|---|---|---|---|
-| Apple pie | 3 apples, 1 wheat, 1 egg | 755 | 1057 kcal | +17.6 kg |
-| Pumpkin pie | 1 pumpkin, 1 wheat, 1 egg | 870 | 1218 kcal | +20.3 kg |
-| Berry muffins | 3 bunches of berries, 1 wheat, 1 egg | 620 | 868 kcal | +14.5 kg |
-| Mushroom pie | 3 mushrooms, 1 wheat, 1 egg | 560 | 784 kcal | +13.1 kg |
-| Bread | 2 wheat | 680 | 952 kcal | +15.9 kg |
+| Apple pie | 3 apples, 1 wheat, 1 egg | 755 | 1057 kcal | +5.3 kg |
+| Pumpkin pie | 1 pumpkin, 1 wheat, 1 egg | 870 | 1218 kcal | +6.1 kg |
+| Berry muffins | 3 bunches of berries, 1 wheat, 1 egg | 620 | 868 kcal | +4.3 kg |
+| Mushroom pie | 3 mushrooms, 1 wheat, 1 egg | 560 | 784 kcal | +3.9 kg |
+| Bread | 2 wheat | 680 | 952 kcal | +4.8 kg |
 
-A pie is the quick way to become huge, and also the quick way to a heart attack.
+So a trip to the forest, the fields and Turkey Meadow for an apple pie is worth more than eating everything raw on the way.
 
 ### What weight changes
 
@@ -138,16 +138,15 @@ Neither end is the "good" one. Each is a tool.
 | Bump | bounces off enemies | sends them flying |
 | Being shoved | flies far | hardly moves |
 | Throw | weak | strong |
-| Fits through | narrow gaps | wide ones only |
 
 His body is drawn from simple shapes in code, so it changes smoothly with every kilogram: the belly grows out from under a cropped explorer jacket, and jiggles.
 
 ## Moving, jumping and stamina
 
 - **Sprint** drains stamina (9 per second lean, 42 huge). At zero he is winded and cannot sprint again until 30 is back.
-- **Jump** always uses the same leg energy, so the height is `36 / weight`. A lean Prosio clears small rocks and can hop over enemies; a huge one barely leaves the ground. Walls are 1.3 high, just above the best possible jump, so jumping never skips a puzzle.
+- **Jump** always uses the same leg energy, so the height is `36 / weight`. A lean Prosio clears small rocks and can hop over enemies; a huge one barely leaves the ground.
 - **Landing on an enemy** stuns it, and a hard enough landing throws it.
-- **Stamina** is spent by sprinting, bumping, jumping, push-ups and lifting. It comes back on its own after a short pause, far faster when lean.
+- **Stamina** is spent by sprinting, bumping, jumping and lifting. It comes back on its own after a short pause, far faster when lean.
 
 ## Fighting
 
@@ -235,45 +234,22 @@ A thrown animal is knocked out if it leaves at its knock-out speed (14 for a tur
 | 16 kg rock | 7.4, travels about 6 m | 13.2, about 10.5 m | 20.6, about 16 m |
 | 130 kg boulder | too heavy to lift (not enough stamina) | 1.6, drops 1 m in front | 2.5, drops 1.3 m in front |
 
-- **A carried rock's weight is his.** It counts on the pressure plate, on both seesaws and when he lands, and it lowers his jump. A dragged animal stands on its own feet, so it does not count.
-- He cannot bump, sprint, eat, gather or do push-ups with his hands full, and cannot jump while holding an animal. He can bash on the move, at half speed.
+- **A carried rock's weight is his.** It counts when he lands, and it lowers his jump and his speed. A dragged animal stands on its own feet, so it does not count.
+- He cannot bump, sprint, eat or pick things up with his hands full, and cannot jump while holding an animal. He can bash on the move, at half speed.
 
-## The meadow and its puzzles
+## The meadow
 
-The meadow is 88 by 60 units inside a fence, with the five sites spread out and little woods, single trees, bushes, rocks, food, wheat fields and turkeys with their nests scattered at random between them. Prosio starts near the middle, by an apple tree, a berry bush, a few pumpkins, a turkey's nest, and the oven with its wheat field. There is no map yet.
+The meadow is 200 by 140 metres inside a fence, more than five times as big as before. Prosio's home is in the middle: a bare yard with the oven, and footpaths winding out from it to each part of the meadow, with a signpost by the yard pointing down each path. Each part has its own food, its own look on the ground, and its name in the top right corner while he is in it.
 
-| Truffle | Where | What it takes |
+| Where | Which way from home | What is there |
 |---|---|---|
-| Skinny shack | north-west | The door is 1.2 wide. Prosio fits under about 68 kg. |
-| Heavy vault | north-east | A pressure plate opens the gate under 105 kg or more, carried load included. |
-| Billy goat | far north | Knock the billy goat out (a bump from about 115 kg, or a throw); it drops the truffle. |
-| Crate | west | Smash a crate with the catapult's boulder (or a heavy thrown rock). |
-| Cage | east | Tip the lever to open the gate. |
+| The forest | west | About 230 trees close together on a darker floor strewn with leaves: berry bushes, wild apple trees and mushrooms |
+| The wheat fields | south-east | Four ploughed fields of wheat in rows, and a few shady trees |
+| The pumpkin patch | south | Three beds of pumpkins |
+| Turkey Meadow | north | Open grass, most of the 22 turkeys, and their eggs |
+| Goat hills | north-east | Dry, stony ground with big rocks and pines, the goats and the billy goat |
 
-### The seesaws
-
-Both are simulated as real levers: a plank with an angle and a turning speed.
-
-- **Weight** on the plank pulls its side down with *weight times distance from the pivot*.
-- **Landing** on the plank shares Prosio's momentum with it: *weight times falling speed times distance from the pivot*. Falling from higher means more speed, so both his weight and the height of the jump count.
-- The plank is harder to get moving the more mass sits far from the pivot (*weight times distance squared*).
-- An end that reaches the ground stops dead.
-
-**The catapult.** Prosio's arm of the plank is short and the boulder's is long, so the boulder's end moves much faster than his. Climb the ramp, jump off the tower (the jump is aimed at the landing pad for you), and when his end hits the ground the 15 kg boulder leaves at the speed its end was moving.
-
-| Prosio | Boulder flies |
-|---|---|
-| 45 kg | 1.8 |
-| 70 kg | 4.1 |
-| 88 kg | 5.5, onto the crate |
-| 105 kg | 6.8 |
-| 125 kg | 8.1 |
-
-Too light falls short and too heavy overshoots; roughly 73 to 103 kg hits. A marker on the ground shows where the boulder would land at his current weight and turns green on the crate. The marker comes from the same formulas as the simulation and matched it to within about 3% in tests.
-
-One liberty is taken: the boulder's flight is tilted about 50 degrees forward, as if by its cup. A real seesaw would throw it nearly straight up.
-
-**The lever.** A 520 kg iron weight sits close to the pivot and Prosio's arm is long. Standing on the far end is never enough, at any weight. Jumping there adds the kick that tips it, from about 75 kg up.
+In between is open meadow with lone trees and rocks, but no food, and a few turkeys wandering about. Animals far from Prosio rest until he comes near.
 
 ## Building
 
@@ -326,17 +302,18 @@ src/
                      shaders, outlines, text
     shaders/         the scene shader: pixel shading, ground, leaves, bark, stone,
                      fabric, shadows, wind and the see-through fade
-    game.odin        the Game state, scenes (menu, playing, paused, oven, won),
+    game.odin        the Game state, scenes (menu, playing, paused, oven),
                      the frame loop and the camera
-    world.odin       walls, platforms, food, scattering, and collide_static,
-                     which keeps anything round out of everything solid
-    prosio.odin      Prosio: weight, movement, jump, sprint, stamina
+    world.odin       the regions, fields and paths, food, laying out the
+                     meadow, and collide_static, which keeps anything round
+                     out of everything solid
+    prosio.odin      Prosio: weight and what burns it, movement, jump,
+                     sprint, stamina
     kitchen.odin     the sack, calories, recipes, the oven, and their menus and
                      pixel icons
     enemies.odin     turkeys and goats, bumps, shoves and stomps
     grab.odin        grabbing, dragging, bashing, throwing, the floppy held
                      animal, rocks in flight
-    seesaw.odin      the lever physics, catapult and boulder
     draw.odin        everything drawn in the world
     ui.odin          bars, prompts, speech bubbles, menus
     util.odin        small maths helpers and a random number generator
@@ -354,8 +331,9 @@ A few choices shape the rest:
 - **No memory allocation in the game.** Everything lives in one `Game` struct of fixed-size arrays, which is also why the web build needs no allocator.
 - **Physics on the ground plane, plus height.** Positions are 2D; things that jump or fly also have a height and a vertical speed. Physics runs in fixed steps of at most 1/120 of a second.
 - **Pixel art from 3D.** The scene is lit by a warm, low sun in four flat tones (deep shade, shade, light and a sunlit highlight, with dithered edges between them): cool violet shadows, warm highlights, a touch of blue skylight on anything facing up, darkening where things meet the ground, and broad soft patches of sunlight on the grass. A limited palette, dithered ground and one-pixel outlines finish it. Everything is drawn into a small image that is enlarged without smoothing. There are six pixel sizes (keys `1` to `6`), aiming at about 180, 240, 320, 360 (the default), 420 and 560 rows of pixels. Each game pixel is a whole number of real screen pixels (on a high-resolution screen it can also be a whole number and a half, which is what makes room for the level between 320 and 420), so the actual count is the nearest that fits the window, and each level is kept at least one step finer than the one below it as far as the window allows (on a small window the finest levels can end up the same). The camera is snapped to whole pixels so scenery does not shimmer as it scrolls, and the image is shifted by less than a pixel to keep scrolling smooth.
-- **Surface detail is calculated, not painted:** grass tones and the footpath, leaf clumps, bark grain and moss are all noise in the shader. Leaves sway in the wind.
-- **Trees** are tall and slim: a trunk plus clusters of round leafy lumps that are darker underneath, in four species (broadleaf, apple, blossom, pine). About a hundred stand in the meadow, many of them in nine little woods of six to ten trees with bushes round their edges. A tree standing between the camera and Prosio fades to a see-through pattern where it covers him.
+- **Surface detail is calculated, not painted:** grass tones, the forest floor, the stony hills, the paths and the ploughed fields, leaf clumps, bark grain and moss are all noise in the shader. Where the fields, paths and regions are is passed to the shader once, at start-up. Leaves sway in the wind.
+- **Shadows are cast, not stamped.** Everything that stands in the sun is first drawn flattened onto the ground along the sunlight, in grey, into an image of its own; the ground is then drawn and that image multiplied over it, and everything else drawn on top. So every shadow has the shape of what casts it (a tree's trunk as well as its crown, a signpost's arm, Prosio mid-jump), falls the same way as the light, and is simply a darker version of whatever it lands on: grass, path, soil or forest floor. Where shadows overlap they are no darker than one.
+- **Trees** are tall and slim: a trunk plus clusters of round leafy lumps that are darker underneath, in four species (broadleaf, apple, blossom, pine). A tree standing between the camera and Prosio fades to a see-through pattern where it covers him; its shadow stays whole.
 - **Only what is near the camera is drawn.**
 
 ## Testing without playing
@@ -376,10 +354,9 @@ The desktop build takes options that script a run, save a picture and quit. They
 | `--menu` | show the menu instead of starting the game |
 | `--crowd` | put turkeys, a goat and the billy goat round Prosio at the start, the first turkey within reach, for trying the club |
 | `--stock` | start with a sack full of food (three of each raw thing, one of each dish) |
-| `--last-truffle` | four truffles found already, the fifth at his feet, for seeing the ending |
 | `--detail 4` | pixel size: 1 chunkiest to 6 finest (default 4) |
 
-Button letters: `l r u d` to move, `b` bump, `j` jump, `s` sprint, `a` gather, oven or push-ups, `g` grab or throw, `q` eat from the sack, `z` `c` choose in the sack, `e` enter.
+Button letters: `l r u d` to move, `b` bump, `j` jump, `s` sprint, `a` pick up or oven, `g` grab or throw, `q` eat from the sack, `z` `c` choose in the sack, `e` enter.
 
 For example, Prosio grabs a turkey from the crowd on frame 12, walks off dragging it, bashes on frame 50, and the picture is taken mid-swing:
 
@@ -399,8 +376,10 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | Speeds, sprint, stamina costs and recovery, jump energy | `prosio.odin` (`walk_speed`, `dash_cost`, `JUMP_ENERGY`, ...) |
 | How hard bumps and shoves are, enemy weights and grips | `enemies.odin` |
 | Throw and bash strength, lift limit, dragging grip, how fast animals go limp, rock weight | `grab.odin` |
-| Seesaw sizes and weights, where the crate stands | `seesaw.odin` |
-| World size, door width, plate weight | `world.odin` |
+| World size, regions, fields, paths, how many trees and rocks | `world.odin` (`WORLD_HALF`, `REGIONS`, `PATH_ENDS`, `build_world`) |
+| How often turkeys lay, the chance of a shaken-out egg | `enemies.odin` (`EGG_EVERY`, `SHAKE_EGG`) |
+| What everything burns | `prosio.odin` (`WALK_BURN`, `GATHER_BURN`, `FIGHT_BURN`, `HURT_BURN`, ...) |
+| The sun's direction and how dark shadows are | `platform.odin` (`SUN`, `SHADOW_INK`) and `scene.frag` |
 | Colours | `draw.odin`, `ui.odin` |
 | Keys | `KEYS` in `platform.odin` |
 
@@ -408,7 +387,8 @@ Every number that shapes the feel is a named constant or a one-line function nea
 
 - No sound or music.
 - No saving, and a single meadow.
-- No map or pointer to the truffle sites.
+- No map; only the signposts by the house and the name of the region he is in.
+- No goal beyond keeping Prosio healthy; the puzzles of earlier versions are gone for now.
 - No gamepad or touch controls.
 - Linux and Windows builds are untested.
 - Text uses raylib's built-in pixel font.

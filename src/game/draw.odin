@@ -9,9 +9,6 @@ COLOR_SKY :: Color{159, 181, 157, 255}
 COLOR_OUTSIDE :: Color{93, 130, 105, 255}
 COLOR_TUFT :: Color{94, 132, 85, 255}
 COLOR_FENCE :: Color{174, 145, 99, 255}
-COLOR_SHACK :: Color{172, 97, 71, 255}
-COLOR_VAULT :: Color{124, 147, 141, 255}
-COLOR_GATE :: Color{75, 98, 100, 255}
 COLOR_SKIN :: Color{249, 181, 160, 255}
 COLOR_SKIN_DARK :: Color{222, 136, 127, 255}
 COLOR_BLUSH :: Color{230, 136, 125, 255}
@@ -35,8 +32,6 @@ COLOR_TRUNK :: Color{120, 99, 77, 255}
 COLOR_ROCK :: Color{137, 150, 143, 255}
 COLOR_ROCK_LIGHT :: Color{157, 166, 146, 255}
 COLOR_PLANK :: Color{214, 168, 110, 255}
-COLOR_CRATE :: Color{196, 142, 84, 255}
-COLOR_IRON :: Color{74, 78, 96, 255}
 
 FLOWER_COLORS := [?]Color{{255, 120, 150, 255}, {255, 236, 120, 255}, {250, 250, 255, 255}, {190, 150, 255, 255}}
 
@@ -92,36 +87,9 @@ taper :: proc(m: Mat4, a, b: Vec3, ra: f32, color: Color) {
 	draw_shape(.Frustum, frame * scale({ra, length, ra}), color)
 }
 
-// The sun is high on the left. The projected shadow moves away from the
-// feet and softens when its caster rises. The quad fades to transparent.
-shadow :: proc(pos: Vec2, radius: f32, ground: f32 = 0, rise: f32 = 0) {
-	offset := max(rise, 0) * 0.65 + radius * 0.37
-	extent := radius * (1.0 + min(max(rise, 0) * 0.07, 0.25))
-	set_surface(.Shadow)
-	centre := Vec3{pos.x + offset, ground + 0.057, pos.y - offset * 0.65}
-	draw_shape(.Plane, translate(centre) * rot_y(-0.55) * scale({extent * 1.28, 1, extent * 0.92}),
-		{48, 65, 65, u8(124 / (1 + max(rise, 0) * 0.18))})
-	set_surface(.Solid)
-}
-
-// The cast footprint of walls and raised decks, offset along the sun direction.
-structure_shadow :: proc(lo, hi: Vec2, height: f32) {
-	if height < 0.05 {
-		return
-	}
-	size := hi - lo
-	offset := Vec2{0.69, -0.48} * height
-	centre := (lo + hi + offset) * 0.5
-	if !on_screen(centre, max(size.x, size.y) * 0.5 + height) {
-		return
-	}
-	set_surface(.Rect_Shadow)
-	draw_shape(.Plane, translate({centre.x, 0.047, centre.y}) *
-		scale({(size.x + abs(offset.x)) * 0.52, 1, (size.y + abs(offset.y)) * 0.52}), {46, 63, 68, 104})
-	set_surface(.Solid)
-}
-
-draw_world :: proc() {
+// The ground: grass, forest floor, paths and fields (all painted by the
+// shader), with tufts and flowers. Shadows are laid over it next.
+draw_ground :: proc() {
 	w := WORLD_HALF
 	outlines_enabled = false
 	box(IDENTITY, {0, -0.56, 0}, {w.x * 2 + 40, 1, w.y * 2 + 40}, COLOR_OUTSIDE)
@@ -145,51 +113,13 @@ draw_world :: proc() {
 			ball(m, {0, 0.31, 0}, {0.04, 0.04, 0.04}, COLOR_STAR)
 		}
 	}
-
-	// Shadows go down before anything stands on them.
-	p := &g.prosio
-	floor := ground_height(p.pos)
-	shadow(p.pos, prosio_radius(p.kg) * 1.23, floor, p.height - floor)
-	for e in g.enemies[:g.enemy_count] {
-		if e.state != .Gone && on_screen(e.pos, 1) {
-			shadow(e.pos, ENEMY_RADIUS[e.kind] * 1.2, 0, e.y)
-		}
-	}
-	for &f in g.foods[:g.food_count] {
-		if !f.gone && f.respawn <= 0 && on_screen(f.pos, 1) {
-			shadow(f.pos, FOOD_SIZE[f.kind] * 1.3, 0, f.y)
-		}
-	}
-	for r, i in g.rounds[:g.round_count] {
-		if r.kind == .Tree && on_screen(r.pos, 5) {
-			// The crown's shadow falls well away from the trunk, as the sun is high.
-			t := tree_shape(i)
-			shadow(r.pos, t.canopy * 1.05, 0, t.canopy_y * 0.75)
-			shadow(r.pos, 0.4)
-		} else if r.r > 0 && r.kind != .Tree && on_screen(r.pos, 2) {
-			shadow(r.pos, r.r * 1.1)
-		}
-	}
-	for wall in g.walls[:g.wall_count] {
-		h := wall.height
-		if wall.gate >= 0 {
-			h -= g.gates[wall.gate].anim * (h + 0.2)
-		}
-		structure_shadow(wall.lo, wall.hi, h)
-	}
-	for deck in g.platforms[:g.platform_count] {
-		structure_shadow(deck.lo, deck.hi, deck.ramp ? deck.height * 0.5 : deck.height)
-	}
-	if g.boulder.state == .Flying {
-		shadow(g.boulder.pos, BOULDER_RADIUS, 0, g.boulder.y)
-	}
 	outlines_enabled = true
+}
 
-	// Pressure plate.
-	open := g.gates[0].open
-	tube(IDENTITY, {g.plate_pos.x, 0, g.plate_pos.y}, 1.05, 0.08, COLOR_IRON)
-	tube(IDENTITY, {g.plate_pos.x, 0, g.plate_pos.y}, 0.88, open ? 0.1 : 0.2, open ? Color{96, 206, 96, 255} : Color{226, 84, 74, 255})
-
+// The fence round the meadow, the trees, rocks and bushes, and the
+// signposts by the house.
+draw_world :: proc() {
+	w := WORLD_HALF
 	// Fence: posts and two rails all the way round.
 	for x := -w.x; x <= w.x; x += 2 {
 		if abs(x - g.camera.x) > 21 * g.camera_zoom {
@@ -213,40 +143,10 @@ draw_world :: proc() {
 		box(IDENTITY, {w.x + 0.2, y, 0}, {0.1, 0.1, w.y * 2 + 0.4}, rail)
 	}
 
-	// Walls and gates.
-	for wall in g.walls[:g.wall_count] {
-		if wall.style == .Fence {
-			continue
-		}
-		centre := (wall.lo + wall.hi) / 2
-		size := wall.hi - wall.lo
-		sink: f32 = 0
-		if wall.gate >= 0 {
-			sink = g.gates[wall.gate].anim * (wall.height + 0.2)
-		}
-		box(IDENTITY, {centre.x, wall.height / 2 - sink, centre.y}, {size.x, wall.height, size.y}, wall.color)
-		if wall.gate >= 0 {
-			// Gate bars.
-			for i in 0 ..< 3 {
-				x := wall.lo.x + size.x * (f32(i) + 0.5) / 3
-				box(IDENTITY, {x, wall.height / 2 - sink, centre.y}, {0.14, wall.height + 0.1, size.y + 0.08}, shade(wall.color, 0.7))
-			}
-		} else {
-			// A coping stone along the top.
-			box(IDENTITY, {centre.x, wall.height + 0.05, centre.y}, {size.x + 0.14, 0.14, size.y + 0.14}, shade(wall.color, 0.78))
-		}
-	}
-	// Posts either side of the skinny door.
-	for side in ([2]f32{-1, 1}) {
-		x := g.door_pos.x + side * (DOOR_GAP / 2 + 0.14)
-		box(IDENTITY, {x, 0.85, g.door_pos.y}, {0.26, 1.7, 0.62}, COLOR_TRUNK)
-		ball(IDENTITY, {x, 1.78, g.door_pos.y}, {0.17, 0.17, 0.17}, COLOR_STAR)
-	}
-
-	// Trees, rocks.
+	// Trees, rocks, bushes. Trees further off still cast shadows into view.
 	for r, i in g.rounds[:g.round_count] {
-		if r.r <= 0 || !on_screen(r.pos, r.kind == .Tree ? 5 : 2) {
-			continue // carried, in flight, smashed or far away
+		if r.r <= 0 || !on_screen(r.pos, r.kind == .Tree ? 6 : 2) {
+			continue // carried, in flight or far away
 		}
 		switch r.kind {
 		case .Tree:
@@ -256,41 +156,25 @@ draw_world :: proc() {
 		case .Rock:
 			m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(i) * 2.3)
 			draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
-		case .Crate:
-		// Drawn with the seesaws.
 		case .Oven:
 		// Drawn by draw_oven.
 		}
 	}
 
-	// The tower and its ramp.
-	for &pl, i in g.platforms[:g.platform_count] {
-		centre := (pl.lo + pl.hi) / 2
-		size := pl.hi - pl.lo
-		if pl.ramp {
-			slope := math.atan2(pl.height, size.y)
-			length := math.sqrt(size.y * size.y + pl.height * pl.height)
-			slab := translate({centre.x, pl.height / 2 - 0.07, centre.y}) * rot_x(slope)
-			box(slab, {0, 0, 0}, {size.x, 0.14, length}, COLOR_PLANK)
-			// Cleats to climb on, and trestles underneath.
-			for k in 1 ..< 6 {
-				box(slab, {0, 0.09, length * (f32(k) / 6 - 0.5)}, {size.x, 0.06, 0.12}, shade(COLOR_PLANK, 0.8))
-			}
-			for k in 1 ..< 3 {
-				t := f32(k) / 3
-				h := pl.height * t - 0.1
-				box(IDENTITY, {centre.x, h / 2, pl.hi.y - size.y * t}, {size.x - 0.3, h, 0.2}, COLOR_TRUNK)
-			}
-		} else {
-			box(IDENTITY, {centre.x, pl.height / 2 - 0.06, centre.y}, {size.x - 0.2, pl.height - 0.12, size.y - 0.2}, COLOR_CRATE)
-			box(IDENTITY, {centre.x, pl.height - 0.06, centre.y}, {size.x, 0.12, size.y}, COLOR_PLANK)
-			box(IDENTITY, {centre.x, pl.height * 0.45, centre.y}, {size.x - 0.12, 0.14, size.y - 0.12}, COLOR_TRUNK)
-			if i == g.tower {
-				// A painted spot: jump from here.
-				tube(IDENTITY, {centre.x, pl.height + 0.005, centre.y}, 0.7, 0.01, COLOR_STAR)
-				tube(IDENTITY, {centre.x, pl.height + 0.01, centre.y}, 0.45, 0.01, COLOR_HEADBAND)
-			}
+	// A signpost for each part of the meadow, pointing down its path.
+	for kind in Region_Kind {
+		if kind == .Home {
+			continue
 		}
+		at := signpost_pos(kind)
+		if !on_screen(at, 2) {
+			continue
+		}
+		dir := normalize2(PATH_ENDS[kind] - HOME)
+		tube(IDENTITY, {at.x, 0, at.y}, 0.08, 1.75, COLOR_TRUNK)
+		board := translate({at.x, 1.45, at.y}) * rot_y(math.atan2(dir.x, dir.y))
+		box(board, {0, 0, 0.35}, {0.08, 0.3, 0.8}, COLOR_PLANK)
+		draw_shape(.Cone, board * translate({0, 0, 0.75}) * rot_x(math.PI / 2) * scale({0.24, 0.3, 0.06}), COLOR_PLANK)
 	}
 }
 
@@ -437,102 +321,16 @@ draw_bush :: proc(b: Round, index: int) {
 	}
 }
 
-// Height of the ground alone, for placing shadows.
-ground_height :: proc(pos: Vec2) -> f32 {
-	h, _ := ground_at(pos)
-	return h
-}
-
-draw_seesaws :: proc() {
-	for &s in g.seesaws {
-		base := translate({s.pivot.x, 0, s.pivot.y}) * rot_y(s.dir > 0 ? 0 : math.PI)
-		width := PLANK_HALF_WIDTH * 2
-
-		// Pivot: a wedge-shaped stand with an axle through it.
-		box(base, {0, s.pivot_h / 2 - 0.04, 0}, {0.5, s.pivot_h - 0.08, width + 0.3}, COLOR_IRON)
-		draw_shape(.Cylinder, base * translate({0, s.pivot_h - 0.06, -width / 2 - 0.15}) * rot_x(math.PI / 2) * scale({0.14, width + 0.3, 0.14}), COLOR_BLACK)
-
-		// Plank, in its own tilted frame: +x runs towards Prosio's end.
-		plank := base * translate({0, s.pivot_h, 0}) * rot_z(-s.angle)
-		length := s.arm_a + s.arm_b
-		box(plank, {(s.arm_a - s.arm_b) / 2, 0, 0}, {length, 0.14, width}, COLOR_PLANK)
-
-		switch s.kind {
-		case .Catapult:
-			// Landing pad on the short end, cup on the long one.
-			box(plank, {PAD_DISTANCE, 0.08, 0}, {0.6, 0.02, width - 0.3}, COLOR_STAR)
-			box(plank, {-s.load_arm - 0.5, 0.22, 0}, {0.1, 0.32, width * 0.7}, COLOR_TRUNK)
-			box(plank, {-s.load_arm + 0.5, 0.16, 0}, {0.1, 0.2, width * 0.7}, COLOR_TRUNK)
-		case .Lever:
-			// Jump mark on the far end; iron weight near the pivot.
-			box(plank, {s.arm_a - 0.5, 0.08, 0}, {0.8, 0.02, width - 0.3}, COLOR_STAR)
-			box(plank, {-s.load_arm, 0.62, 0}, {1.0, 1.1, 1.4}, COLOR_IRON)
-			box(plank, {-s.load_arm, 1.22, 0}, {0.5, 0.14, 0.5}, shade(COLOR_IRON, 0.75))
-			tube(plank, {-s.load_arm, 1.26, 0}, 0.12, 0.16, shade(COLOR_IRON, 0.75))
-		}
-	}
-
-	// The boulder.
-	b := g.boulder
-	m := translate({b.pos.x, b.y + BOULDER_RADIUS * 0.85, b.pos.y}) * rot_z(-b.spin)
-	ball(m, {0, 0, 0}, {BOULDER_RADIUS, BOULDER_RADIUS * 0.9, BOULDER_RADIUS}, COLOR_ROCK)
-	ball(m, {0.15, 0.18, 0.15}, {0.2, 0.18, 0.2}, COLOR_ROCK_LIGHT)
-
-	// The crate, or its splinters.
-	c := translate({g.crate_pos.x, 0, g.crate_pos.y})
-	if !g.crate_broken {
-		box(c, {0, 0.6, 0}, {1.2, 1.2, 1.2}, COLOR_CRATE)
-		box(c, {0, 0.6, 0}, {1.28, 0.16, 1.28}, COLOR_TRUNK)
-		box(c, {0, 1.14, 0}, {1.28, 0.14, 1.28}, COLOR_TRUNK)
-		box(c, {0, 0.07, 0}, {1.28, 0.14, 1.28}, COLOR_TRUNK)
-	} else {
-		box(c * rot_y(0.5), {0.5, 0.04, 0.2}, {0.9, 0.06, 0.25}, COLOR_CRATE)
-		box(c * rot_y(-0.9), {-0.4, 0.04, 0.5}, {0.8, 0.06, 0.25}, COLOR_TRUNK)
-		box(c * rot_y(2.0), {0.3, 0.04, -0.6}, {0.7, 0.06, 0.25}, COLOR_CRATE)
-	}
-}
-
-// A marker on the ground showing where the boulder would land if Prosio
-// jumped off the tower right now.
-draw_throw_marker :: proc() {
-	s := &g.seesaws[CATAPULT]
-	p := &g.prosio
-	if g.crate_broken || g.boulder.state != .On_Seesaw || length2(p.pos - s.pivot) > 9 {
-		return
-	}
-	distance := predict_throw(total_kg())
-	if distance <= 0 {
-		return
-	}
-	spot := boulder_release_pos() + {-s.dir * distance, 0}
-	on_target := length2(spot - g.crate_pos) < CRATE_HIT_RADIUS
-	color := on_target ? Color{90, 230, 90, 210} : Color{255, 230, 80, 210}
-	pulse := 0.6 + 0.08 * math.sin(g.time * 6)
-	y: f32 = on_target ? 1.3 : 0.07
-	tube(IDENTITY, {spot.x, y, spot.y}, pulse, 0.01, color)
-	tube(IDENTITY, {spot.x, y + 0.01, spot.y}, pulse * 0.45, 0.01, {255, 255, 255, 220})
-}
-
-NEST :: Color{150, 112, 70, 255}
 WHEAT :: Color{230, 190, 88, 255}
 
 draw_food :: proc(f: Food, index: int) {
 	if f.gone || !on_screen(f.pos, 1) {
 		return
 	}
-	m := translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1)
-	if f.kind == .Egg {
-		// The nest stays when the egg is taken.
-		draw_shape(.Torus, m * translate({0, 0.05, 0}) * rot_x(math.PI / 2) * scale({0.17, 0.17, 0.1}), NEST)
-		ball(m, {0, 0.03, 0}, {0.16, 0.04, 0.16}, shade(NEST, 0.7))
-		for k in 0 ..< 5 {
-			a := f32(k) * 1.3
-			limb(m, {math.cos(a) * 0.2, 0.08, math.sin(a) * 0.2}, {math.cos(a + 1.1) * 0.22, 0.1, math.sin(a + 1.1) * 0.22}, 0.02, shade(NEST, 1.15))
-		}
-	}
 	if f.respawn > 0 {
 		return
 	}
+	m := translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1)
 	switch f.kind {
 	case .Apple:
 		// Fallen apples brown a little as they start to rot.
@@ -574,24 +372,6 @@ draw_food :: proc(f: Food, index: int) {
 	case .Egg:
 		ball(m, {0, 0.13, 0}, {0.085, 0.11, 0.085}, {246, 236, 214, 255})
 		ball(m, {0.03, 0.17, 0.05}, {0.015, 0.015, 0.015}, {176, 136, 104, 255})
-	}
-}
-
-draw_truffle :: proc(t: Truffle) {
-	if !t.visible || t.taken {
-		return
-	}
-	glow := 0.8 + math.sin(g.time * 4) * 0.15
-	tube(IDENTITY, {t.pos.x, 0.06, t.pos.y}, glow, 0.01, {255, 240, 120, 90})
-	m := translate({t.pos.x, 0.7 + math.sin(g.time * 2.5) * 0.12, t.pos.y}) * rot_y(g.time * 2)
-	ball(m, {0, 0, 0}, {0.3, 0.27, 0.3}, COLOR_GOLD)
-	ball(m, {0.2, 0.08, 0.05}, {0.17, 0.16, 0.17}, COLOR_GOLD)
-	ball(m, {-0.14, 0.14, -0.1}, {0.16, 0.15, 0.16}, {255, 214, 90, 255})
-	ball(m, {-0.05, -0.12, 0.17}, {0.14, 0.13, 0.14}, {240, 176, 30, 255})
-	// Sparkles circling it.
-	for i in 0 ..< 2 {
-		a := g.time * 3 + f32(i) * math.PI
-		ball(m, {math.cos(a) * 0.55, math.sin(g.time * 5 + f32(i)) * 0.2, math.sin(a) * 0.55}, {0.05, 0.05, 0.05}, COLOR_WHITE)
 	}
 }
 
@@ -720,8 +500,7 @@ held_pose :: proc(e: Enemy) -> (pose: Animal_Pose) {
 	pose.hand = e.chain[0]
 	pose.dizzy = e.limp > 0 || e.ko
 	alive := !pose.dizzy
-	ground, _ := ground_at(e.chain[1].xz)
-	on_feet := alive && !held_up(e.kind) && e.chain[1].y < ground + r * c[1].y + 0.05
+	on_feet := alive && !held_up(e.kind) && e.chain[1].y < r * c[1].y + 0.05
 	for si in 0 ..< 2 {
 		side := f32(si * 2 - 1)
 		for ei in 0 ..< 2 {
@@ -978,7 +757,15 @@ draw_prosio :: proc() {
 	wob := p.wobble
 
 	speed := length2(p.vel)
-	walking := speed > 0.5 && p.fail == .None && !p.pushups && !p.airborne
+	walking := speed > 0.5 && p.fail == .None && !p.airborne
+	// Picking something up: he stoops and reaches down for it (reach_down
+	// goes 0 to 1), then brings it up over his shoulder into the sack on his
+	// back (stow goes 0 to 1).
+	picking := p.pick_t > 0 && p.fail == .None
+	u := picking ? 1 - p.pick_t / PICK_TIME : 0
+	reach_down := smooth(min(u * 2.2, 1))
+	stow := smooth(clamp(u * 2.2 - 1.2, 0, 1))
+	stoop := reach_down * (1 - stow)
 	bob: f32 = walking ? abs(math.sin(p.walk_phase)) * 0.07 : 0
 	swing: f32 = walking ? math.sin(p.walk_phase) * (p.sprinting ? 1.0 : 0.7) : 0
 
@@ -1009,10 +796,8 @@ draw_prosio :: proc() {
 		a := smooth(p.fail_t / 0.5)
 		m = base * translate({0, a * belly * 0.8, a * 1.0}) * rot_x(-a * 1.5)
 		eyes_closed = true
-	case p.pushups:
-		down := 0.5 - 0.5 * math.cos(p.pushup_phase * math.TAU)
-		m = base * translate({0, belly + 0.28 - down * 0.25, 0}) * rot_x(1.3) * translate({0, -1.0, 0})
-		brow_tilt = -0.3
+	case picking:
+		m = m * translate({0, -0.1 * stoop, 0}) * rot_x(0.55 * stoop)
 	case p.dash_t > 0:
 		m = m * rot_x(0.2)
 		brow_tilt = -0.5
@@ -1122,12 +907,14 @@ draw_prosio :: proc() {
 			reach := (r + carry_radius()) * (1 - lift)
 			hand = {side * lerp(carry_radius() * 0.66, 0.37, lift), lerp(0.54, 2.29, lift), lerp(reach, 0.10, lift)}
 			elbow = {side * max(chest + 0.21, 0.53), lerp(0.99, 1.78, lift), 0.19 + 0.25 * (1 - lift)}
-		case p.pushups:
-			// Place the palm on the ground under the forward-tilted shoulder.
-			down := 0.5 - 0.5 * math.cos(p.pushup_phase * math.TAU)
-			hand.z = (belly + 0.28 - down * 0.25 + math.cos(f32(1.3)) * (hand.y - 1) - 0.08) / math.sin(f32(1.3))
-			elbow.z = hand.z * 0.48
-			elbow.x = side * (chest + 0.13 + 0.1 * down)
+		case picking && side == HOLD_SIDE:
+			// Down to the ground in front of him, then up and back over his
+			// shoulder.
+			ground := Vec3{side * (chest * 0.7), 0.2, belly_out + belly + 0.25}
+			sack := Vec3{side * (chest * 0.6), 1.62, -0.12}
+			low := hand + (ground - hand) * reach_down
+			hand = low + (sack - low) * stow
+			elbow = shoulder + (hand - shoulder) * 0.5 + {side * 0.16, 0.06, 0}
 		case p.airborne:
 			elbow = {side * (chest + 0.23), 1.36, 0.07}
 			hand = {side * (chest + 0.32), 1.62, 0.18}
@@ -1159,14 +946,18 @@ draw_prosio :: proc() {
 		ball(m, shoulder, {arm_r * 1.8, arm_r * 1.8, arm_r * 1.8}, COLOR_SHIRT)
 		taper(m, shoulder, sleeve_end, arm_r * 1.95, COLOR_SHIRT)
 		ball(m, hand, {arm_r * 1.1, 0.1, arm_r * 1.15}, COLOR_HOOF)
+		if picking && side == HOLD_SIDE && u > 0.45 {
+			// What he picked up, in his hoof.
+			ball(m, hand + {0, 0.1, 0.04}, {0.11, 0.11, 0.11}, ITEM_COLOR[p.pick_item])
+		}
 	}
 
 	// Head: cheeks get rounder too.
 	munch: f32 = p.eat_t > 0 ? math.sin(p.eat_t * 40) * 0.05 : 0
 	cheeks := head * (1 + 0.2 * t)
 	h := root * translate({0, HIP * LEG_SCALE + (1.72 - HIP) * TORSO_SCALE + munch, 0.04}) * rot_x(-0.16)
-	if p.pushups {
-		h = h * rot_x(-0.9) // look ahead, not at the grass
+	if picking {
+		h = h * rot_x(0.3 * stoop) // looking at what he picks up
 	}
 	ball(h, {0, 0, 0}, {cheeks, head * 0.95, head}, COLOR_SKIN)
 	// A vermilion head cloth, with a knot and two loose ends behind one ear.
