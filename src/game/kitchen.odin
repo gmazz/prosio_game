@@ -8,14 +8,16 @@ import "core:math"
 // gathered steadily to make up for what walking, picking things up and
 // fighting burn (see the *_BURN numbers in prosio.odin).
 //
-// At the oven he bakes what he has gathered into pies, muffins and bread.
-// Cooking makes more of the calories in food available to the body, so a
-// baked dish counts COOK_BONUS times the calories of what went into it.
+// Some food has to be made into something else first, and each process has
+// its own place, far from the others: the oven at home bakes pies, muffins
+// and bread; the fire by the pond fries eggs, grills fish and roasts meat;
+// the churn in the goat hills makes butter and cheese of milk. Cooking makes
+// more of the calories in food available to the body, so a baked, fried or
+// roasted dish counts COOK_BONUS times the calories of what went into it.
 
 KCAL_PER_KG :: f32(200) // calories eaten for each kilogram he puts on
 COOK_BONUS :: f32(1.4)
 SACK_MAX :: 9 // of each thing
-BAKE_TIME :: f32(6)
 OVEN_RADIUS :: f32(1.15)
 
 Item :: enum u8 {
@@ -23,14 +25,28 @@ Item :: enum u8 {
 	Berries,
 	Mushroom,
 	Pumpkin,
-	Wheat,
+	Cabbage,
+	Nuts, // a handful
+	Wheat, // not edible as it is: the mill grinds it
 	Egg,
-	// Baked in the oven:
+	Flour, // ground at the mill; not edible until baked
+	Salt, // a lump of rock salt, to lick: no calories at all
+	Fish, // caught in the pond; raw until grilled
+	Meat, // chopped from a turkey or a goat at the fire; raw until roasted
+	Milk, // from a goat
+	Honey, // from the hives in the bee meadow
+	// Made at the oven, the fire or the churn:
 	Apple_Pie,
 	Pumpkin_Pie,
 	Berry_Muffins,
 	Mushroom_Pie,
+	Nut_Cake,
 	Bread,
+	Fried_Egg,
+	Grilled_Fish,
+	Roast,
+	Butter,
+	Cheese,
 }
 FIRST_DISH :: Item.Apple_Pie
 
@@ -39,23 +55,56 @@ ITEM_NAME := [Item]cstring {
 	.Berries       = "BERRIES",
 	.Mushroom      = "MUSHROOM",
 	.Pumpkin       = "PUMPKIN",
+	.Cabbage       = "CABBAGE",
+	.Nuts          = "NUTS",
 	.Wheat         = "WHEAT",
 	.Egg           = "EGG",
+	.Flour         = "FLOUR",
+	.Salt          = "ROCK SALT",
+	.Fish          = "RAW FISH",
+	.Meat          = "RAW MEAT",
+	.Milk          = "MILK",
+	.Honey         = "HONEY",
 	.Apple_Pie     = "APPLE PIE",
 	.Pumpkin_Pie   = "PUMPKIN PIE",
 	.Berry_Muffins = "BERRY MUFFINS",
 	.Mushroom_Pie  = "MUSHROOM PIE",
+	.Nut_Cake      = "NUT CAKE",
 	.Bread         = "BREAD",
+	.Fried_Egg     = "FRIED EGG",
+	.Grilled_Fish  = "GRILLED FISH",
+	.Roast         = "ROAST MEAT",
+	.Butter        = "BUTTER",
+	.Cheese        = "CHEESE",
 }
 
-// Calories in one of each raw thing. A dish's are worked out from its recipe.
+// Calories in one of each raw thing, full grown and of the usual size (what
+// is actually picked varies: see FOOD_BUDGET in world.odin). A dish's are
+// worked out from what went into it.
 RAW_KCAL := #partial [Item]f32 {
 	.Apple    = 95,
 	.Berries  = 50, // a bunch
 	.Mushroom = 30,
 	.Pumpkin  = 400,
+	.Cabbage  = 250, // a whole head
+	.Nuts     = 180, // a handful
 	.Wheat    = 340, // a sheaf, about a cup of flour
 	.Egg      = 130,
+	.Flour    = 340,
+	.Salt     = 0,
+	.Fish     = 200,
+	.Meat     = 300, // one piece; a turkey gives two, a goat five
+	.Milk     = 150, // a jug
+	.Honey    = 300, // a comb
+}
+
+// Some things have to be made into something else first.
+edible :: proc(item: Item) -> bool {
+	#partial switch item {
+	case .Wheat, .Flour, .Egg, .Fish, .Meat:
+		return false
+	}
+	return true
 }
 
 GATHER_TEXT := #partial [Item]cstring {
@@ -63,6 +112,10 @@ GATHER_TEXT := #partial [Item]cstring {
 	.Berries  = "Berries for the sack!",
 	.Mushroom = "A mushroom for the sack!",
 	.Pumpkin  = "A pumpkin for the sack!",
+	.Cabbage  = "A cabbage for the sack!",
+	.Nuts     = "Nuts for the sack!",
+	.Salt     = "A lump of salt for the sack!",
+	.Honey    = "Honey for the sack!",
 	.Wheat    = "Wheat for the sack!",
 	.Egg      = "An egg for the sack!",
 }
@@ -70,9 +123,14 @@ GATHER_TEXT := #partial [Item]cstring {
 // The colour of each, for the thing in his hoof as he picks it up.
 ITEM_COLOR := #partial [Item]Color {
 	.Apple    = {222, 44, 48, 255},
-	.Berries  = {124, 62, 176, 255},
+	.Berries  = {196, 40, 76, 255},
 	.Mushroom = {196, 64, 46, 255},
 	.Pumpkin  = {232, 128, 40, 255},
+	.Cabbage  = {150, 200, 110, 255},
+	.Nuts     = {160, 112, 70, 255},
+	.Salt     = {244, 222, 226, 255},
+	.Fish     = {240, 140, 70, 255},
+	.Honey    = {246, 190, 60, 255},
 	.Wheat    = {230, 190, 88, 255},
 	.Egg      = {246, 236, 214, 255},
 }
@@ -82,12 +140,26 @@ EAT_TEXT := [Item]cstring {
 	.Berries       = "Berries! Yum!",
 	.Mushroom      = "Mmm, mushroom!",
 	.Pumpkin       = "A whole pumpkin! Burp!",
-	.Wheat         = "Crunchy... raw grain!",
-	.Egg           = "A raw egg... gulp!",
+	.Cabbage       = "Crunch crunch... cabbage!",
+	.Nuts          = "Crack! Nutty nuts!",
+	.Salt          = "Lick, lick... SO salty!",
+	.Fish          = "Raw fish? Blergh! The fire by the pond grills it.",
+	.Meat          = "Raw meat? No! The fire by the pond roasts it.",
+	.Milk          = "Glug glug... creamy milk!",
+	.Honey         = "Sticky, sweet honey! Mmm!",
+	.Wheat         = "I can't eat raw wheat! The mill makes flour of it.",
+	.Egg           = "A raw egg? Yuck! The fire by the pond fries it.",
+	.Flour         = "Dry flour? Blergh! It wants baking.",
 	.Apple_Pie     = "Apple pie! Heavenly!",
 	.Pumpkin_Pie   = "Pumpkin pie! BURP!",
 	.Berry_Muffins = "Muffins! So fluffy!",
 	.Mushroom_Pie  = "Mushroom pie! Mmm!",
+	.Nut_Cake      = "Nut cake! So rich!",
+	.Fried_Egg     = "A fried egg! Sunny side up!",
+	.Grilled_Fish  = "Grilled fish! Crispy!",
+	.Roast         = "Roast meat! What a feast!",
+	.Butter        = "A whole pat of butter! Slurp!",
+	.Cheese        = "Cheese! Squeaky and salty!",
 	.Bread         = "Warm bread! Yum!",
 }
 
@@ -96,32 +168,65 @@ Ingredient :: struct {
 	count: int, // 0: unused
 }
 
+// Where things are made.
+Station_Kind :: enum {
+	Oven, // at home
+	Fire, // by the pond
+	Churn, // in the goat hills
+}
+
+STATION_NAME := [Station_Kind]cstring{.Oven = "THE OVEN", .Fire = "THE COOKING FIRE", .Churn = "THE CHURN"}
+STATION_LABEL := [Station_Kind]cstring{.Oven = "OVEN", .Fire = "FIRE", .Churn = "CHURN"}
+STATION_ABOUT := [Station_Kind]cstring {
+	.Oven  = "Cooking makes food richer: +40% kcal!",
+	.Fire  = "Cooking makes food richer: +40% kcal!",
+	.Churn = "Churning turns milk into butter and cheese.",
+}
+STATION_BUSY := [Station_Kind]cstring{.Oven = "BAKING... %d", .Fire = "COOKING... %d", .Churn = "CHURNING... %d"}
+STATION_TIME := [Station_Kind]f32{.Oven = 6, .Fire = 4, .Churn = 5} // seconds to make a batch
+STATION_BONUS := [Station_Kind]f32{.Oven = COOK_BONUS, .Fire = COOK_BONUS, .Churn = 1}
+STATION_RADIUS := [Station_Kind]f32{.Oven = OVEN_RADIUS, .Fire = 0.8, .Churn = 0.55}
+STATION_ROUND := [Station_Kind]Round_Kind{.Oven = .Oven, .Fire = .Fire, .Churn = .Churn}
+
 Recipe :: struct {
+	at:    Station_Kind,
 	dish:  Item,
 	needs: [3]Ingredient,
 }
 
 RECIPES := [?]Recipe {
-	{.Apple_Pie, {{.Apple, 3}, {.Wheat, 1}, {.Egg, 1}}},
-	{.Pumpkin_Pie, {{.Pumpkin, 1}, {.Wheat, 1}, {.Egg, 1}}},
-	{.Berry_Muffins, {{.Berries, 3}, {.Wheat, 1}, {.Egg, 1}}},
-	{.Mushroom_Pie, {{.Mushroom, 3}, {.Wheat, 1}, {.Egg, 1}}},
-	{.Bread, {{.Wheat, 2}, {}, {}}},
+	{.Oven, .Apple_Pie, {{.Apple, 3}, {.Flour, 1}, {.Egg, 1}}},
+	{.Oven, .Pumpkin_Pie, {{.Pumpkin, 1}, {.Flour, 1}, {.Egg, 1}}},
+	{.Oven, .Berry_Muffins, {{.Berries, 3}, {.Flour, 1}, {.Egg, 1}}},
+	{.Oven, .Mushroom_Pie, {{.Mushroom, 3}, {.Flour, 1}, {.Egg, 1}}},
+	{.Oven, .Nut_Cake, {{.Nuts, 2}, {.Flour, 1}, {.Egg, 1}}},
+	{.Oven, .Bread, {{.Flour, 2}, {}, {}}},
+	{.Fire, .Fried_Egg, {{.Egg, 1}, {}, {}}},
+	{.Fire, .Grilled_Fish, {{.Fish, 1}, {}, {}}},
+	{.Fire, .Roast, {{.Meat, 1}, {}, {}}},
+	{.Churn, .Butter, {{.Milk, 2}, {}, {}}},
+	{.Churn, .Cheese, {{.Milk, 2}, {.Salt, 1}, {}}},
 }
 
-Oven :: struct {
+// An oven, a fire or a churn: it makes one kind of thing at a time, one or
+// several of it in a batch.
+Station :: struct {
 	pos:     Vec2,
 	baking:  bool,
-	ready:   bool, // a dish is waiting inside
+	ready:   bool, // what it made is waiting there
 	dish:    Item,
+	count:   int, // how many of it
+	kcal:    f32, // the calories in all of them, from what went in
 	bake_t:  f32,
 	smoke_t: f32,
-	baked:   int, // dishes baked this game
 }
 
-// Which recipe the oven's menu points at, and a moment of "not enough".
-oven_choice: int
-oven_refused_t: f32
+// Whose menu is open, which recipe it points at, how many to make, and a
+// moment of "not enough".
+cook_at: Station_Kind
+cook_choice: int
+cook_count: int
+cook_refused_t: f32
 
 recipe_for :: proc(dish: Item) -> ^Recipe {
 	for &r in RECIPES {
@@ -130,6 +235,18 @@ recipe_for :: proc(dish: Item) -> ^Recipe {
 		}
 	}
 	return nil
+}
+
+// The recipes of one station, in order.
+station_recipes :: proc(at: Station_Kind, buf: ^[len(RECIPES)]^Recipe) -> []^Recipe {
+	n := 0
+	for &r in RECIPES {
+		if r.at == at {
+			buf[n] = &r
+			n += 1
+		}
+	}
+	return buf[:n]
 }
 
 // The calories in what went into a recipe, raw.
@@ -144,16 +261,57 @@ item_kcal :: proc(item: Item) -> f32 {
 	if item < FIRST_DISH {
 		return RAW_KCAL[item]
 	}
-	return math.round(raw_kcal(recipe_for(item)) * COOK_BONUS)
+	r := recipe_for(item)
+	return math.round(raw_kcal(r) * STATION_BONUS[r.at])
 }
 
-can_bake :: proc(r: ^Recipe) -> bool {
+// What is in the sack is not all alike: an apple picked green has fewer
+// calories than a ripe one. So the sack keeps the calories of each kind of
+// thing in it, and one piece taken out is an average one.
+sack_add :: proc(item: Item, kcal: f32) {
+	g.prosio.sack[item] += 1
+	g.prosio.sack_kcal[item] += kcal
+}
+
+// Takes this many out, and says how many calories went with them.
+sack_take :: proc(item: Item, count: int) -> f32 {
+	p := &g.prosio
+	if p.sack[item] <= 0 {
+		return 0
+	}
+	n := min(count, p.sack[item])
+	kcal := p.sack_kcal[item] * f32(n) / f32(p.sack[item])
+	p.sack[item] -= n
+	p.sack_kcal[item] = p.sack[item] > 0 ? p.sack_kcal[item] - kcal : 0
+	return kcal
+}
+
+// The calories in one piece of this in the sack (or the usual, with none).
+sack_piece_kcal :: proc(item: Item) -> f32 {
+	p := &g.prosio
+	if p.sack[item] <= 0 {
+		return item_kcal(item)
+	}
+	return math.round(p.sack_kcal[item] / f32(p.sack[item]))
+}
+
+// What one of a recipe would give, made from what is in the sack now.
+recipe_kcal :: proc(r: ^Recipe) -> (sum: f32) {
 	for n in r.needs {
-		if g.prosio.sack[n.item] < n.count {
-			return false
+		sum += sack_piece_kcal(n.item) * f32(n.count)
+	}
+	return math.round(sum * cook_bonus(r.at))
+}
+
+// How many of a recipe the sack has the makings of, and room for.
+max_batch :: proc(r: ^Recipe) -> int {
+	most := SACK_MAX - g.prosio.sack[r.dish]
+	for n in r.needs {
+		if n.count > 0 {
+			most = min(most, g.prosio.sack[n.item] / n.count)
 		}
 	}
-	return true
+	return max(most, 0)
 }
 
 // The things in the sack, in order.
@@ -197,9 +355,10 @@ sack_step :: proc(step: int) {
 	p.sack_sel = owned[(at + step + len(owned)) % len(owned)]
 }
 
+// Something in the sack he could eat right now.
 sack_has_food :: proc() -> bool {
-	for n in g.prosio.sack {
-		if n > 0 {
+	for n, item in g.prosio.sack {
+		if n > 0 && edible(item) {
 			return true
 		}
 	}
@@ -209,32 +368,49 @@ sack_has_food :: proc() -> bool {
 // E next to food: into the sack it goes.
 gather :: proc(food: ^Food, bush: ^Round) {
 	p := &g.prosio
-	item := food != nil ? FOOD_ITEM[food.kind] : Item.Berries
+	item := Item.Berries
+	if food != nil {
+		item = FOOD_ITEM[food.kind]
+	} else if bush.kind == .Hive {
+		item = .Honey
+	} else if bush.kind == .Salt_Rock {
+		item = .Salt
+	}
 	if p.sack[item] >= SACK_MAX {
 		hint("No room in my sack for more of these!")
 		return
 	}
-	p.sack[item] += 1
-	sack_step(0)
 	at: Vec2
+	unripe := false
 	if food != nil {
+		sack_add(item, food_kcal(food))
+		unripe = food.grow < 0.6
 		if food.fallen {
 			food.gone = true
 		} else {
-			food.respawn = FOOD_RESPAWN[food.kind]
+			// Another will sprout here, but not for a good while.
+			food.respawn = random_range(FOOD_REGROW[food.kind].x, FOOD_REGROW[food.kind].y)
 		}
 		at = food.pos
 		burst({at.x, 0.4, at.y}, 6, 2, food.kind == .Wheat ? Color{226, 186, 84, 255} : COLOR_LEAF_LIGHT, 0.06)
 	} else {
+		sack_add(item, bush_kcal(bush))
+		unripe = bush.ripe < 0.6
+		if bush.fruit == plant_max(bush.kind) {
+			bush.fruit_t = random_range(plant_regrow(bush.kind).x, plant_regrow(bush.kind).y)
+		}
 		bush.fruit -= 1
-		bush.fruit_t = BERRY_REGROW
 		bush.shake_t = 0.4
 		at = bush.pos
-		burst({at.x, 0.7, at.y}, 6, 2, BERRY_COLOR, 0.06)
+		burst({at.x, 0.9, at.y}, 6, 2, ITEM_COLOR[item], 0.06)
 	}
-	say(GATHER_TEXT[item], 1.2)
-	p.pick_t = PICK_TIME // a moment to stoop and pick it up
+	sack_step(0)
+	say(unripe ? "Not ripe yet... into the sack anyway." : GATHER_TEXT[item], 1.2)
+	p.pick_t = pick_time() // a moment to stoop and pick it up
+	p.pick_total = p.pick_t
+	train(.Hooves, PICK_WORK)
 	p.pick_item = item
+	p.drinking = false
 	p.vel = {}
 	burn(GATHER_BURN)
 	to := at - p.pos
@@ -249,9 +425,12 @@ eat_from_sack :: proc() {
 		hint("My sack is empty! E picks food up.")
 		return
 	}
-	p.sack[item] -= 1
+	if !edible(item) {
+		hint(EAT_TEXT[item])
+		return
+	}
+	eat(item_meal(item, sack_take(item, 1)))
 	sack_step(0)
-	p.kg += item_kcal(item) / KCAL_PER_KG
 	say(EAT_TEXT[item])
 	p.eat_t = 0.5
 	p.wobble_vel += 2.5
@@ -259,95 +438,135 @@ eat_from_sack :: proc() {
 	burst({p.pos.x, p.height + 1.3, p.pos.y}, 8, 2.5, crumbs, 0.07)
 }
 
-oven_in_reach :: proc(pos: Vec2, r: f32) -> bool {
-	return length2(g.oven.pos - pos) < OVEN_RADIUS + r + 0.7
+station_in_reach :: proc(at: Station_Kind, pos: Vec2, r: f32) -> bool {
+	return length2(g.stations[at].pos - pos) < STATION_RADIUS[at] + r + 0.7
 }
 
-// E at the oven: take out what is ready, or choose something to bake.
-use_oven :: proc() {
+// The station he is standing at, if any.
+station_near :: proc(pos: Vec2, r: f32) -> (at: Station_Kind, ok: bool) {
+	for kind in Station_Kind {
+		if station_in_reach(kind, pos, r) {
+			return kind, true
+		}
+	}
+	return {}, false
+}
+
+// E at a station: take what is ready, or choose something to make.
+use_station :: proc(at: Station_Kind) {
 	p := &g.prosio
-	o := &g.oven
+	o := &g.stations[at]
+	to := o.pos - p.pos
+	p.facing = math.atan2(to.x, to.y)
 	switch {
 	case o.ready:
-		if p.sack[o.dish] >= SACK_MAX {
+		taken := 0
+		for o.count > 0 && p.sack[o.dish] < SACK_MAX {
+			share := o.kcal / f32(o.count)
+			sack_add(o.dish, share)
+			o.kcal -= share
+			o.count -= 1
+			taken += 1
+		}
+		if taken == 0 {
 			hint("No room in my sack for it!")
 			return
 		}
-		p.sack[o.dish] += 1
 		p.sack_sel = o.dish
-		o.ready = false
-		say("Into the sack, still warm!", 1.6)
-		burst({o.pos.x, 0.9, o.pos.y + OVEN_RADIUS}, 10, 2.5, COLOR_STAR, 0.08)
+		o.ready = o.count > 0
+		say(at == .Churn ? "Into the sack, fresh from the churn!" : "Into the sack, still warm!", 1.6)
+		burst({o.pos.x, 0.9, o.pos.y + STATION_RADIUS[at]}, 10, 2.5, COLOR_STAR, 0.08)
 	case o.baking:
-		hint("Still baking... it smells so good!")
+		hint(at == .Oven ? "Still baking... it smells so good!" : (at == .Fire ? "Still sizzling... not yet!" : "Still churning... round and round!"))
 	case:
 		scene = .Oven
-		oven_refused_t = 0
-		// Point at the first thing he can bake, if any.
-		for &r, i in RECIPES {
-			if can_bake(&r) {
-				oven_choice = i
+		cook_at = at
+		cook_choice = 0
+		cook_count = 1
+		cook_refused_t = 0
+		// Point at the first thing he can make, if any.
+		buf: [len(RECIPES)]^Recipe
+		for r, i in station_recipes(at, &buf) {
+			if max_batch(r) > 0 {
+				cook_choice = i
 				break
 			}
 		}
 	}
-	to := o.pos - p.pos
-	p.facing = math.atan2(to.x, to.y)
 }
 
-// The oven's menu, shown with the game paused.
-update_oven_menu :: proc(dt: f32) {
-	n := len(RECIPES)
-	oven_refused_t -= dt
+// A station's menu, shown with the game paused.
+update_cook_menu :: proc(dt: f32) {
+	buf: [len(RECIPES)]^Recipe
+	recipes := station_recipes(cook_at, &buf)
+	n := len(recipes)
+	cook_refused_t -= dt
 	if button_pressed(.Down) {
-		oven_choice = (oven_choice + 1) % n
+		cook_choice = (cook_choice + 1) % n
+		cook_count = 1
 	}
 	if button_pressed(.Up) {
-		oven_choice = (oven_choice + n - 1) % n
+		cook_choice = (cook_choice + n - 1) % n
+		cook_count = 1
 	}
+	r := recipes[cook_choice]
+	most := max_batch(r)
+	if button_pressed(.Right) {
+		cook_count += 1
+	}
+	if button_pressed(.Left) {
+		cook_count -= 1
+	}
+	cook_count = clamp(cook_count, 1, max(most, 1))
 	if button_pressed(.Menu) || button_pressed(.Grab) {
 		scene = .Playing
 		return
 	}
 	if button_pressed(.Confirm) || button_pressed(.Action) {
-		r := &RECIPES[oven_choice]
-		if !can_bake(r) {
-			oven_refused_t = 1.2
+		if most == 0 {
+			cook_refused_t = 1.2
 			return
 		}
+		o := &g.stations[cook_at]
+		o.kcal = 0
 		for need in r.needs {
-			g.prosio.sack[need.item] -= need.count
+			o.kcal += sack_take(need.item, need.count * cook_count)
 		}
+		o.kcal = math.round(o.kcal * cook_bonus(cook_at))
+		train(.Cooking, COOK_WORK * f32(cook_count))
 		sack_step(0)
-		o := &g.oven
 		o.baking = true
 		o.dish = r.dish
-		o.bake_t = BAKE_TIME
+		o.count = cook_count
+		o.bake_t = cook_time(cook_at)
 		scene = .Playing
-		say("Into the oven it goes!", 1.4)
+		say(cook_at == .Oven ? "Into the oven it goes!" : (cook_at == .Fire ? "On the fire it goes!" : "Round and round goes the churn!"), 1.4)
 	}
 }
 
-update_oven :: proc(dt: f32) {
-	o := &g.oven
-	if !o.baking {
-		return
-	}
-	o.bake_t -= dt
-	o.smoke_t -= dt
-	if o.smoke_t <= 0 {
-		o.smoke_t = 0.12
-		chimney := Vec3{o.pos.x - 0.4, 2.15, o.pos.y - 0.35}
-		vel := Vec3{random_range(-0.2, 0.2) + 0.25, random_range(0.9, 1.4), random_range(-0.2, 0.2)}
-		grey := u8(random_range(190, 235))
-		spawn_particle(chimney, vel, random_range(1.2, 2), random_range(0.1, 0.17), {grey, grey, grey, 255}, -0.3)
-	}
-	if o.bake_t <= 0 {
-		o.baking = false
-		o.ready = true
-		o.baked += 1
-		say("Ding! The oven is ready!", 2)
-		burst({o.pos.x, 1.2, o.pos.y + OVEN_RADIUS}, 12, 3, COLOR_STAR, 0.09)
+update_stations :: proc(dt: f32) {
+	for &o, at in g.stations {
+		// The fire always smokes a little; the oven only while it bakes.
+		o.smoke_t -= dt
+		if o.smoke_t <= 0 && at != .Churn && (o.baking || at == .Fire) {
+			o.smoke_t = o.baking ? 0.12 : 0.5
+			from := at == .Oven ? Vec3{o.pos.x - 0.4, 2.15, o.pos.y - 0.35} : Vec3{o.pos.x, 0.9, o.pos.y}
+			vel := Vec3{random_range(-0.2, 0.2) + 0.25, random_range(0.9, 1.4), random_range(-0.2, 0.2)}
+			grey := u8(random_range(190, 235))
+			spawn_particle(from, vel, random_range(1.2, 2), random_range(0.1, 0.17), {grey, grey, grey, 255}, -0.3)
+		}
+		if !o.baking {
+			continue
+		}
+		o.bake_t -= dt
+		if o.bake_t <= 0 {
+			o.baking = false
+			o.ready = true
+			if length2(g.prosio.pos - o.pos) < 25 {
+				say(at == .Oven ? "Ding! The oven is ready!" : (at == .Fire ? "Sizzle! It's cooked!" : "The churn is done!"), 2)
+			}
+			burst({o.pos.x, 1.2, o.pos.y + STATION_RADIUS[at]}, 12, 3, COLOR_STAR, 0.09)
+		}
 	}
 }
 
@@ -358,7 +577,7 @@ BRICK_LINE :: Color{168, 80, 60, 255}
 // A round brick oven on a stone base, its mouth facing the camera, with a
 // chimney and a pile of logs.
 draw_oven :: proc() {
-	o := &g.oven
+	o := &g.stations[.Oven]
 	if !on_screen(o.pos, 3) {
 		return
 	}
@@ -400,6 +619,87 @@ draw_oven :: proc() {
 	tube(m, {-0.4, 2.1, -0.35}, 0.22, 0.08, BRICK_DARK)
 }
 
+FLAME :: Color{246, 120, 40, 255}
+FLAME_HOT :: Color{255, 220, 90, 255}
+STEEL :: Color{190, 196, 204, 255}
+
+// The cooking fire, by the pond: a ring of stones round the fire, a spit
+// over it on two forked sticks, and a chopping block with a cleaver, where
+// what he has hunted is cut into meat.
+draw_fire :: proc() {
+	o := &g.stations[.Fire]
+	if !on_screen(o.pos, 3) {
+		return
+	}
+	m := translate({o.pos.x, 0, o.pos.y})
+	set_surface(.Stone)
+	for k in 0 ..< 8 {
+		a := f32(k) * math.TAU / 8
+		ball(m, {math.cos(a) * 0.62, 0.1, math.sin(a) * 0.62}, {0.2, 0.16, 0.2}, k % 2 == 0 ? COLOR_ROCK : COLOR_ROCK_LIGHT)
+	}
+	set_surface(.Solid)
+	for k in 0 ..< 3 {
+		box(m * rot_y(f32(k) * 1.05), {0, 0.1, 0}, {0.9, 0.12, 0.14}, COLOR_TRUNK)
+	}
+	// The flames leap up when something is cooking.
+	big: f32 = o.baking ? 1.5 : 1
+	for k in 0 ..< 4 {
+		flick := 0.75 + 0.25 * math.sin(g.time * (11 + f32(k) * 3) + f32(k))
+		ball(m, {(f32(k) - 1.5) * 0.14, 0.2 + 0.15 * flick * big, 0.06 * f32(k % 2)}, {0.12 * flick, 0.27 * flick * big, 0.12 * flick}, k % 2 == 1 ? FLAME_HOT : FLAME)
+	}
+	for side in ([2]f32{-1, 1}) {
+		box(m, {side * 0.88, 0.5, 0}, {0.07, 1.0, 0.07}, COLOR_TRUNK)
+	}
+	box(m, {0, 0.98, 0}, {1.95, 0.05, 0.05}, COLOR_TRUNK)
+	// What is cooking, or cooked, hangs over the fire.
+	if o.baking || o.ready {
+		draw_dish(m * translate({0, 1.0, 0}), o.dish)
+	}
+	block := m * translate(FIRE_BLOCK)
+	set_surface(.Bark)
+	tube(block, {}, BLOCK_RADIUS, 0.45, COLOR_TRUNK)
+	set_surface(.Solid)
+	tube(block, {0, 0.45, 0}, BLOCK_RADIUS - 0.03, 0.03, COLOR_PLANK)
+	cleaver := block * translate({0.03, 0.47, 0}) * rot_z(0.5)
+	box(cleaver, {0.1, 0.16, 0}, {0.3, 0.22, 0.03}, STEEL)
+	box(cleaver, {-0.17, 0.2, 0}, {0.26, 0.06, 0.05}, COLOR_HOOF)
+}
+
+FIRE_BLOCK :: Vec3{1.55, 0, 0.35} // where the chopping block stands, from the fire
+BLOCK_RADIUS :: f32(0.36)
+
+// The churn, in the goat hills: a tall wooden tub with a plunger that goes
+// up and down as it churns, and a stool beside it where what it made waits.
+draw_churn :: proc() {
+	o := &g.stations[.Churn]
+	if !on_screen(o.pos, 3) {
+		return
+	}
+	m := translate({o.pos.x, 0, o.pos.y})
+	wood := COLOR_PLANK
+	draw_shape(.Frustum, m * scale({0.5, 1.1, 0.5}), wood)
+	tube(m, {0, 0.2, 0}, 0.485, 0.07, COLOR_HOOF)
+	tube(m, {0, 0.75, 0}, 0.39, 0.07, COLOR_HOOF)
+	tube(m, {0, 1.1, 0}, 0.33, 0.05, COLOR_TRUNK)
+	plunge: f32 = o.baking ? 0.18 * math.sin(g.time * 9) : 0
+	tube(m, {0, 1.0 + plunge, 0}, 0.04, 0.85, COLOR_TRUNK)
+	box(m, {0, 1.86 + plunge, 0}, {0.3, 0.06, 0.06}, COLOR_TRUNK)
+	if o.baking && math.mod(g.time, 0.35) < 0.02 {
+		burst({o.pos.x, 1.2, o.pos.y}, 1, 1.2, COLOR_WHITE, 0.05)
+	}
+	stool := m * translate(CHURN_STOOL)
+	tube(stool, {0, 0.3, 0}, 0.3, 0.05, wood)
+	for k in 0 ..< 3 {
+		a := f32(k) * math.TAU / 3
+		limb(stool, {math.cos(a) * 0.1, 0.3, math.sin(a) * 0.1}, {math.cos(a) * 0.26, 0, math.sin(a) * 0.26}, 0.03, COLOR_TRUNK)
+	}
+	if o.ready {
+		draw_dish(stool * translate({0, 0.36, 0}), o.dish)
+	}
+}
+
+CHURN_STOOL :: Vec3{0.95, 0, 0.3}
+
 CRUST :: Color{230, 182, 108, 255}
 CRUST_DARK :: Color{190, 130, 66, 255}
 
@@ -436,6 +736,43 @@ draw_dish :: proc(m: Mat4, dish: Item) {
 		draw_shape(.Hemisphere, m * translate({0, 0.05, 0}) * scale({0.25, 0.14, 0.25}), CRUST)
 		tube(m, {0, 0.17, 0}, 0.03, 0.06, {240, 228, 206, 255})
 		draw_shape(.Hemisphere, m * translate({0, 0.22, 0}) * scale({0.07, 0.05, 0.07}), {196, 64, 46, 255})
+	case .Nut_Cake:
+		// A round brown cake with nuts on top.
+		tube(m, {}, 0.25, 0.15, {150, 100, 62, 255})
+		tube(m, {0, 0.15, 0}, 0.25, 0.02, {196, 150, 96, 255})
+		for k in 0 ..< 5 {
+			a := f32(k) * math.TAU / 5
+			ball(m, {math.cos(a) * 0.14, 0.19, math.sin(a) * 0.14}, {0.05, 0.04, 0.05}, {120, 78, 48, 255})
+		}
+	case .Fried_Egg:
+		// Sunny side up.
+		ball(m, {0, 0.02, 0}, {0.22, 0.03, 0.19}, COLOR_WHITE)
+		ball(m, {0.02, 0.05, 0}, {0.08, 0.05, 0.08}, {250, 196, 60, 255})
+	case .Grilled_Fish:
+		// A browned fish, stripes from the grill across it.
+		ball(m, {0, 0.07, 0}, {0.28, 0.08, 0.12}, {196, 140, 80, 255})
+		draw_shape(.Cone, m * translate({-0.4, 0.07, 0}) * rot_z(-math.PI / 2) * scale({0.12, 0.18, 0.04}), {176, 120, 66, 255})
+		for k in 0 ..< 3 {
+			box(m, {(f32(k) - 1) * 0.12, 0.13, 0}, {0.03, 0.03, 0.2}, {96, 62, 44, 255})
+		}
+	case .Roast:
+		// A big browned joint on the bone.
+		ball(m, {0, 0.12, 0}, {0.2, 0.15, 0.17}, {176, 104, 60, 255})
+		ball(m, {0.04, 0.2, 0.03}, {0.1, 0.06, 0.09}, {206, 136, 80, 255})
+		limb(m, {-0.15, 0.1, 0}, {-0.36, 0.1, 0}, 0.035, COLOR_WHITE)
+		ball(m, {-0.38, 0.1, 0}, {0.06, 0.06, 0.06}, COLOR_WHITE)
+	case .Butter:
+		// A yellow pat on a little dish.
+		tube(m, {}, 0.22, 0.03, COLOR_WHITE)
+		box(m, {0, 0.1, 0}, {0.28, 0.13, 0.17}, {250, 222, 110, 255})
+	case .Cheese:
+		// A wedge with holes in it.
+		wedge := m * translate({0, 0.02, 0}) * rot_y(0.4)
+		draw_shape(.Cylinder, wedge * scale({0.25, 0.17, 0.25}), {246, 200, 76, 255})
+		for k in 0 ..< 3 {
+			a := f32(k) * 2.1 + 0.4
+			ball(wedge, {math.cos(a) * 0.12, 0.19, math.sin(a) * 0.12}, {0.035, 0.012, 0.035}, {206, 156, 50, 255})
+		}
 	case .Bread:
 		// A long loaf with slashes across the top.
 		ball(m, {0, 0.1, 0}, {0.17, 0.12, 0.3}, {216, 160, 92, 255})
@@ -504,6 +841,174 @@ ICONS := [Item][12]string {
 		"..kkkkkkkk..",
 		"............",
 	},
+	.Cabbage = {
+		"............",
+		"...kkkkkk...",
+		".kkgGggGgkk.",
+		"kGgglllggGgk",
+		"kgglhlllgggk",
+		"kGglllGllgGk",
+		"kgglGllllggk",
+		"kGgglllGggGk",
+		".kGggggggGk.",
+		"..kkGGGGkk..",
+		"....kkkk....",
+		"............",
+	},
+	.Nuts = {
+		"............",
+		"....kkk.....",
+		"...knnnk....",
+		"..knhnTnk...",
+		"..knnTnnkkk.",
+		"..kTnnnknnnk",
+		"...kkkknhnTk",
+		".kkk..knnTnk",
+		"knnnk.kTnnnk",
+		"knhTk..kkkk.",
+		".kkk........",
+		"............",
+	},
+	.Salt = {
+		"............",
+		".....kk.....",
+		"....kwwk....",
+		"...kwhwsk...",
+		"..kwwwwssk..",
+		".kkwwwsskkk.",
+		"kwwkwsskwwsk",
+		"kwhwkkkwhwsk",
+		"kwwwwskwwssk",
+		"kwwsssskwssk",
+		".kkkkkkkkkk.",
+		"............",
+	},
+	.Fish = {
+		"............",
+		"............",
+		"...kkkk....k",
+		".kkooookk.kk",
+		"koooooooOkOk",
+		"kokoooooOOOk",
+		"koooooowOOOk",
+		"kwwwwwwwOkOk",
+		".kkwwwwkk.kk",
+		"...kkkk....k",
+		"............",
+		"............",
+	},
+	.Meat = {
+		"............",
+		"..kkkkk.....",
+		".krrrrrkk...",
+		"krrmmrrrrk..",
+		"krmmrrrRRk..",
+		"krrrrrRRRk..",
+		".kRrrRRRkkk.",
+		"..kkRRRkwwwk",
+		"....kkkkkwwk",
+		".......kwwkk",
+		"........kk..",
+		"............",
+	},
+	.Milk = {
+		"...kkkkkk...",
+		"...kwwwwk...",
+		"...kkkkkk...",
+		"..kwwwwwwk..",
+		".kwwwwwwwwk.",
+		".kwuuuuuuwk.",
+		".kwuwuuwuwk.",
+		".kwuuuuuuwk.",
+		".kwwwwwwwwk.",
+		".kwwwwwwcck.",
+		"..kkkkkkkk..",
+		"............",
+	},
+	.Honey = {
+		"............",
+		"...kkkkkk...",
+		"..kbbbbbbk..",
+		"..kkkkkkkk..",
+		".kyyyyyyyyk.",
+		"kyhyyyyyyYYk",
+		"kyhyyyyyyYYk",
+		"kyyyyyyyYYYk",
+		"kyyyyyyYYYYk",
+		".kYYYYYYYYk.",
+		"..kkkkkkkk..",
+		"............",
+	},
+	.Fried_Egg = {
+		"............",
+		"............",
+		"...kkkkk....",
+		".kkwwwwwkk..",
+		"kwwwwyywwwk.",
+		"kwwwyyyywwwk",
+		"kwwwyhyywwwk",
+		"kwwwwyywwwck",
+		".kwwwwwwwcck",
+		"..kkwwwwckk.",
+		"....kkkkk...",
+		"............",
+	},
+	.Grilled_Fish = {
+		"............",
+		"............",
+		"...kkkk....k",
+		".kkttttkk.kk",
+		"kttkttkttkTk",
+		"ktkttkttkTTk",
+		"kttkttkttTTk",
+		"kTTTTTTTTkTk",
+		".kkTTTTkk.kk",
+		"...kkkk....k",
+		"............",
+		"............",
+	},
+	.Roast = {
+		"............",
+		"....kkkk....",
+		"..kkttttkk..",
+		".kttthtttTk.",
+		"kttthttttTTk",
+		"ktttttttTTTk",
+		"kTtttttTTTTk",
+		".kTTTTTTTTk.",
+		"..kkkTTkkk..",
+		".....kwk....",
+		"....kwwwk...",
+		".....kkk....",
+	},
+	.Butter = {
+		"............",
+		"............",
+		"............",
+		"..kkkkkkkk..",
+		".kyyyyyyyYk.",
+		".kyhyyyyyYk.",
+		".kyyyyyyyYk.",
+		".kYYYYYYYYk.",
+		"kkkkkkkkkkkk",
+		"kwwwwwwwwwck",
+		".kkkkkkkkkk.",
+		"............",
+	},
+	.Cheese = {
+		"............",
+		"............",
+		".......kkk..",
+		".....kkyyyk.",
+		"...kkyyyyyk.",
+		".kkyyyyyyyyk",
+		"kyyyYyyyyyyk",
+		"kyyyyyyYyyyk",
+		"kyYyyyyyyyYk",
+		"kyyyyyYyyyyk",
+		"kkkkkkkkkkkk",
+		"............",
+	},
 	.Wheat = {
 		".y...y...y..",
 		"yYy.yYy.yYy.",
@@ -530,6 +1035,20 @@ ICONS := [Item][12]string {
 		".kcccccdcck.",
 		"..kcccccck..",
 		"...kkkkkk...",
+		"............",
+	},
+	.Flour = {
+		"....kkkk....",
+		"...kwwwwk...",
+		"..kkbbbbkk..",
+		".kwwwwwwwwk.",
+		"kwwwwwwwwwwk",
+		"kwwwyywwwwwk",
+		"kwwyYYywwwwk",
+		"kwwwyywwwwck",
+		"kwwwwwwwwcck",
+		".kwwwwwwcck.",
+		"..kkkkkkkk..",
 		"............",
 	},
 	.Apple_Pie = {
@@ -588,6 +1107,20 @@ ICONS := [Item][12]string {
 		"............",
 		"............",
 	},
+	.Nut_Cake = {
+		"............",
+		"............",
+		"..kkkkkkkk..",
+		".ktTtnTtntk.",
+		"ktntTttnTttk",
+		"kTTTTTTTTTTk",
+		"kbbbbbbbbbbk",
+		"kbTbbbbbbTbk",
+		"kbbbbTbbbbbk",
+		".kbbbbbbbbk.",
+		"..kkkkkkkk..",
+		"............",
+	},
 	.Bread = {
 		"............",
 		"............",
@@ -627,6 +1160,9 @@ icon_color :: proc(c: u8) -> (Color, bool) {
 	case 'n': return {204, 142, 82, 255}, true
 	case 'm': return {244, 156, 176, 255}, true
 	case 'M': return {212, 112, 142, 255}, true
+	case 'l': return {190, 226, 140, 255}, true
+	case 's': return {236, 196, 204, 255}, true
+	case 'u': return {110, 170, 230, 255}, true
 	}
 	return {}, false
 }
@@ -679,7 +1215,7 @@ draw_sack :: proc(x, y, s: f32) {
 	}
 
 	name := ITEM_NAME[p.sack_sel]
-	kcal := ui_format("%d kcal", i32(item_kcal(p.sack_sel)))
+	kcal := ui_format("%d kcal", i32(sack_piece_kcal(p.sack_sel)))
 	name_w := ui_text_width(name, text)
 	left := centre - (name_w + 10 * s + ui_text_width(kcal, text)) / 2
 	label(name, left, y + pad, text)
@@ -711,45 +1247,172 @@ draw_sack :: proc(x, y, s: f32) {
 	}
 }
 
-// The oven's menu: what can be baked, what it needs and what it is worth.
-draw_oven_menu :: proc() {
+// A station's menu: what can be made there, what it needs and what it is
+// worth, and how many to make at once.
+draw_cook_menu :: proc() {
 	sw, sh := screen_size()
 	s := min(sw / 1280, sh / 720)
 	ui_rect(0, 0, sw, sh, {10, 24, 20, 130})
-	pw, ph := 820 * s, 560 * s
+	buf: [len(RECIPES)]^Recipe
+	recipes := station_recipes(cook_at, &buf)
+	row := 64 * s
+	pw, ph := 860 * s, 208 * s + f32(len(recipes)) * row
 	px, py := sw / 2 - pw / 2, sh / 2 - ph / 2
 	ui_round_rect(px, py, pw, ph, {74, 46, 38, 240}, 0.08)
-	label_centred("THE OVEN", sw / 2, py + 18 * s, 44 * s, UI_ORANGE)
-	label_centred("Cooking makes food richer: +40% kcal!", sw / 2, py + 70 * s, 20 * s, UI_YELLOW)
+	label_centred(STATION_NAME[cook_at], sw / 2, py + 18 * s, 44 * s, UI_ORANGE)
+	if bonus := cook_bonus(cook_at); bonus > 1 {
+		// His own cooking: the better he is at it, the richer.
+		label_centred(ui_format("Cooking makes food richer: +%d%% kcal!", i32(math.round((bonus - 1) * 100))), sw / 2, py + 70 * s, 20 * s, UI_YELLOW)
+	} else {
+		label_centred(STATION_ABOUT[cook_at], sw / 2, py + 70 * s, 20 * s, UI_YELLOW)
+	}
 
 	y := py + 108 * s
-	row := 74 * s
-	for &r, i in RECIPES {
-		chosen := i == oven_choice
-		ok := can_bake(&r)
+	for r, i in recipes {
+		chosen := i == cook_choice
+		most := max_batch(r)
 		if chosen {
-			ui_round_rect(px + 18 * s, y - 8 * s, pw - 36 * s, row - 6 * s, UI_YELLOW, 0.3)
-			ui_round_rect(px + 21 * s, y - 5 * s, pw - 42 * s, row - 12 * s, {118, 78, 60, 255}, 0.3)
+			ui_round_rect(px + 18 * s, y - 7 * s, pw - 36 * s, row - 4 * s, UI_YELLOW, 0.3)
+			ui_round_rect(px + 21 * s, y - 4 * s, pw - 42 * s, row - 10 * s, {118, 78, 60, 255}, 0.3)
 		}
-		ui_round_rect(px + 34 * s, y, 54 * s, 54 * s, SACK_BOX, 0.2)
-		draw_icon(r.dish, px + 39 * s, y + 5 * s, 44 * s)
-		label(ITEM_NAME[r.dish], px + 102 * s, y + 2 * s, 24 * s, ok ? UI_WHITE : Color{200, 180, 170, 255})
-		label(ui_format("%d kcal", i32(item_kcal(r.dish))), px + 102 * s, y + 31 * s, 20 * s, UI_YELLOW)
-		label(ui_format("(raw %d)", i32(raw_kcal(&r))), px + 214 * s, y + 33 * s, 16 * s, {220, 200, 180, 255})
-		x := px + 380 * s
+		ui_round_rect(px + 34 * s, y, 46 * s, 46 * s, SACK_BOX, 0.2)
+		draw_icon(r.dish, px + 38 * s, y + 4 * s, 38 * s)
+		label(ITEM_NAME[r.dish], px + 94 * s, y, 22 * s, most > 0 ? UI_WHITE : Color{200, 180, 170, 255})
+		label(ui_format("%d kcal", i32(recipe_kcal(r))), px + 94 * s, y + 26 * s, 18 * s, UI_YELLOW)
+		if STATION_BONUS[r.at] > 1 {
+			label(ui_format("(raw %d)", i32(recipe_kcal(r) / cook_bonus(r.at))), px + 198 * s, y + 28 * s, 15 * s, {220, 200, 180, 255})
+		}
+		// What it needs, for as many as are chosen.
+		times := chosen ? cook_count : 1
+		x := px + 330 * s
 		for need in r.needs {
 			if need.count == 0 {
 				continue
 			}
 			have := g.prosio.sack[need.item]
-			draw_icon(need.item, x, y + 7 * s, 40 * s)
-			label(ui_format2("%d/%d", i32(have), i32(need.count)), x + 46 * s, y + 18 * s, 22 * s, have >= need.count ? UI_GREEN : UI_RED)
-			x += 140 * s
+			draw_icon(need.item, x, y + 5 * s, 36 * s)
+			label(ui_format2("%d/%d", i32(have), i32(need.count * times)), x + 42 * s, y + 14 * s, 20 * s, have >= need.count * times ? UI_GREEN : UI_RED)
+			x += 122 * s
+		}
+		if chosen && most > 0 {
+			// How many to make at once.
+			cx := px + pw - 110 * s
+			label("<", cx - 34 * s, y + 10 * s, 24 * s, cook_count > 1 ? UI_YELLOW : Color{150, 130, 120, 255})
+			label_centred(ui_format("x %d", i32(cook_count)), cx + 10 * s, y + 10 * s, 24 * s)
+			label(">", cx + 44 * s, y + 10 * s, 24 * s, cook_count < most ? UI_YELLOW : Color{150, 130, 120, 255})
 		}
 		y += row
 	}
-	if oven_refused_t > 0 {
-		label_centred("Not enough in the sack for that!", sw / 2, py + ph - 78 * s, 24 * s, UI_RED)
+	if cook_refused_t > 0 {
+		label_centred("Not enough in the sack for that!", sw / 2, py + ph - 82 * s, 22 * s, UI_RED)
 	}
-	label_centred("UP / DOWN: choose     E or ENTER: bake     ESC: close", sw / 2, py + ph - 40 * s, 20 * s, UI_YELLOW)
+	label_centred("UP / DOWN: choose     LEFT / RIGHT: how many     E or ENTER: make it     ESC: close", sw / 2, py + ph - 42 * s, 18 * s, UI_YELLOW)
+}
+
+// The mill, by the wheat fields: it grinds wheat into flour, a sheaf at a
+// time. E puts all the wheat in the sack into it; E again takes the flour.
+MILL_RADIUS :: f32(1.35)
+MILL_TIME :: f32(2.5) // seconds to grind one sheaf
+
+Mill :: struct {
+	pos:      Vec2,
+	grinding: int, // sheaves still to grind
+	each:     f32, // the calories in each of them
+	ready:    int, // sacks of flour waiting
+	kcal:     f32, // the calories in them all
+	t:        f32,
+	spin:     f32, // how far round the sails are
+}
+
+mill_in_reach :: proc(pos: Vec2, r: f32) -> bool {
+	return length2(g.mill.pos - pos) < MILL_RADIUS + r + 0.7
+}
+
+use_mill :: proc() {
+	p := &g.prosio
+	m := &g.mill
+	to := m.pos - p.pos
+	p.facing = math.atan2(to.x, to.y)
+	switch {
+	case m.ready > 0:
+		taken := 0
+		for m.ready > 0 && p.sack[.Flour] < SACK_MAX {
+			share := m.kcal / f32(m.ready)
+			sack_add(.Flour, share)
+			m.kcal -= share
+			m.ready -= 1
+			taken += 1
+		}
+		if taken == 0 {
+			hint("No room in my sack for flour!")
+			return
+		}
+		p.sack_sel = .Flour
+		say("Flour! Now to the oven.", 1.6)
+		burst({m.pos.x, 0.8, m.pos.y + MILL_RADIUS}, 10, 2, COLOR_WHITE, 0.08)
+	case m.grinding > 0:
+		hint("Still grinding... round and round!")
+	case p.sack[.Wheat] > 0:
+		m.grinding = p.sack[.Wheat]
+		m.each = sack_take(.Wheat, m.grinding) / f32(m.grinding)
+		m.t = MILL_TIME
+		sack_step(0)
+		say("In goes the wheat!", 1.4)
+	case:
+		hint("The mill grinds wheat into flour. I have no wheat!")
+	}
+}
+
+update_mill :: proc(dt: f32) {
+	m := &g.mill
+	m.spin += dt * (m.grinding > 0 ? 3.5 : 0.5)
+	if m.grinding <= 0 {
+		return
+	}
+	m.t -= dt
+	if m.t <= 0 {
+		m.t = MILL_TIME
+		m.grinding -= 1
+		m.ready += 1
+		m.kcal += m.each
+		burst({m.pos.x, 0.8, m.pos.y + MILL_RADIUS}, 5, 1.5, COLOR_WHITE, 0.07)
+		if m.grinding == 0 && length2(g.prosio.pos - m.pos) < 14 {
+			say("The flour is ready!", 1.6)
+		}
+	}
+}
+
+MILL_WALL :: Color{238, 230, 212, 255}
+MILL_ROOF :: Color{176, 88, 66, 255}
+
+// A little windmill: a round whitewashed tower, a red cap, four sails that
+// turn (fast when it is grinding), and the sacks of flour by the door.
+draw_mill :: proc() {
+	mill := &g.mill
+	if !on_screen(mill.pos, 5) {
+		return
+	}
+	m := translate({mill.pos.x, 0, mill.pos.y})
+	set_surface(.Stone)
+	tube(m, {}, MILL_RADIUS + 0.08, 0.35, COLOR_ROCK)
+	set_surface(.Solid)
+	draw_shape(.Frustum, m * translate({0, 0.3, 0}) * scale({MILL_RADIUS, 2.9, MILL_RADIUS}), MILL_WALL)
+	cone(m, {0, 3.15, 0}, MILL_RADIUS * 0.82, 1.1, MILL_ROOF)
+	// The door and a little window, facing the camera.
+	box(m, {0, 0.85, MILL_RADIUS * 0.9}, {0.6, 1.1, 0.16}, COLOR_TRUNK)
+	box(m, {0, 2.2, MILL_RADIUS * 0.72}, {0.32, 0.36, 0.14}, {70, 60, 62, 255})
+	// The sails, on a hub at the front.
+	hub := m * translate({0.0, 2.75, MILL_RADIUS * 0.72 + 0.28}) * rot_z(mill.spin)
+	ball(hub, {}, {0.16, 0.16, 0.16}, COLOR_TRUNK)
+	for k in 0 ..< 4 {
+		sail := hub * rot_z(f32(k) * math.PI / 2)
+		box(sail, {0, 1.0, 0}, {0.07, 2.0, 0.07}, COLOR_TRUNK)
+		box(sail, {0.2, 1.2, 0.02}, {0.36, 1.45, 0.03}, COLOR_WHITE)
+	}
+	// Flour waiting to be fetched.
+	for k in 0 ..< min(mill.ready, 4) {
+		at := Vec3{-0.85 + f32(k) * 0.34, 0.2, MILL_RADIUS + 0.35 + 0.1 * f32(k % 2)}
+		ball(m, at, {0.17, 0.22, 0.15}, COLOR_WHITE)
+		ball(m, at + {0, 0.2, 0}, {0.07, 0.06, 0.07}, MILL_WALL)
+	}
 }

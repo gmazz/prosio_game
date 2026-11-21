@@ -2,13 +2,15 @@ package game
 
 import "core:math"
 
-// Prosio's weight in kilograms. Leaving the range at either end is a fail.
-KG_MIN :: f32(35) // faints from hunger
-KG_MAX :: f32(135) // heart gives up
-KG_START :: f32(80)
-KG_LEAN :: f32(65) // below this he is lean
-KG_HUGE :: f32(105) // above this he is huge
-KG_DANGER :: f32(7) // warning zone width at each end
+// Prosio's fat, in kilograms. (His weight is this and the rest of him, added
+// up in diet.odin.) Running out of it, or carrying too much, is a fail.
+FAT_MAX :: f32(100) // heart gives up
+FAT_START :: f32(45)
+FAT_LEAN :: f32(30) // below this he is lean
+FAT_HUGE :: f32(70) // above this he is huge
+FAT_DANGER :: f32(7) // warning zone width at each end
+KG_START :: f32(80) // what he weighs at the start; walking and running burn in proportion to this
+KG_SLIM :: f32(35) // the weight at which he is at his narrowest
 
 STAMINA_MAX :: f32(100)
 DASH_TIME :: f32(0.28)
@@ -24,14 +26,16 @@ JUMP_BURN :: f32(0.06) // kg per jump
 FIGHT_BURN :: f32(0.2) // kg per bump, grab, bash or throw
 HURT_BURN :: f32(0.35) // kg per shove or peck taken
 
-// His legs put the same energy into every jump, so height = energy / weight:
-// a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3.
+// Ordinary legs put the same energy into every jump, so height = energy /
+// weight: a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3. Strong
+// legs put in more (see LEG_SPRING in body.odin).
 JUMP_ENERGY :: f32(36)
 
 Fail :: enum {
 	None,
 	Fainted,
 	Heart_Attack,
+	Diet, // a nutrient, or water, stayed at an extreme too long (see diet.odin)
 }
 
 Prosio :: struct {
@@ -39,8 +43,17 @@ Prosio :: struct {
 	height:       f32, // how far his feet are above the meadow
 	vy:           f32, // vertical speed while in the air
 	airborne:     bool,
+	peak:         f32, // the highest his feet have been since he left the ground
 	facing:       f32,
-	kg:           f32,
+	kg:           f32, // what he weighs: the sum of his parts (see body_kg in diet.odin)
+	fat:          f32, // kg of fat on him
+	trait:        [Trait]f32, // his muscles and skills (see body.odin)
+	trait_was:    [Trait]f32, // what they were a few seconds ago,
+	trend:        [Trait]f32, // and how much each has changed since
+	fat_was:      f32,
+	fat_trend:    f32,
+	trend_t:      f32,
+	pick_total:   f32, // how long this stoop takes in all
 	stamina:      f32,
 	regen_delay:  f32,
 	sprinting:    bool,
@@ -79,64 +92,86 @@ Prosio :: struct {
 	hand:         Vec3, // where the hand that holds an animal by the leg is
 	fail:         Fail,
 	fail_t:       f32,
+	fail_need:    Need, // which level ended the game,
+	hiccup_t:     f32, // time until his next hiccup, with too much sugar in him
+	need:         [Need]f32, // his levels of each nutrient and of water, 0 to 100
+	need_was:     [Need]Need_State, // how each was a moment ago, to notice changes
+	extreme_t:    [Need]f32, // how long each has been at a dangerous extreme
+	rush:         bool, // on a sugar rush
+	crash_t:      f32, // time left in the sugar crash after one
+	gas_t:        f32, // time until his next wind
+	ache_cd:      f32, // time until the next tummy ache
+	ache_t:       f32, // time left doubled up with an ache or a cramp
+	cramp_t:      f32, // how long he has sprinted towards a cramp
+	drinking:     bool, // the thing he is stooping for is a drink
 	sack:         [Item]int, // what he has gathered or baked
+	sack_kcal:    [Item]f32, // and the calories in all of each kind
 	sack_sel:     Item, // what he would eat next
 	bubble:       cstring, // speech bubble text
 	bubble_t:     f32,
 	hint_cd:      f32,
 }
 
-// 0 at the thinnest, 1 at the fattest.
-fatness :: proc(kg: f32) -> f32 {
-	return clamp((kg - KG_MIN) / (KG_MAX - KG_MIN), 0, 1)
+// How fat he is: 0 with none at all, 1 with all he can carry.
+fatness :: proc() -> f32 {
+	return clamp(g.prosio.fat / FAT_MAX, 0, 1)
 }
 
 // Prosio's size on the ground. The hands swing beyond this torso radius.
 prosio_radius :: proc(kg: f32) -> f32 {
-	return 0.42 + (kg - KG_MIN) * 0.0055
+	return 0.42 + (kg - KG_SLIM) * 0.0055
 }
 
-// How wide his chest is. His arms hang from its sides.
+// How wide his chest is: wider with fat, and with good lungs. His arms hang
+// from its sides.
 prosio_chest :: proc(kg: f32) -> f32 {
-	return min(prosio_radius(kg) - 0.12, 0.33 + 0.16 * fatness(kg))
+	return min(prosio_radius(kg) - 0.12, 0.33 + 0.16 * fatness()) * lerp(1, 1.1, g.prosio.trait[.Lungs])
 }
 
-// Everything below gets worse with weight, and the gap is deliberately wide.
-walk_speed :: proc(kg: f32) -> f32 {
-	return lerp(7.2, 2.6, math.pow(fatness(kg), 0.8))
+// Everything below gets worse with fat, and the gap is deliberately wide.
+// Strong legs make up for some of it, and good lungs for some more.
+walk_speed :: proc() -> f32 {
+	return lerp(7.2, 2.6, math.pow(fatness(), 0.8)) * tone(.Legs, WEAK_LEGS, LEG_SPEED)
 }
 
-sprint_boost :: proc(kg: f32) -> f32 {
-	return lerp(1.7, 1.25, fatness(kg))
+sprint_boost :: proc() -> f32 {
+	return lerp(1.7, 1.25, fatness())
 }
 
-sprint_drain :: proc(kg: f32) -> f32 {
-	return lerp(9, 42, fatness(kg)) // stamina per second
+sprint_drain :: proc() -> f32 {
+	return lerp(9, 42, fatness()) * lerp(1, LUNG_DRAIN, g.prosio.trait[.Lungs]) // stamina per second
 }
 
-dash_speed :: proc(kg: f32) -> f32 {
-	return lerp(15, 10.5, fatness(kg))
+dash_speed :: proc() -> f32 {
+	return lerp(15, 10.5, fatness())
 }
 
-dash_cost :: proc(kg: f32) -> f32 {
-	return lerp(9, 42, fatness(kg))
+dash_cost :: proc() -> f32 {
+	return lerp(9, 42, fatness())
 }
 
-jump_cost :: proc(kg: f32) -> f32 {
-	return lerp(4, 22, fatness(kg))
+jump_cost :: proc() -> f32 {
+	return lerp(4, 22, fatness())
 }
 
-stamina_regen :: proc(kg: f32) -> f32 {
-	return lerp(50, 8, math.pow(fatness(kg), 0.8)) // stamina per second
+stamina_regen :: proc() -> f32 {
+	return lerp(50, 8, math.pow(fatness(), 0.8)) * lerp(1, LUNG_REGEN, g.prosio.trait[.Lungs]) // stamina per second
 }
 
+// How high he jumps weighing this much (with what he carries).
 jump_height :: proc(kg: f32) -> f32 {
-	return JUMP_ENERGY / kg
+	return JUMP_ENERGY * tone(.Legs, WEAK_LEGS, LEG_SPRING) / kg
 }
 
-// Weight burned. Fights and knocks are the dearest; see the *_BURN numbers.
-burn :: proc(kg: f32) {
-	g.prosio.kg -= kg
+// The same, with a name put into the text ("Got my %s back!"). The text is
+// kept here, as the formatted one does not last.
+named_text: [96]u8
+say_named :: proc(format: cstring, name: cstring, seconds: f32 = 2) {
+	text := string(ui_format_name(format, name))
+	n := min(len(text), len(named_text) - 1)
+	copy(named_text[:n], text[:n])
+	named_text[n] = 0
+	say(cstring(&named_text[0]), seconds)
 }
 
 say :: proc(text: cstring, seconds: f32 = 1.6) {
@@ -155,9 +190,14 @@ hint :: proc(text: cstring) {
 reset_prosio :: proc() {
 	g.prosio = Prosio {
 		pos     = HOME + {0, 4},
-		kg      = KG_START,
+		fat     = FAT_START,
 		stamina = STAMINA_MAX,
 	}
+	for n in Need {
+		g.prosio.need[n] = n == .Water ? WATER_START : NEED_START
+	}
+	g.prosio.fat_was = FAT_START
+	g.prosio.kg = body_kg()
 }
 
 update_prosio :: proc(dt: f32) {
@@ -183,10 +223,8 @@ update_prosio :: proc(dt: f32) {
 		collide_static(&p.pos, max(r, 1.0), p.height)
 		prosio_vertical(dt)
 		if p.fail_t > 1 && pressed(.Restart) {
-			sack := p.sack // the sack is still there when he comes round
-			reset_prosio()
-			g.prosio.sack = sack
-			sack_step(0)
+			wake_up()
+			save_game()
 		}
 		return
 	}
@@ -200,23 +238,36 @@ update_prosio :: proc(dt: f32) {
 	moving := move != {}
 
 	grounded := !p.airborne
-	busy := p.eat_t > 0 || p.pick_t > 0
+	busy := p.eat_t > 0 || p.pick_t > 0 || p.ache_t > 0
 	can_act := p.dazed_t <= 0 && p.dash_t <= 0 && !busy
 	food := food_in_reach(p.pos, r + 0.75)
 	bush := bush_in_reach(p.pos, r + 0.6)
-	oven := oven_in_reach(p.pos, r)
+	station, at_station := station_near(p.pos, r)
+	mill := mill_in_reach(p.pos, r)
+	pond := pond_in_reach(p.pos, r)
 
 	// Grabbing and throwing.
 	update_grab(dt, can_act)
 	carrying := p.carry != .Nothing
 
-	// The action button next to food puts it in the sack; at the oven it
-	// bakes.
+	// With an animal in his hand, the action button milks a goat, or chops
+	// a dead one into meat at the fire.
+	if grounded && can_act && p.carry == .Enemy && p.lift_t <= 0 && !p.swinging && pressed(.Action) {
+		use_held_animal()
+		carrying = p.carry != .Nothing
+	}
+	// The action button next to food puts it in the sack; at the oven, the
+	// fire or the churn it makes things, at the mill it grinds, and at the
+	// pond he drinks.
 	if grounded && can_act && !carrying && pressed(.Action) {
 		if food != nil || bush != nil {
 			gather(food, bush)
-		} else if oven {
-			use_oven()
+		} else if at_station {
+			use_station(station)
+		} else if mill {
+			use_mill()
+		} else if pond {
+			drink()
 		}
 	}
 	// The sack: choose with Z and C, eat with Q.
@@ -232,13 +283,19 @@ update_prosio :: proc(dt: f32) {
 
 	// Jump. A lighter Prosio goes higher, and a load weighs him down.
 	if grounded && can_act && p.lift_t <= 0 && p.carry != .Enemy && pressed(.Jump) {
-		cost := jump_cost(p.kg)
+		cost := jump_cost()
 		if p.stamina >= cost {
 			p.stamina -= cost
 			p.regen_delay = 0.4
 			burn(JUMP_BURN)
-			p.vy = math.sqrt(2 * GRAVITY * jump_height(total_kg()))
+			train(.Legs, JUMP_WORK)
+			height := jump_height(total_kg())
+			if lacks(.Electrolytes) {
+				height *= CRAMP_JUMP // cramped legs
+			}
+			p.vy = math.sqrt(2 * GRAVITY * height)
 			p.airborne = true
+			p.peak = p.height
 			p.stretch_vel += 4
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
 			grounded = false
@@ -249,14 +306,14 @@ update_prosio :: proc(dt: f32) {
 
 	// Bump: a short belly charge. Costs more stamina the heavier he is.
 	if grounded && can_act && !carrying && pressed(.Bump) {
-		cost := dash_cost(p.kg)
+		cost := dash_cost()
 		if p.stamina >= cost {
 			dir := moving ? move : facing_dir(p.facing)
 			p.stamina -= cost
 			p.regen_delay = 0.6
 			p.dash_t = DASH_TIME
 			// A bump out of a sprint keeps the extra speed.
-			p.vel = dir * max(dash_speed(p.kg), length2(p.vel) + 2)
+			p.vel = dir * max(dash_speed(), length2(p.vel) + 2)
 			p.facing = math.atan2(dir.x, dir.y)
 			burn(FIGHT_BURN)
 			p.wobble_vel -= 2
@@ -267,15 +324,17 @@ update_prosio :: proc(dt: f32) {
 	}
 
 	// Sprint: hold the button while moving.
-	t := fatness(p.kg)
+	t := fatness()
 	if p.winded && p.stamina > 30 {
 		p.winded = false
 	}
-	p.sprinting = button_down(.Sprint) && moving && grounded && p.dazed_t <= 0 && !busy && !carrying && !p.winded
+	p.sprinting = button_down(.Sprint) && moving && grounded && p.dazed_t <= 0 && !busy && !carrying && !p.winded && p.crash_t <= 0
 	if p.sprinting {
-		p.stamina -= sprint_drain(p.kg) * dt
+		p.stamina -= sprint_drain() * (p.rush ? RUSH_DRAIN : 1) * dt
 		p.regen_delay = lerp(0.3, 1.0, t)
 		burn(SPRINT_BURN * p.kg / KG_START * dt)
+		train(.Legs, SPRINT_WORK * dt)
+		train(.Lungs, SPRINT_WORK * dt)
 		p.dust_t -= dt
 		if p.dust_t <= 0 {
 			p.dust_t = 0.1
@@ -293,12 +352,19 @@ update_prosio :: proc(dt: f32) {
 	if p.dash_t > 0 {
 		p.dash_t -= dt
 	} else {
-		speed := walk_speed(p.kg)
+		speed := walk_speed() * diet_speed()
 		if p.sprinting {
-			speed *= sprint_boost(p.kg)
+			speed *= sprint_boost()
 		}
 		// With a load, the same legs have more weight to move.
 		speed *= p.kg / total_kg()
+		// And a dead weight dragged behind him holds him back.
+		if p.carry == .Enemy && g.enemies[p.carry_index].ko {
+			speed *= p.kg / (p.kg + ENEMY_KG[g.enemies[p.carry_index].kind] * DRAG_SLIDE / strength())
+			if moving {
+				train(.Legs, DRAG_WORK * dt)
+			}
+		}
 		target := move * speed
 		if p.dazed_t > 0 || busy || p.lift_t > 0 {
 			target = {}
@@ -317,6 +383,7 @@ update_prosio :: proc(dt: f32) {
 		}
 		if moving && target != {} && grounded && !p.sprinting {
 			burn(WALK_BURN * p.kg / KG_START * dt)
+			train(.Legs, WALK_WORK * dt)
 		}
 	}
 	p.pos += p.vel * dt
@@ -341,23 +408,34 @@ update_prosio :: proc(dt: f32) {
 		}
 	}
 
-	// Stamina comes back much faster when he is lean.
+	// Stamina comes back much faster when he is lean; slowly with no carbs
+	// in him, and only part of the way when he is thirsty.
 	if p.dash_t <= 0 && !p.sprinting && p.carry == .Nothing {
 		p.regen_delay -= dt
-		if p.regen_delay <= 0 {
-			p.stamina = min(p.stamina + stamina_regen(p.kg) * dt, STAMINA_MAX)
+		top := lacks(.Water) ? THIRSTY_STAMINA : STAMINA_MAX
+		if p.regen_delay <= 0 && p.stamina < top {
+			regen := stamina_regen() * (lacks(.Carbs) ? NO_FUEL : 1)
+			p.stamina = min(p.stamina + regen * dt, top)
 		}
 	}
 
-	// Weight limits.
-	p.kg = clamp(p.kg, KG_MIN, KG_MAX)
-	if p.kg <= KG_MIN {
+	// What he has eaten and drunk, and what it does to him.
+	update_diet(dt)
+
+	// His muscles and skills follow what he has been doing, and his weight
+	// follows them and his fat.
+	update_body(dt)
+
+	// The limits of his fat.
+	if p.fail != .None {
+		// His diet has done for him.
+	} else if p.fat <= 0 {
 		p.fail = .Fainted
-	} else if p.kg >= KG_MAX {
+	} else if p.fat >= FAT_MAX {
 		p.fail = .Heart_Attack
-	} else if p.kg < KG_MIN + KG_DANGER {
+	} else if p.fat < FAT_DANGER {
 		hint(sack_has_food() ? "So hungry... Q: eat from my sack!" : "So hungry... I must find food!")
-	} else if p.kg > KG_MAX - KG_DANGER {
+	} else if p.fat > FAT_MAX - FAT_DANGER {
 		hint("So full... no more food for now!")
 	}
 	if p.fail != .None {
@@ -381,6 +459,10 @@ prosio_vertical :: proc(dt: f32) {
 	}
 	p.vy -= GRAVITY * dt
 	p.height += p.vy * dt
+	p.peak = max(p.peak, p.height)
+	if p.vy < -1 && stomp_enemies() {
+		return // came down on an animal, and bounced off it
+	}
 	if p.vy <= 0 && p.height <= 0 {
 		speed := -p.vy
 		p.height = 0
@@ -399,7 +481,6 @@ prosio_lands :: proc(speed: f32) {
 	impact := total_kg() * speed
 	g.shake = max(g.shake, min(impact / 2500, 0.6))
 	p.stretch_vel -= min(speed * 0.5, 5)
-	p.wobble_vel += speed * 0.5 * fatness(p.kg)
+	p.wobble_vel += speed * 0.5 * fatness()
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 4 + int(impact / 150), 2 + impact / 600, COLOR_DUST, 0.12)
-	stomp_enemies(speed)
 }

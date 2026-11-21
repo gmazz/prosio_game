@@ -11,7 +11,7 @@ UI_YELLOW :: Color{246, 206, 70, 255}
 UI_ORANGE :: Color{244, 150, 60, 255}
 UI_BLUE :: Color{80, 170, 240, 255}
 
-CONTROLS :: "Move: WASD   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Pick up / oven: E   Sack: Z C   Eat: Q   Menu: ESC"
+CONTROLS :: "Move: WASD   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Pick up / use / drink: E   Sack: Z C   Eat: Q   Sack, outfit, map: M   Menu: ESC"
 
 // Text with a dark edge so it reads on any background.
 label :: proc(text: cstring, x, y, size: f32, color: Color = UI_WHITE) {
@@ -35,24 +35,38 @@ draw_ui :: proc() {
 	s := min(sw / 1280, sh / 720)
 	p := &g.prosio
 
-	ui_vignette(35)
+	// With too few vitamins his sight dims: the dark closes in from the edges.
+	if lacks(.Vitamins) {
+		ui_vignette(205, 2)
+	} else {
+		ui_vignette(35)
+	}
 
 	// Signs in the world.
-	oven_top := Vec3{g.oven.pos.x, 2.9, g.oven.pos.y}
-	switch {
-	case g.oven.ready:
-		pulse := 1 + 0.08 * math.sin(g.time * 6)
-		world_label("READY!", oven_top, 22 * s * pulse, UI_GREEN)
-	case g.oven.baking:
-		world_label(ui_format("BAKING... %d", i32(math.ceil(g.oven.bake_t))), oven_top, 18 * s, UI_ORANGE)
-	case:
-		world_label("OVEN", oven_top, 16 * s, UI_YELLOW)
-	}
-	for kind in Region_Kind {
-		if kind != .Home && length2(signpost_pos(kind) - g.camera) < 16 {
-			at := signpost_pos(kind)
-			world_label(REGIONS[kind].sign, {at.x, 2.05, at.y}, 15 * s, UI_YELLOW)
+	for o, at in g.stations {
+		if !on_screen(o.pos, 4) {
+			continue
 		}
+		top := Vec3{o.pos.x, at == .Oven ? 2.9 : 2.5, o.pos.y}
+		switch {
+		case o.ready:
+			pulse := 1 + 0.08 * math.sin(g.time * 6)
+			world_label("READY!", top, 22 * s * pulse, UI_GREEN)
+		case o.baking:
+			world_label(ui_format(STATION_BUSY[at], i32(math.ceil(o.bake_t))), top, 18 * s, UI_ORANGE)
+		case:
+			world_label(STATION_LABEL[at], top, 16 * s, UI_YELLOW)
+		}
+	}
+	mill_top := Vec3{g.mill.pos.x, 4.6, g.mill.pos.y}
+	switch {
+	case g.mill.ready > 0 && g.mill.grinding == 0:
+		pulse := 1 + 0.08 * math.sin(g.time * 6)
+		world_label("FLOUR READY!", mill_top, 20 * s * pulse, UI_GREEN)
+	case g.mill.grinding > 0:
+		world_label(ui_format("GRINDING... %d", i32(g.mill.grinding)), mill_top, 18 * s, UI_ORANGE)
+	case:
+		world_label("MILL", mill_top, 16 * s, UI_YELLOW)
 	}
 
 	// Speech bubble.
@@ -64,58 +78,10 @@ draw_ui :: proc() {
 		ui_text(p.bubble, pos.x - w / 2 + 11 * s, pos.y - size + 6.5 * s, size, UI_DARK)
 	}
 
-	// Weight bar, with its zones, and the stamina bar under it.
+	// What he is made of, and beside it the sack.
 	x, y := 18 * s, 14 * s
-	bar_w, bar_h := 250 * s, 15 * s
-	pad := 9 * s
-	panel_w := bar_w + 82 * s
-	panel_h := 104 * s
-	ui_round_rect(x - pad, y - pad + 2 * s, panel_w + pad, panel_h, UI_PANEL, 0.2)
-	label("WEIGHT", x, y, 16 * s)
-	zone_name: cstring = "CHUBBY"
-	zone_color := UI_YELLOW
-	if p.kg < KG_LEAN {
-		zone_name, zone_color = "LEAN", UI_GREEN
-	} else if p.kg >= KG_HUGE {
-		zone_name, zone_color = "HUGE", UI_ORANGE
-	}
-	label(zone_name, x + 76 * s, y, 16 * s, zone_color)
-	y += 22 * s
-	Zone :: struct {
-		from, to: f32,
-		color:    Color,
-	}
-	zones := [?]Zone {
-		{KG_MIN, KG_MIN + KG_DANGER, UI_RED},
-		{KG_MIN + KG_DANGER, KG_LEAN, UI_GREEN},
-		{KG_LEAN, KG_HUGE, UI_YELLOW},
-		{KG_HUGE, KG_MAX - KG_DANGER, UI_ORANGE},
-		{KG_MAX - KG_DANGER, KG_MAX, UI_RED},
-	}
-	ui_rect(x - 2 * s, y - 2 * s, bar_w + 4 * s, bar_h + 4 * s, UI_DARK)
-	for z in zones {
-		x0 := x + bar_w * fatness(z.from)
-		x1 := x + bar_w * fatness(z.to)
-		ui_rect(x0, y, x1 - x0, bar_h, z.color)
-	}
-	marker := x + bar_w * fatness(p.kg)
-	ui_rect(marker - 4 * s, y - 5 * s, 8 * s, bar_h + 10 * s, UI_DARK)
-	ui_rect(marker - 2 * s, y - 3.5 * s, 4 * s, bar_h + 7 * s, UI_WHITE)
-	label(ui_format("%d kg", i32(p.kg + 0.5)), x + bar_w + 10 * s, y - 1 * s, 18 * s)
-	if p.carry == .Rock {
-		// What he carries counts as his weight when he jumps and lands.
-		label(ui_format("+%d", i32(p.carry_kg + 0.5)), x + bar_w + 10 * s, y + 19 * s, 15 * s, UI_YELLOW)
-	}
-	y += bar_h + 10 * s
-	label("STAMINA", x, y, 16 * s)
-	y += 22 * s
-	ui_rect(x - 2 * s, y - 2 * s, bar_w + 4 * s, 10 * s + 4 * s, UI_DARK)
-	ui_rect(x, y, bar_w * p.stamina / STAMINA_MAX, 10 * s, (p.winded || p.stamina < 25) ? UI_RED : UI_BLUE)
-	// The notch shows how much one bump costs right now.
-	ui_rect(x + bar_w * dash_cost(p.kg) / STAMINA_MAX - 1 * s, y, 2 * s, 10 * s, UI_DARK)
-
-	// The sack, beside the weight.
-	draw_sack(x + panel_w + 12 * s, 14 * s - pad + 2 * s, s)
+	panel_w, _ := draw_body_panel(x, y, s)
+	draw_sack(x + panel_w + 12 * s, 14 * s - 9 * s + 2 * s, s)
 
 	// Where he is: the part of the meadow and what is found there.
 	if g.in_region {
@@ -134,8 +100,17 @@ draw_ui :: proc() {
 		action: cstring = nil
 		if p.carry != .Nothing {
 			switch {
-			case p.carry == .Enemy && p.carry_kg > p.kg * LIFT_LIMIT:
+			case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_FROM[g.enemies[p.carry_index].kind] > 0:
+				// A body: it wants chopping up, at the block by the fire.
+				if station_in_reach(.Fire, p.pos, prosio_radius(p.kg) + 1.2) {
+					action = "E: chop it into meat"
+				} else {
+					action = "Drag it to the fire by the pond     SPACE: bash with it     F: throw it"
+				}
+			case p.carry == .Enemy && p.carry_kg > p.kg * LIFT_LIMIT * strength():
 				action = "Too heavy to swing!   SPACE: heave     F: let go"
+			case p.carry == .Enemy && g.enemies[p.carry_index].kind == .Goat:
+				action = "E: milk it     SPACE: bash with it     F: throw it"
 			case p.carry == .Enemy:
 				action = "SPACE: bash with it!     F: throw it"
 			case p.lift_t > 0:
@@ -143,12 +118,42 @@ draw_ui :: proc() {
 			case:
 				action = "F: throw it down"
 			}
-		} else if food_in_reach(p.pos, prosio_radius(p.kg) + 0.75) != nil || bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6) != nil {
-			action = "E: put it in the sack"
-		} else if oven_in_reach(p.pos, prosio_radius(p.kg)) {
-			action = g.oven.ready ? "E: take it out of the oven" : (g.oven.baking ? "Baking... wait for the ding!" : "E: bake something")
-		} else if _, found := grab_target(); found {
-			action = "F: grab"
+		} else if food := food_in_reach(p.pos, prosio_radius(p.kg) + 0.75); food != nil {
+			// What it is worth now: less if it has not finished growing.
+			action = ui_format(food.grow < 0.95 && !food.fallen ? "E: pick it now (%d kcal, still growing)" : "E: pick it (%d kcal)", i32(food_kcal(food)))
+		} else if bush := bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6); bush != nil {
+			if bush.kind == .Hive {
+				action = "E: take the honey (300 kcal)"
+			} else if bush.kind == .Salt_Rock {
+				action = "E: break off a lump of rock salt"
+			} else {
+				action = ui_format(bush.ripe < 0.95 ? "E: pick berries now (%d kcal, still ripening)" : "E: pick berries (%d kcal)", i32(bush_kcal(bush)))
+			}
+		} else if at, near := station_near(p.pos, prosio_radius(p.kg)); near {
+			o := g.stations[at]
+			switch at {
+			case .Oven:
+				action = o.ready ? "E: take it out of the oven" : (o.baking ? "Baking... wait for the ding!" : "E: bake something")
+			case .Fire:
+				action = o.ready ? "E: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "E: cook something")
+			case .Churn:
+				action = o.ready ? "E: take it from the stool" : (o.baking ? "Churning... nearly there!" : "E: churn some milk")
+			}
+		} else if mill_in_reach(p.pos, prosio_radius(p.kg)) {
+			switch {
+			case g.mill.ready > 0:
+				action = "E: take the flour"
+			case g.mill.grinding > 0:
+				action = "Grinding... wait for the flour"
+			case p.sack[.Wheat] > 0:
+				action = "E: grind the wheat"
+			case:
+				action = "The mill grinds wheat into flour"
+			}
+		} else if pond_in_reach(p.pos, prosio_radius(p.kg)) {
+			action = fish_in_reach() ? "E: drink     F: grab that fish!" : "E: drink     F: grab for a fish (stand still and they come)"
+		} else if target, found := grab_target(); found {
+			action = target.kind == .Enemy && g.enemies[target.index].state == .Dead ? "F: take it by the leg" : "F: grab"
 		}
 		if action != nil {
 			label_centred(action, sw / 2, sh - 64 * s, 20 * s, UI_YELLOW)
@@ -164,9 +169,13 @@ draw_ui :: proc() {
 			title = "HEART ATTACK!"
 			line = "Too heavy... his heart could not keep up."
 		}
+		if p.fail == .Diet {
+			title, line = ending().title, ending().line
+		}
 		label_centred(title, sw / 2, sh * 0.56, 64 * s, UI_RED)
 		label_centred(line, sw / 2, sh * 0.56 + 76 * s, 28 * s)
-		label_centred("Press ENTER to try again", sw / 2, sh * 0.56 + 124 * s, 26 * s, UI_YELLOW)
+		label_centred("Press ENTER to wake up at home", sw / 2, sh * 0.56 + 124 * s, 26 * s, UI_YELLOW)
+		label_centred("(his sack is lost, and some of his muscle; what he has learnt stays)", sw / 2, sh * 0.56 + 160 * s, 18 * s)
 	}
 }
 
@@ -183,7 +192,7 @@ MENU_TEXT := [Menu_Item]cstring {
 	.Play         = "PLAY",
 	.Resume       = "RESUME",
 	.Look         = "",
-	.Restart      = "RESTART",
+	.Restart      = "START OVER",
 	.Exit_To_Menu = "EXIT TO MENU",
 	.Quit         = "QUIT",
 }
@@ -192,15 +201,25 @@ look_text :: proc() -> cstring {
 	return ui_format("PIXELS: %d / 6", i32(pixel_level + 1))
 }
 
-MENU_MAIN := [?]Menu_Item{.Play, .Look, .Quit}
-MENU_MAIN_WEB := [?]Menu_Item{.Play, .Look} // the browser has nothing to quit to
+// With a saved Prosio, the main menu carries on with him, or starts over
+// with a new one. (The browser has nothing to quit to.)
+MENU_MAIN := [?]Menu_Item{.Play, .Look, .Restart, .Quit}
 MENU_PAUSE := [?]Menu_Item{.Resume, .Look, .Restart, .Exit_To_Menu}
 
 menu_items :: proc() -> []Menu_Item {
 	if scene == .Paused {
 		return MENU_PAUSE[:]
 	}
-	return IS_WEB ? MENU_MAIN_WEB[:] : MENU_MAIN[:]
+	@(static) list: [len(MENU_MAIN)]Menu_Item
+	n := 0
+	for item in MENU_MAIN {
+		if (item == .Restart && !has_save) || (item == .Quit && IS_WEB) {
+			continue
+		}
+		list[n] = item
+		n += 1
+	}
+	return list[:n]
 }
 
 menu_length :: proc() -> int {
@@ -225,6 +244,9 @@ draw_menu :: proc() {
 	for i in 0 ..< menu_length() {
 		item := menu_items()[i]
 		text := item == .Look ? look_text() : MENU_TEXT[item]
+		if item == .Play && has_save {
+			text = "CONTINUE"
+		}
 		chosen := i == menu_choice
 		text_size := (chosen ? 44 : 36) * s
 		w := ui_text_width(text, text_size)

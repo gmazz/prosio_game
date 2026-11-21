@@ -113,11 +113,25 @@ draw_ground :: proc() {
 			ball(m, {0, 0.31, 0}, {0.04, 0.04, 0.04}, COLOR_STAR)
 		}
 	}
+	draw_fish()
+	// Lily pads float on the pond, bobbing a little.
+	if on_screen(POND, POND_RADIUS) {
+		for k in 0 ..< 7 {
+			a := f32(k) * 2.4 + 0.5
+			d := POND_RADIUS * (0.25 + 0.09 * f32(k % 5))
+			bob := 0.012 * math.sin(g.time * 1.4 + f32(k))
+			pad := translate({POND.x + math.cos(a) * d, 0.03 + bob, POND.y + math.sin(a) * d}) * rot_y(f32(k) * 1.3)
+			tube(pad, {}, 0.3 + 0.06 * f32(k % 3), 0.02, {84, 150, 84, 255})
+			if k % 3 == 0 {
+				ball(pad, {0.05, 0.07, 0}, {0.1, 0.07, 0.1}, {250, 214, 226, 255})
+				ball(pad, {0.05, 0.11, 0}, {0.04, 0.04, 0.04}, COLOR_STAR)
+			}
+		}
+	}
 	outlines_enabled = true
 }
 
-// The fence round the meadow, the trees, rocks and bushes, and the
-// signposts by the house.
+// The fence round the meadow, and the trees, rocks and bushes.
 draw_world :: proc() {
 	w := WORLD_HALF
 	// Fence: posts and two rails all the way round.
@@ -156,26 +170,35 @@ draw_world :: proc() {
 		case .Rock:
 			m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(i) * 2.3)
 			draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
-		case .Oven:
-		// Drawn by draw_oven.
+		case .Hive:
+			draw_hive(r, i)
+		case .Salt_Rock:
+			draw_salt_rock(r, i)
+		case .Oven, .Mill, .Fire, .Churn, .Block:
+		// Drawn by draw_oven, draw_mill, draw_fire and draw_churn.
 		}
 	}
 
-	// A signpost for each part of the meadow, pointing down its path.
-	for kind in Region_Kind {
-		if kind == .Home {
-			continue
+	// Bulrushes in clumps round the pond's edge, leaving the side towards
+	// home open.
+	if on_screen(POND, POND_RADIUS + 3) {
+		for k in 0 ..< 9 {
+			a := 2.2 + f32(k) * 0.52
+			at := POND + Vec2{math.cos(a), math.sin(a)} * (POND_RADIUS - 0.15 + 0.2 * f32(k % 2))
+			m := translate({at.x, 0, at.y}) * rot_y(f32(k) * 1.9)
+			set_sway(0.06)
+			for j in 0 ..< 4 {
+				lean := Vec3{0.1 * f32(j) - 0.15, 0, 0.07 * f32(j % 2)}
+				tall := 0.75 + 0.18 * f32((k + j) % 3)
+				limb(m, lean, lean * 1.5 + {0, tall, 0}, 0.02, {104, 150, 72, 255})
+				if j % 2 == 0 {
+					ball(m, lean * 1.5 + {0, tall, 0}, {0.045, 0.13, 0.045}, {110, 72, 48, 255})
+				}
+			}
+			set_sway(0)
 		}
-		at := signpost_pos(kind)
-		if !on_screen(at, 2) {
-			continue
-		}
-		dir := normalize2(PATH_ENDS[kind] - HOME)
-		tube(IDENTITY, {at.x, 0, at.y}, 0.08, 1.75, COLOR_TRUNK)
-		board := translate({at.x, 1.45, at.y}) * rot_y(math.atan2(dir.x, dir.y))
-		box(board, {0, 0, 0.35}, {0.08, 0.3, 0.8}, COLOR_PLANK)
-		draw_shape(.Cone, board * translate({0, 0, 0.75}) * rot_x(math.PI / 2) * scale({0.24, 0.3, 0.06}), COLOR_PLANK)
 	}
+
 }
 
 // The size of one tree, worked out from its number so it never changes.
@@ -189,7 +212,11 @@ Tree_Shape :: struct {
 // Trees are tall and slim, so that standing close together they make a
 // little wood rather than a row of lollipops.
 tree_shape :: proc(index: int) -> Tree_Shape {
-	species := g.rounds[index].species
+	return tree_shape_of(g.rounds[index].species, index)
+}
+
+// The shape a tree of this species would have as tree number index.
+tree_shape_of :: proc(species: Tree_Species, index: int) -> Tree_Shape {
 	size := 0.85 + 0.4 * math.mod(f32(index) * 0.37, 1)
 	switch species {
 	case .Pine:
@@ -202,6 +229,18 @@ tree_shape :: proc(index: int) -> Tree_Shape {
 	return {species, size, 1.4 * size, 4.7 * size}
 }
 
+// How high a tree's leaves start and how high they reach.
+foliage :: proc(t: Tree_Shape) -> (low, high: f32) {
+	switch t.species {
+	case .Pine:
+		return 1.2 * t.size, 6.45 * t.size
+	case .Apple:
+		return t.canopy_y - t.canopy * 0.85, t.canopy_y + t.canopy * 1.2
+	case .Broadleaf, .Blossom:
+	}
+	return t.canopy_y - t.canopy * 1.15, t.canopy_y + t.canopy * 1.45
+}
+
 // A tree standing between the camera and Prosio fades to a see-through
 // pattern where it covers him, so he never disappears behind it.
 tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
@@ -209,12 +248,16 @@ tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
 	if pos.y < p.pos.y - 0.5 {
 		return 0 // behind him
 	}
-	centre := Vec3{pos.x, t.canopy_y, pos.y}
-	crown := world_to_screen(centre)
-	reach := abs(world_to_screen(centre + {t.canopy, 0, 0}).x - crown.x)
+	// How far he is, on the screen, from the middle of its leaves: 1 at
+	// their edge.
+	low, high := foliage(t)
+	middle := Vec3{pos.x, (low + high) / 2, pos.y}
+	crown := world_to_screen(middle)
+	wide := abs(world_to_screen(middle + {t.canopy, 0, 0}).x - crown.x)
+	tall := abs(world_to_screen({pos.x, high, pos.y}).y - crown.y)
 	him := world_to_screen({p.pos.x, p.height + 1, p.pos.y})
-	apart := length2(crown - him)
-	cover := 1 - smooth((apart - reach * 0.75) / (reach * 0.5 + 1))
+	apart := length2((crown - him) / Vec2{max(wide, 1), max(tall, 1)})
+	cover := 1 - smooth((apart - 0.8) / 0.5)
 	// The leftover leaves show as single pixels, so it fades a long way.
 	strength: f32 = 0.86
 	return strength * cover * smooth((pos.y - p.pos.y + 0.5) / 1.0)
@@ -295,7 +338,9 @@ draw_tree :: proc(pos: Vec2, index: int) {
 				a := f32(k) * 2.4 + f32(index) + 0.5
 				up := 0.45 + 0.15 * f32(k % 2)
 				out := math.sqrt(1 - up * up) * c * 1.02
-				ball(crown, {math.cos(a) * out, y + up * c * tall * 1.02, math.sin(a) * out}, {0.17, 0.16, 0.17}, {222, 44, 48, 255})
+				ripe := g.rounds[index].ripe
+				big := lerp(0.09, 0.17, ripe)
+				ball(crown, {math.cos(a) * out, y + up * c * tall * 1.02, math.sin(a) * out}, {big, big * 0.95, big}, blend(UNRIPE_GREEN, APPLE_RED, ripe * 1.2 - 0.2))
 			}
 		}
 	}
@@ -315,14 +360,26 @@ draw_bush :: proc(b: Round, index: int) {
 	for k in 0 ..< b.fruit {
 		a := f32(k) * 2.1 + 0.4
 		bunch := m * translate({math.cos(a) * r * 0.62, r * 1.45, math.sin(a) * r * 0.62})
+		big := lerp(0.05, 0.09, b.ripe)
 		for j in 0 ..< 3 {
-			ball(bunch, {f32(j % 2) * 0.11 - 0.055, -f32(j / 2) * 0.09, 0}, {0.09, 0.09, 0.09}, BERRY_COLOR)
+			ball(bunch, {f32(j % 2) * 0.11 - 0.055, -f32(j / 2) * 0.09, 0}, {big, big, big}, blend({170, 196, 120, 255}, BERRY_COLOR, b.ripe * 1.2 - 0.2))
 		}
 	}
 }
 
 WHEAT :: Color{230, 190, 88, 255}
+UNRIPE_GREEN :: Color{132, 178, 74, 255}
+APPLE_RED :: Color{222, 44, 48, 255}
 
+// A colour part of the way from one to another.
+blend :: proc(a, b: Color, t: f32) -> Color {
+	k := clamp(t, 0, 1)
+	return {u8(lerp(f32(a.r), f32(b.r), k)), u8(lerp(f32(a.g), f32(b.g), k)), u8(lerp(f32(a.b), f32(b.b), k)), 255}
+}
+
+// Food shows how far along it is: it sprouts small and green, and grows and
+// colours as it ripens. Each piece is also a little bigger or smaller than
+// the next.
 draw_food :: proc(f: Food, index: int) {
 	if f.gone || !on_screen(f.pos, 1) {
 		return
@@ -330,11 +387,12 @@ draw_food :: proc(f: Food, index: int) {
 	if f.respawn > 0 {
 		return
 	}
-	m := translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1)
+	grown := lerp(0.4, 1, f.grow) * math.pow(f.size, 0.4)
+	m := translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1) * scale({grown, grown, grown})
 	switch f.kind {
 	case .Apple:
 		// Fallen apples brown a little as they start to rot.
-		ripe := Color{222, 44, 48, 255}
+		ripe := blend(UNRIPE_GREEN, APPLE_RED, f.grow * 1.2 - 0.2)
 		if f.fallen && f.life < 12 {
 			ripe = {170, 88, 50, 255}
 		}
@@ -348,7 +406,7 @@ draw_food :: proc(f: Food, index: int) {
 			ball(m, {math.cos(a) * 0.08, 0.21, math.sin(a) * 0.08}, {0.025, 0.012, 0.025}, COLOR_WHITE)
 		}
 	case .Pumpkin:
-		orange := Color{232, 128, 40, 255}
+		orange := blend({118, 150, 70, 255}, {232, 128, 40, 255}, f.grow * 1.3 - 0.3)
 		for k in 0 ..< 5 {
 			a := f32(k) * math.TAU / 5
 			ball(m, {math.cos(a) * 0.12, 0.22, math.sin(a) * 0.12}, {0.2, 0.2, 0.2}, k % 2 == 0 ? orange : shade(orange, 0.9))
@@ -364,14 +422,35 @@ draw_food :: proc(f: Food, index: int) {
 			spread := 0.08 + 0.03 * f32(k % 3)
 			base := Vec3{math.cos(a) * spread, 0, math.sin(a) * spread}
 			top := Vec3{math.cos(a) * spread * 1.9, 0.6 + 0.07 * f32(k % 2), math.sin(a) * spread * 1.9}
-			limb(m, base, top, 0.018, shade(WHEAT, 0.85))
-			ball(m, top + {0, 0.07, 0}, {0.04, 0.1, 0.04}, k % 2 == 0 ? WHEAT : shade(WHEAT, 0.9))
+			gold := blend({124, 170, 78, 255}, WHEAT, f.grow * 1.3 - 0.3)
+			limb(m, base, top, 0.018, shade(gold, 0.85))
+			ball(m, top + {0, 0.07, 0}, {0.04, 0.1, 0.04}, k % 2 == 0 ? gold : shade(gold, 0.9))
 		}
 		set_sway(0)
 		tube(m, {0, 0.24, 0}, 0.1, 0.06, COLOR_TRUNK)
 	case .Egg:
 		ball(m, {0, 0.13, 0}, {0.085, 0.11, 0.085}, {246, 236, 214, 255})
 		ball(m, {0.03, 0.17, 0.05}, {0.015, 0.015, 0.015}, {176, 136, 104, 255})
+	case .Cabbage:
+		// A pale heart wrapped in darker outer leaves.
+		heart := blend({96, 150, 70, 255}, {176, 216, 124, 255}, f.grow)
+		for k in 0 ..< 5 {
+			a := f32(k) * math.TAU / 5
+			leaf := m * translate({math.cos(a) * 0.17, 0.1, math.sin(a) * 0.17}) * rot_y(-a) * rot_z(0.5)
+			ball(leaf, {}, {0.09, 0.17, 0.15}, k % 2 == 0 ? COLOR_LEAF : COLOR_LEAF_DARK)
+		}
+		ball(m, {0, 0.17, 0}, {0.2, 0.17, 0.2}, heart)
+		ball(m, {0.03, 0.27, 0.02}, {0.11, 0.07, 0.11}, shade(heart, 1.08))
+	case .Nuts:
+		// A little heap: more nuts lie on it as time goes by.
+		m = translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1)
+		for k in 0 ..< 1 + int(f.grow * 4.99) {
+			a := f32(k) * 2.4
+			d: f32 = k == 0 ? 0 : 0.1
+			nut := m * translate({math.cos(a) * d, 0.055, math.sin(a) * d}) * rot_y(a)
+			ball(nut, {}, {0.055, 0.05, 0.065}, k % 2 == 0 ? Color{168, 118, 74, 255} : Color{142, 98, 62, 255})
+			box(nut, {0, 0.045, 0}, {0.012, 0.012, 0.09}, {112, 76, 50, 255})
+		}
 	}
 }
 
@@ -405,6 +484,7 @@ Animal_Pose :: struct {
 	held:        bool, // a leg runs to Prosio's hand
 	hand:        Vec3,
 	dizzy:       bool,
+	dead:        bool, // crosses for eyes
 }
 
 // Animal models share the same metre-independent frame (+Z is the muzzle).
@@ -417,6 +497,13 @@ draw_enemy :: proc(e: Enemy) {
 	pose := Animal_Pose{dizzy = e.state == .Dizzy || e.limp > 0 || e.ko}
 	if e.state == .Held {
 		pose = held_pose(e)
+	} else if e.state == .Dead {
+		pose.dead = true
+		// Flat out on its side, legs anyhow.
+		m := translate({e.pos.x, 0, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
+		body := m * translate({0.75, 0.5, 0}) * rot_z(-1.42)
+		pose.rear, pose.front = body, body * rot_y(0.25)
+		pose.legs = {{{0.5, 0.1}, {-0.4, 0.15}}, {{0.15, 0.5}, {-0.1, 0.6}}}
 	} else {
 		pace := e.state == .Chase ? min(length2(e.vel) / ENEMY_SPEED[e.kind], 1) : f32(0)
 		stride := math.sin(e.hop) * pace
@@ -443,8 +530,10 @@ draw_enemy :: proc(e: Enemy) {
 		draw_turkey(pose, e)
 	case .Goat, .Billy:
 		draw_goat(pose, e)
+	case .Fox:
+		draw_fox(pose, e)
 	}
-	if e.state == .Dizzy || (e.state == .Held && (e.limp > 0 || e.ko)) {
+	if !e.ko && (e.state == .Dizzy || (e.state == .Held && e.limp > 0)) {
 		head := pose.front * [4]f32{0, 2.3, 0.6, 1}
 		draw_stars(head.xyz, r * 0.75, e.home.x * 1.7 + e.home.y)
 	}
@@ -499,6 +588,7 @@ held_pose :: proc(e: Enemy) -> (pose: Animal_Pose) {
 	pose.held = true
 	pose.hand = e.chain[0]
 	pose.dizzy = e.limp > 0 || e.ko
+	pose.dead = e.ko
 	alive := !pose.dizzy
 	on_feet := alive && !held_up(e.kind) && e.chain[1].y < r * c[1].y + 0.05
 	for si in 0 ..< 2 {
@@ -619,7 +709,7 @@ draw_turkey :: proc(pose: Animal_Pose, e: Enemy) {
 	ball(h, {0, -0.25, 0.08}, {0.1, 0.15, 0.1}, TURKEY_RED)
 	ball(pose.front, {0, 1.55, 0.66}, {0.1, 0.14, 0.08}, TURKEY_RED)
 	for side in ([2]f32{-1, 1}) {
-		draw_cute_eye(h * translate({side * 0.15, 0.06, 0.18}) * rot_y(side * 0.5), 0.085, pose.dizzy)
+		draw_cute_eye(h * translate({side * 0.15, 0.06, 0.18}) * rot_y(side * 0.5), 0.085, pose.dizzy, pose.dead)
 		if cross && !pose.dizzy {
 			// A cross little brow.
 			brow := h * translate({side * 0.14, 0.17, 0.2}) * rot_z(-side * 0.45)
@@ -695,7 +785,7 @@ draw_goat :: proc(pose: Animal_Pose, e: Enemy) {
 		ear := h * translate({side * 0.27, 0.06, -0.04}) * rot_z(side * 1.2)
 		ball(ear, {0, 0.16, 0}, {0.07, 0.18, 0.1}, coat)
 		ball(ear, {0, 0.17, 0.04}, {0.04, 0.12, 0.05}, GOAT_PINK)
-		draw_cute_eye(h * translate({side * 0.19, 0.08, 0.22}) * rot_y(side * 0.55), 0.09, pose.dizzy)
+		draw_cute_eye(h * translate({side * 0.19, 0.08, 0.22}) * rot_y(side * 0.55), 0.09, pose.dizzy, pose.dead)
 		if billy {
 			// Great horns curling back and round.
 			prev := Vec3{side * 0.12, 0.24, 0.02}
@@ -718,7 +808,14 @@ draw_goat :: proc(pose: Animal_Pose, e: Enemy) {
 
 // A big glossy cartoon eye: a dark oval with a large and a small highlight.
 // Shut tight when dizzy.
-draw_cute_eye :: proc(m: Mat4, size: f32, shut: bool) {
+draw_cute_eye :: proc(m: Mat4, size: f32, shut: bool, dead := false) {
+	if dead {
+		// Two little crosses: it will not be getting up again.
+		for turn in ([2]f32{-0.8, 0.8}) {
+			box(m * rot_z(turn), {0, 0, 0.02}, {size * 1.5, size * 0.3, size * 0.3}, ANIMAL_INK)
+		}
+		return
+	}
 	if shut {
 		box(m, {0, 0, 0.02}, {size * 1.1, size * 0.18, size * 0.3}, ANIMAL_INK)
 		return
@@ -737,10 +834,13 @@ draw_smile :: proc(m: Mat4, size: f32) {
 }
 
 // Prosio is short and stocky: short legs, a compact body and a big head.
+EAR_DROOP :: f32(2.9) // how far his ears hang over, in radians from straight up: almost straight down
 LEG_SCALE :: f32(0.86) // leg length, as a share of the old, longer legs
 TORSO_SCALE :: f32(0.84) // the body from hips to neck, likewise
 HIP :: f32(0.47) // hip height in the body's own measurements
 SHOULDER_HEIGHT :: HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE // above his feet
+
+HIDE_TAN :: Color{214, 146, 116, 255}
 
 draw_prosio :: proc() {
 	p := &g.prosio
@@ -752,7 +852,16 @@ draw_prosio :: proc() {
 	defer if flashing {
 		set_hit_flash(0)
 	}
-	t := fatness(p.kg)
+	t := fatness()
+	// A tough hide is a darker, rougher one.
+	skin := blend(COLOR_SKIN, HIDE_TAN, p.trait[.Hide] * 0.7)
+	skin_dark := blend(COLOR_SKIN_DARK, shade(HIDE_TAN, 0.85), p.trait[.Hide] * 0.7)
+	if too_much(.Vitamins) && p.fail == .None {
+		// Too many vitamins: he glows orange.
+		glow := 0.6 + 0.15 * math.sin(g.time * 5)
+		skin = blend(skin, {255, 150, 40, 255}, glow)
+		skin_dark = blend(skin_dark, {230, 110, 30, 255}, glow)
+	}
 	r := prosio_radius(p.kg)
 	wob := p.wobble
 
@@ -762,7 +871,7 @@ draw_prosio :: proc() {
 	// goes 0 to 1), then brings it up over his shoulder into the sack on his
 	// back (stow goes 0 to 1).
 	picking := p.pick_t > 0 && p.fail == .None
-	u := picking ? 1 - p.pick_t / PICK_TIME : 0
+	u := picking ? 1 - p.pick_t / max(p.pick_total, 0.01) : 0
 	reach_down := smooth(min(u * 2.2, 1))
 	stow := smooth(clamp(u * 2.2 - 1.2, 0, 1))
 	stoop := reach_down * (1 - stow)
@@ -776,17 +885,17 @@ draw_prosio :: proc() {
 	belly := (r - belly_out * 0.6) * lerp(0.8, 0.93, t)
 	chest := prosio_chest(p.kg)
 	hips := 0.3 + 0.1 * t
-	head := f32(0.43)
+	head := f32(0.46) // a big round head: he is drawn cute, kawaii style
 
 	base := translate({p.pos.x, p.height, p.pos.y}) * rot_y(p.facing)
 	m := base * translate({0, bob, 0})
 	eyes_closed := math.mod(g.time, 3.2) < 0.12
 	brow_tilt: f32 = 0 // positive is worried, negative is fierce
-	if p.kg < KG_MIN + KG_DANGER || p.kg > KG_MAX - KG_DANGER || p.winded {
+	if p.fat < FAT_DANGER || p.fat > FAT_MAX - FAT_DANGER || p.winded {
 		brow_tilt = 0.4
 	}
 	switch {
-	case p.fail == .Fainted:
+	case p.fail == .Fainted || p.fail == .Diet:
 		// Topples over onto his side.
 		a := smooth(p.fail_t / 0.5)
 		m = base * translate({a * 1.0, a * chest, 0}) * rot_z(a * 1.5)
@@ -798,6 +907,11 @@ draw_prosio :: proc() {
 		eyes_closed = true
 	case picking:
 		m = m * translate({0, -0.1 * stoop, 0}) * rot_x(0.55 * stoop)
+	case p.ache_t > 0:
+		// Doubled up with a tummy ache or a cramp.
+		m = m * rot_x(0.45) * rot_z(math.sin(g.time * 22) * 0.05)
+		eyes_closed = true
+		brow_tilt = 0.5
 	case p.dash_t > 0:
 		m = m * rot_x(0.2)
 		brow_tilt = -0.5
@@ -823,61 +937,56 @@ draw_prosio :: proc() {
 	// tapering to a cloven hoof. The knee bends a little as he walks, and in
 	// the air he tucks his legs up.
 	leg_x := 0.13 + 0.13 * t
-	leg_r := 0.1 + 0.06 * t
+	leg_r := (0.1 + 0.06 * t) * tone(.Legs, 0.85, 1.45) // thin when wasted, sturdy when built
 	for side in ([2]f32{-1, 1}) {
 		leg_swing := p.airborne ? -0.5 + side * 0.3 : side * swing
 		hip := m * translate({side * leg_x, HIP * LEG_SCALE, 0}) * rot_x(leg_swing)
 		bend := 0.03 + (p.airborne ? 0.12 : 0.07 * max(-side * swing, 0))
 		knee := Vec3{0, -0.23 * LEG_SCALE, bend}
 		ankle := Vec3{0, -0.41 * LEG_SCALE, 0}
-		taper(hip, {0, 0.06, 0}, knee, leg_r * 1.5, COLOR_SKIN)
-		ball(hip, knee, {leg_r * 0.95, leg_r * 0.95, leg_r * 0.95}, COLOR_SKIN)
-		taper(hip, knee, ankle, leg_r * 0.98, COLOR_SKIN)
-		for toe in ([2]f32{-1, 1}) {
-			ball(hip, {toe * leg_r * 0.42, -0.42 * LEG_SCALE, 0.05}, {leg_r * 0.64, 0.075, leg_r * 1.2}, COLOR_HOOF)
-		}
-		// The short leg of his shorts round the top of the thigh.
-		taper(hip, {0, 0.1, 0}, {0, -0.08, 0.02}, leg_r * 1.8, COLOR_SHORTS)
+		taper(hip, {0, 0.06, 0}, knee, leg_r * 1.5, skin)
+		ball(hip, knee, {leg_r * 0.95, leg_r * 0.95, leg_r * 0.95}, skin)
+		taper(hip, knee, ankle, leg_r * 0.98, skin)
+		draw_leg_outfit(hip, leg_r, knee, ankle)
 	}
 	// Everything above the hips: sat on the shorter legs, a little compacted.
 	m = m * translate({0, HIP * LEG_SCALE, 0}) * scale({1, TORSO_SCALE, 1}) * translate({0, -HIP, 0})
 
-	// Shorts over two round buttocks, with a crease between them at the back.
-	// They sit high, so his legs show below them.
-	ball(m, {0, 0.6, 0.05}, {hips * 0.95, 0.2, hips * 0.8}, COLOR_SHORTS)
+	// His own body first, whole, with nothing on: two round buttocks, the
+	// belly, and a chest that rises from the top of the belly to his
+	// shoulders. Clothes then go on over it in layers (see outfit.odin), each
+	// a little bigger than what it covers.
+	ball(m, {0, 0.6, 0.05}, {hips * 0.95 - LAYER, 0.2 - LAYER, hips * 0.8 - LAYER}, skin)
 	for side in ([2]f32{-1, 1}) {
-		ball(m, {side * hips * 0.42, 0.57, -hips * 0.25}, {hips * 0.58, 0.21, hips * 0.62}, COLOR_SHORTS)
+		ball(m, {side * hips * 0.42, 0.57, -hips * 0.25}, {hips * 0.58 - LAYER, 0.21 - LAYER, hips * 0.62 - LAYER}, skin)
 	}
+	ball(m, {0, 0.72, -hips * 0.86}, {0.08, 0.08, 0.08}, skin_dark) // curly tail, above the crease
+	ball(m, {0.06, 0.8, -hips * 0.9 - 0.04}, {0.05, 0.05, 0.05}, skin_dark)
+	draw_hips_outfit(m, hips)
 	belly_y := 0.26 + 0.2 * t
 	belly_mid := 0.86 + 0.04 * t // the belly hangs over the shorts, but not down to the knees
-	ball(m, {0, belly_mid, belly_out}, {belly * (1 + wob), belly_y * (1 - wob), belly * (1 + wob)}, COLOR_SKIN)
-	if t > 0.25 {
-		ball(m, {0, belly_mid - 0.08, belly_out + belly * (1 + wob)}, {0.045, 0.045, 0.03}, COLOR_SKIN_DARK)
+	ball(m, {0, belly_mid, belly_out}, {belly * (1 + wob), belly_y * (1 - wob), belly * (1 + wob)}, skin)
+	covered := SHIRT_LOOK[outfit.shirt].long || closed_coat() || outfit.over == .Apron
+	if t > 0.25 && !covered {
+		ball(m, {0, belly_mid - 0.08, belly_out + belly * (1 + wob)}, {0.045, 0.045, 0.03}, skin_dark)
 	}
-	// Cropped jacket follows the upper arc of his belly, with a narrow sewn hem.
+	// His chest follows the upper arc of his belly, and so does a shirt.
 	jacket := m * translate({0, belly_mid + belly_y * (1 - wob) * 0.51, belly_out})
 	jacket_w := max(chest, belly * (1 + wob) * 0.86 + 0.014)
 	jacket_h := max(0.33, 1.46 - (belly_mid + belly_y * (1 - wob) * 0.51))
-	set_surface(.Jacket)
-	draw_shape(.Hemisphere, jacket * scale({jacket_w, jacket_h, jacket_w}), COLOR_SHIRT)
-	set_surface(.Solid)
-	draw_shape(.Cylinder, jacket * scale({jacket_w, 0.044, jacket_w}), {175, 115, 60, 255})
-	// The kerchief sits just below his chin.
-	ball(m, {0, 1.40, 0.03}, {chest * 0.74, 0.095, chest * 0.72}, COLOR_HEADBAND)
-	knot := m * translate({chest * 0.56, 1.39, 0.11}) * rot_z(0.44)
-	ball(knot, {0, -0.06, 0.035}, {0.07, 0.14, 0.055}, COLOR_HEADBAND)
-	// Small canvas pack with a flap and brass clasp, visible from behind.
-	pack := m * translate({0, 1.15, -max(chest * 0.78, belly * 0.64)})
+	draw_shape(.Hemisphere, jacket * scale({jacket_w - LAYER, jacket_h - LAYER * 0.5, jacket_w - LAYER}), skin)
+	draw_torso_outfit(m, jacket, jacket_w, jacket_h, chest, belly * (1 + wob), belly_y * (1 - wob), belly_mid, belly_out, hips, swing, skin)
+	// Small canvas pack with a flap and brass clasp, visible from behind; it
+	// sits outside whatever he wears.
+	pack := m * translate({0, 1.15, -max(chest * 0.78, belly * 0.64) - clothes_thickness() - (outfit.over == .Cape ? f32(0.1) : 0)})
 	ball(pack, {}, {0.235, 0.255, 0.135}, COLOR_SHORTS)
 	ball(pack, {0, 0.077, -0.069}, {0.232, 0.123, 0.093}, {89, 133, 126, 255})
 	box(pack, {0, 0.031, -0.165}, {0.047, 0.065, 0.016}, COLOR_SHIRT)
-	ball(m, {0, 0.72, -hips * 0.86}, {0.08, 0.08, 0.08}, COLOR_SKIN_DARK) // curly tail, above the crease
-	ball(m, {0.06, 0.8, -hips * 0.9 - 0.04}, {0.05, 0.05, 0.05}, COLOR_SKIN_DARK)
 
 	// Set the wrist and elbow outside the current belly cross section. All
 	// points are in the same local frame as the wobbling torso, so squash,
 	// spin, facing and the push-up tilt are applied to the whole rig together.
-	arm_r := lerp(0.1, 0.135, t)
+	arm_r := lerp(0.1, 0.135, t) * tone(.Arms, 0.78, 1.5) // noodles when wasted, bulging when built
 	belly_width := belly * (1 + wob)
 	belly_height := belly_y * (1 - wob)
 	for side in ([2]f32{-1, 1}) {
@@ -936,17 +1045,16 @@ draw_prosio :: proc() {
 
 		}
 		// Chubby arms: a plump upper arm with a round biceps, narrowing to
-		// the elbow, then a forearm narrowing to the hoof. A short sleeve
-		// covers the top of the arm.
-		taper(m, shoulder, elbow, arm_r * 1.75, COLOR_SKIN)
-		ball(m, shoulder + (elbow - shoulder) * 0.45, {arm_r * 1.45, arm_r * 1.45, arm_r * 1.45}, COLOR_SKIN)
-		ball(m, elbow, {arm_r * 1.05, arm_r * 1.05, arm_r * 1.05}, COLOR_SKIN)
-		taper(m, elbow, hand, arm_r * 1.12, COLOR_SKIN)
-		sleeve_end := shoulder + (elbow - shoulder) * 0.4
-		ball(m, shoulder, {arm_r * 1.8, arm_r * 1.8, arm_r * 1.8}, COLOR_SHIRT)
-		taper(m, shoulder, sleeve_end, arm_r * 1.95, COLOR_SHIRT)
+		// the elbow, then a forearm narrowing to the hoof; a round shoulder
+		// joins it to his chest. Then the sleeve, if what he wears has one.
+		taper(m, shoulder, elbow, arm_r * 1.75, skin)
+		ball(m, shoulder + (elbow - shoulder) * 0.45, {arm_r * 1.45, arm_r * 1.45, arm_r * 1.45}, skin)
+		ball(m, elbow, {arm_r * 1.05, arm_r * 1.05, arm_r * 1.05}, skin)
+		taper(m, elbow, hand, arm_r * 1.12, skin)
+		ball(m, shoulder, {arm_r * 1.7, arm_r * 1.7, arm_r * 1.7}, skin)
+		draw_sleeve(m, shoulder, elbow, hand, arm_r)
 		ball(m, hand, {arm_r * 1.1, 0.1, arm_r * 1.15}, COLOR_HOOF)
-		if picking && side == HOLD_SIDE && u > 0.45 {
+		if picking && !p.drinking && side == HOLD_SIDE && u > 0.45 {
 			// What he picked up, in his hoof.
 			ball(m, hand + {0, 0.1, 0.04}, {0.11, 0.11, 0.11}, ITEM_COLOR[p.pick_item])
 		}
@@ -959,39 +1067,45 @@ draw_prosio :: proc() {
 	if picking {
 		h = h * rot_x(0.3 * stoop) // looking at what he picks up
 	}
-	ball(h, {0, 0, 0}, {cheeks, head * 0.95, head}, COLOR_SKIN)
-	// A vermilion head cloth, with a knot and two loose ends behind one ear.
-	// A swept forelock gives his head an asymmetric outline in profile.
-	lock := h * translate({-0.075, 0.34, -0.028}) * rot_z(0.64)
-	ball(lock, {}, {0.098, 0.143, 0.12}, {165, 104, 82, 255})
-	limb(lock, {0, 0.006, 0}, {-0.065, 0.152, -0.039}, 0.047, {165, 104, 82, 255})
-	band := h * rot_z(-0.075)
-	ball(band, {0, 0.195, -0.01}, {cheeks * 0.94, 0.145, head * 0.97}, COLOR_HEADBAND)
-	ball(band, {0.34, 0.19, -0.23}, {0.087, 0.069, 0.083}, COLOR_HEADBAND)
-	flutter := 0.036 * math.sin(g.time * 4.0) + 0.035 * swing
-	limb(band, {0.35, 0.18, -0.24}, {0.48, 0.06 + flutter, -0.4}, 0.055, COLOR_HEADBAND)
-	limb(band, {0.35, 0.18, -0.24}, {0.32, -0.04 - flutter, -0.43}, 0.049, COLOR_HEADBAND)
+	ball(h, {0, 0, 0}, {cheeks, head * 0.95, head}, skin)
+	draw_hair(h, cheeks, head, swing)
+	draw_hat(h, h * rot_z(-0.075), cheeks, head, swing)
 	for side in ([2]f32{-1, 1}) {
-		ear := h * translate({side * cheeks * 0.66, 0.27, -0.02}) * rot_z(-side * 0.6)
-		draw_shape(.Cone, ear * scale({0.157, 0.28, 0.109}), COLOR_SKIN)
-		draw_shape(.Cone, ear * translate({0, 0.025, 0.068}) * scale({0.104, 0.18, 0.054}), COLOR_SKIN_DARK)
-		if eyes_closed {
-			box(h, {side * 0.16, 0.06, 0.37}, {0.14, 0.03, 0.03}, COLOR_BLACK)
-		} else {
-			ball(h, {side * 0.17, 0.074, 0.365}, {0.09, 0.103, 0.069}, COLOR_WHITE)
-			ball(h, {side * 0.17, 0.076, 0.413}, {0.055, 0.080, 0.040}, COLOR_BLACK)
-			ball(h, {side * 0.17 - 0.014, 0.107, 0.448}, {0.02, 0.02, 0.012}, COLOR_WHITE)
+		// Floppy ears: they hang down beside his cheeks, flap a little as he
+		// walks, and fly up when he falls.
+		droop := EAR_DROOP + (walking ? 0.14 * math.sin(p.walk_phase * 2 + side) : 0.03 * math.sin(g.time * 2 + side))
+		if p.airborne {
+			droop = clamp(1.5 + p.vy * 0.09, 0.6, EAR_DROOP)
 		}
-		// Eyebrows show how he feels.
-		brow := h * translate({side * 0.16, 0.2, 0.35}) * rot_z(side * brow_tilt)
-		box(brow, {0, 0, 0}, {0.12, 0.025, 0.03}, COLOR_HOOF)
-		cheek := h * translate({side * cheeks * 0.67, -0.077, 0.293}) * rot_y(side * 0.68)
-		ball(cheek, {}, {0.088, 0.047, 0.034}, COLOR_BLUSH)
-		ball(h, {side * 0.067, -0.077, 0.532}, {0.027, 0.037, 0.018}, COLOR_NOSTRIL)
+		root := Vec3{side * cheeks * 0.86, 0.24, -0.02}
+		ear := h * translate(root) * rot_x(0.15) * rot_z(-side * droop)
+		ball(ear, {0, 0.19, 0}, {0.14, 0.22, 0.055}, skin) // a soft rounded flap
+		ball(ear, {0, 0.2, 0.03}, {0.09, 0.15, 0.035}, skin_dark)
+		// Big glossy eyes, set wide and low.
+		if eyes_closed {
+			box(h, {side * 0.19, 0.03, 0.42}, {0.13, 0.028, 0.03}, COLOR_BLACK)
+		} else {
+			eye := h * translate({side * 0.19, 0.035, 0.385}) * rot_y(side * 0.3)
+			ball(eye, {}, {0.085, 0.115, 0.06}, COLOR_BLACK)
+			ball(eye, {-0.026, 0.045, 0.045}, {0.034, 0.04, 0.02}, COLOR_WHITE)
+			ball(eye, {0.028, -0.042, 0.05}, {0.016, 0.016, 0.01}, COLOR_WHITE)
+		}
+		// Little eyebrows show how he feels.
+		brow := h * translate({side * 0.19, 0.21, 0.37}) * rot_z(side * brow_tilt)
+		box(brow, {0, 0, 0}, {0.09, 0.022, 0.03}, COLOR_HOOF)
+		// Rosy cheeks.
+		cheek := h * translate({side * cheeks * 0.62, -0.1, 0.31}) * rot_y(side * 0.6)
+		ball(cheek, {}, {0.105, 0.06, 0.034}, ANIMAL_BLUSH)
+		ball(h, {side * 0.06, -0.085, 0.53}, {0.024, 0.033, 0.018}, COLOR_NOSTRIL)
 	}
-	ball(h, {0, -0.09, 0.404}, {0.182, 0.122, 0.141}, COLOR_SKIN_DARK)
-	if p.eat_t > 0 || p.airborne {
-		ball(h, {0, -0.23, 0.33}, {0.06, 0.05, 0.03}, COLOR_NOSTRIL) // open mouth
+	ball(h, {0, -0.1, 0.415}, {0.165, 0.112, 0.13}, skin_dark)
+	draw_face_outfit(h, cheeks)
+	switch {
+	case p.eat_t > 0 || p.airborne:
+		ball(h, {0, -0.235, 0.35}, {0.06, 0.05, 0.03}, COLOR_NOSTRIL) // open mouth
+	case p.strain > 0.5 || p.heave_t > 0 || eyes_closed && p.fail != .None:
+	case outfit.face == .None:
+		draw_smile(h * translate({0, -0.235, 0.37}), 0.05) // a small contented smile
 	}
 	if p.strain > 0.5 || p.heave_t > 0 {
 		ball(h, {0, -0.22, 0.34}, {0.09, 0.025, 0.03}, COLOR_WHITE) // gritted teeth
@@ -1001,7 +1115,7 @@ draw_prosio :: proc() {
 	if p.dazed_t > 0 {
 		draw_stars(head_top, 0.45, 3.3)
 	}
-	if p.fail == .Fainted && p.fail_t > 0.4 {
+	if (p.fail == .Fainted || p.fail == .Diet) && p.fail_t > 0.4 {
 		draw_stars({p.pos.x, p.height + 1.3, p.pos.y}, 0.6, 5.1)
 	}
 	if p.fail == .Heart_Attack && p.fail_t > 0.4 {
@@ -1024,4 +1138,92 @@ draw_particles :: proc() {
 		ball(IDENTITY, p.pos, {s, s, s}, p.color)
 	}
 	outlines_enabled = true
+}
+
+FOX_COAT :: Color{212, 116, 55, 255}
+FOX_FEET :: Color{84, 60, 52, 255}
+
+// A fox: a slim rust-red body, dark feet, a bushy white-tipped tail and a
+// big head with pointed ears. With something stolen, it carries it in its
+// mouth. Held, one hind leg runs to Prosio's hand.
+draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
+	coat, feet, cream, ink := FOX_COAT, FOX_FEET, ANIMAL_CREAM, ANIMAL_INK
+	r := ENEMY_RADIUS[e.kind]
+	for si in 0 ..< 2 {
+		side := f32(si * 2 - 1)
+		for ei in 0 ..< 2 {
+			end := f32(ei * 2 - 1)
+			if pose.held && si == 1 && ei == 0 {
+				hip := pose.rear * [4]f32{GRIP_ROOT[e.kind].x, GRIP_ROOT[e.kind].y, GRIP_ROOT[e.kind].z, 1}
+				limb(IDENTITY, hip.xyz, pose.hand, 0.12 * r, coat)
+				ball(IDENTITY, pose.hand, {0.1, 0.1, 0.1} * r, feet)
+				continue
+			}
+			turn := pose.legs[si][ei]
+			frame := end < 0 ? pose.rear : pose.front
+			leg := frame * translate({side * 0.34, 0.77, end * 0.59}) * rot_z(turn.y) * rot_x(turn.x)
+			knee := Vec3{0, -0.35, end < 0 ? -0.10 : 0.05}
+			paw := Vec3{0, -0.69, 0.04}
+			taper(leg, {0, 0.05, 0}, knee, 0.2, coat)
+			taper(leg, knee, paw, 0.12, feet)
+			ball(leg, paw + {0, 0, 0.035}, {0.12, 0.105, 0.16}, feet)
+		}
+	}
+	// The body in three overlapping parts, so it can bend in the middle.
+	ball(pose.rear, {0, 0.97, -0.45}, {0.51, 0.53, 0.6}, coat)
+	ball(pose.rear, {0, 0.98, -0.07}, {0.5, 0.52, 0.45}, coat)
+	ball(pose.front, {0, 0.99, 0.27}, {0.5, 0.52, 0.56}, coat)
+	limb(pose.front, {0, 1.07, 0.36}, {0, 1.47, 0.64}, 0.40, cream)
+	wag: f32 = pose.dead ? 0 : 0.39 + 0.20 * math.sin(e.hop * 0.52)
+	tail := pose.rear * translate({0, 1.04, -0.75}) * rot_y(wag)
+	limb(tail, {0, 0, 0.07}, {0, 0.30, -1.12}, 0.305, coat)
+	limb(tail, {0, 0.26, -0.87}, {0, 0.53, -1.43}, 0.20, cream)
+
+	h := pose.front * translate({0, 1.51, 0.65}) * scale({1.12, 1.12, 1.12}) // a big head is a cute head
+	if pose.held && !pose.dizzy {
+		h = h * rot_y(0.3 * math.sin(e.hop * 0.7)) // looking wildly about
+	}
+	ball(h, {0, 0, 0}, {0.51, 0.44, 0.47}, coat)
+	ball(h, {0, -0.15, 0.31}, {0.36, 0.21, 0.35}, cream)
+	ball(h, {0, -0.10, 0.58}, {0.19, 0.15, 0.22}, coat)
+	ball(h, {0, -0.095, 0.76}, {0.12, 0.083, 0.078}, ink)
+	for side in ([2]f32{-1, 1}) {
+		ear := h * translate({side * 0.31, 0.28, -0.14}) * rot_z(-side * 0.24)
+		draw_shape(.Cone, ear * scale({0.215, 0.63, 0.185}), coat)
+		draw_shape(.Cone, ear * translate({0, 0.059, 0.106}) * scale({0.139, 0.44, 0.077}), ink)
+		patch := h * translate({side * 0.32, -0.085, 0.265}) * rot_z(side * 0.32)
+		ball(patch, {}, {0.23, 0.16, 0.18}, cream)
+		draw_cute_eye(h * translate({side * 0.24, 0.07, 0.36}) * rot_y(side * 0.45), 0.13, pose.dizzy, pose.dead)
+		ball(h, {side * 0.3, -0.12, 0.31}, {0.085, 0.045, 0.035}, ANIMAL_BLUSH)
+	}
+	if e.has_loot {
+		// What it stole, in its mouth.
+		color := ITEM_COLOR[e.loot] // (things that are made have no colour of their own here)
+		ball(h, {0, -0.24, 0.78}, {0.3, 0.22, 0.22}, color.a > 0 ? color : CRUST)
+	} else {
+		draw_smile(h * translate({0, -0.2, 0.62}), 0.06)
+	}
+}
+
+SALT_PINK :: Color{250, 196, 212, 255}
+
+// A big grey rock with rock salt growing on it: a white crust all the time,
+// and big pink crystals standing up out of it when there is some to take.
+draw_salt_rock :: proc(r: Round, index: int) {
+	m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(index) * 1.3)
+	draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
+	set_surface(.Solid)
+	// The crust, in patches over the top.
+	for k in 0 ..< 5 {
+		a := f32(k) * 1.26
+		ball(m, {math.cos(a) * r.r * 0.45, r.r * 0.86 - 0.05 * f32(k % 2), math.sin(a) * r.r * 0.4}, {0.22, 0.07, 0.2}, COLOR_WHITE)
+	}
+	for k in 0 ..< r.fruit {
+		// A cluster of crystals for each lump, standing on the rock.
+		side := f32(k) * 2 - 1
+		c := m * translate({side * r.r * 0.36, r.r * 0.88, 0.1 * side}) * rot_y(side * 0.7)
+		draw_shape(.Cube, c * translate({0, 0.34, 0}) * rot_z(0.15 * side) * scale({0.34, 0.74, 0.34}), SALT_PINK)
+		draw_shape(.Cube, c * translate({0.26, 0.2, 0.1}) * rot_z(-0.35) * scale({0.22, 0.44, 0.22}), shade(SALT_PINK, 0.92))
+		draw_shape(.Cube, c * translate({-0.22, 0.16, 0.13}) * rot_z(0.4) * scale({0.18, 0.34, 0.18}), COLOR_WHITE)
+	}
 }

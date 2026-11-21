@@ -3,7 +3,7 @@ package game
 import "core:math"
 
 MAX_ENEMIES :: 40
-EGG_EVERY :: Vec2{100, 220} // a turkey lays an egg every so many seconds, at random in this range
+EGG_EVERY :: Vec2{600, 1200} // a turkey lays an egg every so many seconds, at random in this range: only now and then
 SHAKE_EGG :: f32(0.2) // chance that shaking a held turkey shakes an egg out of it
 AWAKE :: f32(42) // animals further than this from Prosio rest
 
@@ -21,11 +21,13 @@ BONK :: f32(31)
 WEAK_HIT :: f32(3)
 
 // Bad-tempered turkeys live in Turkey Meadow and roam the open meadow, laying
-// eggs as they go; goats keep to the goat hills, led by a big billy goat.
+// eggs as they go; goats keep to the goat hills, led by a big billy goat;
+// and foxes lurk in the forest, after what is in his sack.
 Enemy_Kind :: enum {
 	Turkey,
 	Goat,
 	Billy,
+	Fox,
 }
 
 // How a turkey hunts. Like wolves round their prey, the turkeys near Prosio
@@ -46,6 +48,7 @@ Enemy_State :: enum {
 	Flying,
 	Dizzy,
 	Held, // in Prosio's hands
+	Dead, // knocked out for good: its body lies there, to be dragged to the fire
 	Gone,
 }
 
@@ -76,7 +79,15 @@ Enemy :: struct {
 	side:      Vec3, // which way its side points
 	dangle:    [2]Vec3, // which way the hind and the front legs hang
 	limp:      f32, // bashed about: limp for this long
+	hurt:      f32, // stomp damage taken; it wears off (see ENEMY_TOUGH)
 	egg_t:     f32, // a turkey lays an egg when this runs out
+	scared_t:  f32, // running from Prosio's wind for this long
+	licking:   bool, // a goat, licking the salt off him
+	body_t:    f32, // how much longer its body lies there
+	milk_t:    f32, // a goat has milk again when this runs out
+	has_loot:  bool, // a fox, with something out of his sack in its mouth
+	loot:      Item,
+	loot_kcal: f32,
 }
 
 // A big farm turkey, a goat, and the billy goat, who weighs more than an
@@ -85,22 +96,47 @@ ENEMY_KG := [Enemy_Kind]f32 {
 	.Turkey = 16,
 	.Goat   = 55,
 	.Billy  = 95,
+	.Fox    = 20,
 }
 ENEMY_RADIUS := [Enemy_Kind]f32 {
 	.Turkey = 0.42,
 	.Goat   = 0.62,
 	.Billy  = 0.78,
+	.Fox    = 0.45,
 }
 ENEMY_SPEED := [Enemy_Kind]f32 {
 	.Turkey = 2.8,
 	.Goat   = 2.3,
 	.Billy  = 2.0,
+	.Fox    = 3.4,
 }
 ENEMY_GRIP := [Enemy_Kind]f32 {
 	.Turkey = 560,
 	.Goat   = 450,
 	.Billy  = 500,
+	.Fox    = 600,
 }
+// Knocked out, a turkey or a goat is dead: its body lies where it fell for
+// BODY_LIFE, and chopped up at the fire it gives this many pieces of meat. A
+// fox only slinks off for a while. Another animal takes a dead one's place,
+// but not for a good while (seconds, somewhere in this range): so hunting
+// thins the flock, and with it the eggs.
+MEAT_FROM := [Enemy_Kind]int {
+	.Turkey = 2,
+	.Goat   = 5,
+	.Billy  = 8,
+	.Fox    = 0,
+}
+RESPAWN := [Enemy_Kind]Vec2 {
+	.Turkey = {300, 480},
+	.Goat   = {480, 720},
+	.Billy  = {600, 900},
+	.Fox    = {60, 120},
+}
+BODY_LIFE :: f32(240)
+MILK_EVERY :: f32(180) // seconds until a milked goat has milk again
+FOX_NOTICE :: f32(13) // how far off a fox scents his sack
+FOX_REST :: f32(25) // seconds a fox keeps away after a theft or a fright
 // An enemy bumped at least this fast is knocked out. A heavy animal needs
 // less speed: it hits the ground that much harder. A turkey is knocked out
 // by a bump from a Prosio of about 90 kg, a goat about 95 kg, and the billy
@@ -109,6 +145,7 @@ ENEMY_KO_SPEED := [Enemy_Kind]f32 {
 	.Turkey = 15,
 	.Goat   = 6,
 	.Billy  = 4,
+	.Fox    = 12,
 }
 
 add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
@@ -118,7 +155,7 @@ add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
 		home = home,
 		turn = g.enemy_count % 2 == 0 ? 1 : -1,
 		hunt_t = random_range(1.5, 3),
-		egg_t = random_range(EGG_EVERY.x * 0.3, EGG_EVERY.y),
+		egg_t = random_range(30, EGG_EVERY.y),
 	}
 	g.enemy_count += 1
 }
@@ -145,6 +182,14 @@ spawn_enemies :: proc() {
 			placed += 1
 		}
 	}
+	// Foxes, each with its den somewhere in the forest.
+	for placed, tries := 0, 0; placed < 5 && tries < 500; tries += 1 {
+		pos := spot_in(.Forest, 0.85)
+		if clear_spot(pos, 1) {
+			add_enemy(.Fox, pos)
+			placed += 1
+		}
+	}
 }
 
 // How fast a hit with this much momentum throws an enemy.
@@ -155,6 +200,7 @@ bump_speed :: proc(momentum: f32, kind: Enemy_Kind) -> f32 {
 // Sends an enemy flying. It is knocked out if it leaves at ko_speed or more
 // (by default, the speed that knocks it out when bumped).
 launch_enemy :: proc(e: ^Enemy, dir: Vec2, speed: f32, ko_speed: f32 = -1) {
+	drop_loot(e)
 	e.state = .Flying
 	e.skip = false
 	e.vel = dir * speed
@@ -164,10 +210,14 @@ launch_enemy :: proc(e: ^Enemy, dir: Vec2, speed: f32, ko_speed: f32 = -1) {
 
 update_enemies :: proc(dt: f32) {
 	p := &g.prosio
+	licked := false
 
 	for &e, index in g.enemies[:g.enemy_count] {
 		r := ENEMY_RADIUS[e.kind]
 		e.hit_t -= dt
+		e.scared_t -= dt
+		e.milk_t -= dt
+		e.hurt = max(e.hurt - HEAL_RATE * dt, 0)
 		switch e.state {
 		case .Gone:
 			e.timer -= dt
@@ -176,11 +226,25 @@ update_enemies :: proc(dt: f32) {
 				e.pos = e.home
 				e.vel = {}
 				e.y = 0
+				e.ko = false
+				e.hurt = 0
+				e.limp = 0
+				e.body_t = 0
 				burst({e.pos.x, 0.5, e.pos.y}, 10, 3, COLOR_DUST, 0.14)
 			}
 
 		case .Held:
 		// Carried: update_grab moves it.
+
+		case .Dead:
+			// Its body lies there until it is carried off, or is gone.
+			e.vel = {}
+			e.y = 0
+			e.body_t -= dt
+			if e.body_t <= 0 {
+				burst({e.pos.x, 0.3, e.pos.y}, 8, 2, COLOR_DUST, 0.12)
+				leave(&e)
+			}
 
 		case .Chase:
 			e.timer -= dt
@@ -202,7 +266,7 @@ update_enemies :: proc(dt: f32) {
 				continue
 			}
 			target := chase_velocity(&e, index, dt)
-			accel: f32 = e.kind == .Turkey ? 14 : 10
+			accel: f32 = e.kind == .Goat || e.kind == .Billy ? 10 : 14
 			e.vel = approach2(e.vel, target, accel * dt)
 			e.pos += e.vel * dt
 			speed := length2(e.vel)
@@ -238,7 +302,19 @@ update_enemies :: proc(dt: f32) {
 				e.stuck_from = e.pos
 			}
 			e.y = 0
-			touch_prosio(&e, true)
+			if e.licking {
+				// A rough tongue takes the salt off him, bit by bit (however
+				// many goats there are, there is only so much to lick).
+				if !licked {
+					p.need[.Electrolytes] = max(p.need[.Electrolytes] - LICK * dt, 0)
+					licked = true
+				}
+				hint("Hee hee! That tickles!")
+				if math.mod(g.time + f32(index) * 0.37, 0.7) < dt {
+					spawn_particle({e.pos.x, 1.3, e.pos.y}, {0, 1, 0}, 0.8, 0.09, COLOR_HEART, 0)
+				}
+			}
+			touch_prosio(&e, e.scared_t <= 0 && !e.licking && e.kind != .Fox)
 
 		case .Flying:
 			e.vy -= GRAVITY * dt
@@ -304,10 +380,16 @@ update_enemies :: proc(dt: f32) {
 			e.timer -= dt
 			touch_prosio(&e, false)
 			if e.state == .Dizzy && e.timer <= 0 {
-				if e.ko {
-					e.state = .Gone
-					e.timer = 12
+				if e.ko && MEAT_FROM[e.kind] > 0 {
+					// That was the end of it: its body stays.
+					e.state = .Dead
+					if e.body_t <= 0 {
+						e.body_t = BODY_LIFE
+						burst({e.pos.x, 0.6, e.pos.y}, 18, 5, COLOR_STAR, 0.15)
+					}
+				} else if e.ko {
 					burst({e.pos.x, 0.6, e.pos.y}, 18, 5, COLOR_STAR, 0.15)
+					leave(&e)
 				} else {
 					e.state = .Chase
 					e.timer = 0.5
@@ -350,8 +432,29 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 	speed := ENEMY_SPEED[e.kind]
 	to := p.pos - e.pos
 	dist := length2(to)
-	goat := e.kind != .Turkey
-	if p.fail != .None || dist > 11 || (goat && dist > 8) {
+	goat := e.kind == .Goat || e.kind == .Billy
+	e.licking = false
+	toward := to / max(dist, 0.001)
+	if e.scared_t > 0 && p.fail == .None {
+		// His wind has reached it: away, as fast as its legs will go.
+		e.hunt = .Retreat
+		e.hunt_t = 0.5
+		return dist < 16 ? -toward * speed * 1.7 : Vec2{}
+	}
+	if e.kind == .Fox {
+		return fox_velocity(e, dist, toward)
+	}
+	if goat && salty() && dist < 16 {
+		// A salty pig! It trots up and licks him, and has no mind to butt.
+		e.hunt = .Stalk
+		e.hunt_t = 1
+		reach := prosio_radius(p.kg) + ENEMY_RADIUS[e.kind] + 0.15
+		e.licking = dist < reach + 0.3
+		return dist > reach ? toward * speed * 1.2 + keep_apart(e, index) * speed * 0.5 : Vec2{}
+	}
+	// Glowing orange with vitamins, he is spotted from further off.
+	notice: f32 = too_much(.Vitamins) ? GLOW_NOTICE : 1
+	if p.fail != .None || dist > 11 * notice || (goat && dist > 8 * notice) {
 		// Nothing to hunt: amble home. When it spots him again it first
 		// takes its time to fan out round him.
 		e.hunt = .Stalk
@@ -369,7 +472,6 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 		return {}
 	}
 	e.hunt_t -= dt
-	toward := to / max(dist, 0.001)
 	if goat {
 		return goat_velocity(e, index, dist, toward)
 	}
@@ -426,6 +528,134 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 		return normalize2(-toward + side * 0.6 + keep_apart(e, index)) * speed * 1.15
 	}
 	return {}
+}
+
+// A fox does not fight: it steals. It comes up on him from wherever he is
+// not looking, and stands stock still whenever he turns to look at it. If it
+// reaches him it has the best thing out of his sack and is off to its den
+// with it, where it eats it. A bump, a grab, a stomp, anything thrown at it,
+// or his wind, and it lets go.
+fox_velocity :: proc(e: ^Enemy, dist: f32, toward: Vec2) -> Vec2 {
+	p := &g.prosio
+	speed := ENEMY_SPEED[.Fox]
+	home := e.home - e.pos
+	if e.has_loot {
+		if length2(home) < 1.2 {
+			e.has_loot = false
+			e.timer = FOX_REST
+			if dist < 40 {
+				say_named("Oh no! The fox ate my %s!", ITEM_NAME[e.loot])
+			}
+			return {}
+		}
+		return normalize2(home) * speed * 1.5
+	}
+	buf: [len(Item)]Item
+	if p.fail != .None || dist > FOX_NOTICE || e.timer > 0 || len(owned_items(&buf)) == 0 {
+		return length2(home) > 1 ? normalize2(home) * speed * 0.5 : Vec2{}
+	}
+	if dist < prosio_radius(p.kg) + ENEMY_RADIUS[.Fox] + 0.2 {
+		steal(e)
+		return -toward * speed * 1.5
+	}
+	seen := dot2(facing_dir(p.facing), -toward) // 1 when he looks straight at it
+	if seen > 0.5 && dist < 8 {
+		return {} // caught in the open: it freezes, all innocence
+	}
+	return toward * speed * (dist < 5 ? 1.3 : 0.8)
+}
+
+// The fox has the richest thing in his sack.
+steal :: proc(e: ^Enemy) {
+	p := &g.prosio
+	best: Item
+	best_kcal := f32(-1)
+	for count, item in p.sack {
+		if kcal := sack_piece_kcal(item); count > 0 && kcal > best_kcal {
+			best, best_kcal = item, kcal
+		}
+	}
+	if best_kcal < 0 {
+		return
+	}
+	e.loot = best
+	e.loot_kcal = sack_take(best, 1)
+	e.has_loot = true
+	sack_step(0)
+	say_named("Hey! The fox took my %s!", ITEM_NAME[best])
+	burst({p.pos.x, p.height + 1.2, p.pos.y}, 6, 2.5, COLOR_STAR, 0.08)
+}
+
+// A fox that is hit or frightened lets go of what it stole, and Prosio has
+// it back.
+drop_loot :: proc(e: ^Enemy) {
+	if !e.has_loot {
+		return
+	}
+	e.has_loot = false
+	e.timer = FOX_REST
+	if g.prosio.sack[e.loot] < SACK_MAX {
+		sack_add(e.loot, e.loot_kcal)
+		sack_step(0)
+		say_named("Got my %s back!", ITEM_NAME[e.loot])
+	}
+}
+
+// It is gone, and another will not take its place for a good while.
+leave :: proc(e: ^Enemy) {
+	e.state = .Gone
+	e.timer = random_range(RESPAWN[e.kind].x, RESPAWN[e.kind].y)
+	e.has_loot = false
+}
+
+// E with an animal in his hand: a goat is milked; a dead turkey or goat is
+// chopped into meat, but only at the block by the fire.
+use_held_animal :: proc() {
+	p := &g.prosio
+	e := &g.enemies[p.carry_index]
+	switch {
+	case e.ko && MEAT_FROM[e.kind] == 0:
+		hint("Nobody eats fox.")
+	case e.ko:
+		if !station_in_reach(.Fire, p.pos, prosio_radius(p.kg) + 1.2) {
+			hint("The chopping block is by the fire, at the pond.")
+			return
+		}
+		room := SACK_MAX - p.sack[.Meat]
+		if room <= 0 {
+			hint("No room in my sack for meat!")
+			return
+		}
+		for _ in 0 ..< min(MEAT_FROM[e.kind], room) {
+			sack_add(.Meat, RAW_KCAL[.Meat])
+		}
+		p.sack_sel = .Meat
+		block := g.stations[.Fire].pos + FIRE_BLOCK.xz
+		burst({block.x, 0.7, block.y}, 12, 3, COLOR_STAR, 0.08)
+		leave(e)
+		p.carry = .Nothing
+		p.lift_t = 0
+		p.carry_kg = 0
+		p.swinging = false
+		say("Chop, chop, chop! Meat for the fire!", 1.8)
+	case e.kind == .Goat:
+		if e.milk_t > 0 {
+			hint("This goat has no milk just now.")
+		} else if p.sack[.Milk] >= SACK_MAX {
+			hint("No room in my sack for more milk!")
+		} else {
+			sack_add(.Milk, RAW_KCAL[.Milk])
+			sack_step(0)
+			e.milk_t = MILK_EVERY
+			train(.Hooves, MILK_WORK)
+			say("Squirt, squirt! A jug of milk!", 1.6)
+			burst(e.chain[1], 6, 1.5, COLOR_WHITE, 0.06)
+		}
+	case e.kind == .Billy:
+		hint("A billy goat gives no milk!")
+	case:
+		hint("Nothing to do with this one but bash or throw it.")
+	}
 }
 
 // A goat squares up to him, charges head down, and backs off again.
@@ -544,12 +774,15 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 			if p.carry == .Rock {
 				drop_carry()
 			}
+			// Well padded, he hardly feels it; all skin, it hurts the more.
+			felt := knock()
 			if !p.swinging {
-				p.vel = -away * min(BONK * ENEMY_KG[e.kind] / p.kg, 12)
+				p.vel = -away * min(BONK * ENEMY_KG[e.kind] / p.kg, 12) * min(felt, 1.3)
 			}
-			p.stamina -= 12
+			p.stamina -= 12 * felt
 			p.regen_delay = 0.4
-			burn(HURT_BURN)
+			burn(HURT_BURN * felt)
+			train(.Hide, KNOCK_WORK)
 			p.wobble_vel += 3
 			// After a shove he cannot be shoved again for a moment, so a
 			// crowd of enemies cannot keep him pinned down.
@@ -563,9 +796,9 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 				p.winded = false
 				say("Wooo... dizzy...", 1.2)
 			} else {
-				say(e.kind == .Turkey ? "Ouch! It pecked me!" : "Oof! Headbutt!", 0.9)
+				say(felt < 0.7 ? "Boing! It bounced off me!" : (e.kind == .Turkey ? "Ouch! It pecked me!" : "Oof! Headbutt!"), 0.9)
 			}
-			e.vel = away * 4
+			e.vel = away * (felt < 0.7 ? 7 : 4)
 			e.timer = 1.2
 			e.hunt = .Retreat // strike and fall back, like a wolf
 			e.hunt_t = random_range(0.8, 1.4)
@@ -612,7 +845,7 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 
 	launch_enemy(e, dir, speed)
 	// A heavy Prosio ploughs on; a lighter one is slowed more.
-	p.vel *= lerp(0.2, 0.75, fatness(p.kg))
+	p.vel *= lerp(0.2, 0.75, fatness())
 	g.shake = max(g.shake, min(speed * 0.04, 0.8))
 	burst({e.pos.x, 0.7, e.pos.y}, 6 + int(speed), 3 + speed * 0.2, COLOR_STAR, 0.12)
 	if e.ko {
@@ -622,40 +855,68 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 	}
 }
 
-// Prosio lands on top of enemies. A hard landing throws them; a soft one
-// leaves them dizzy, and he hops off either way.
-stomp_enemies :: proc(landing_speed: f32) {
+// Prosio comes down on an animal: the blow is his weight times the height
+// he came down from (the top of his jump), times STOMP_K. Every Prosio hits
+// as hard, since a heavy one cannot jump as high: weight times jump height
+// is always 36 (more with a rock in his arms). The damage adds up, and
+// wears off slowly; enough of it knocks the animal out.
+STOMP_K :: f32(1)
+HEAL_RATE :: f32(4) // damage that wears off each second
+// Stomp damage that knocks each out: two jumps for a turkey, four in quick
+// succession for a goat, and six for the billy goat.
+ENEMY_TOUGH := [Enemy_Kind]f32 {
+	.Turkey = 50,
+	.Goat   = 110,
+	.Billy  = 160,
+	.Fox    = 60,
+}
+
+// Checked as he falls: if he comes down on an animal, it takes the blow and
+// he bounces off. True if he did.
+stomp_enemies :: proc() -> bool {
 	p := &g.prosio
-	if landing_speed < 3 || p.fail != .None {
-		return
+	if p.fail != .None {
+		return false
 	}
 	pr := prosio_radius(p.kg)
-	stomped := false
+	damage: f32
+	hit, knocked_out := false, false
 	for &e in g.enemies[:g.enemy_count] {
-		if e.state != .Chase && e.state != .Dizzy {
-			continue
+		if (e.state != .Chase && e.state != .Dizzy) || e.hit_t > 0 {
+			continue // not on its feet, or just stomped: his bounce off it is not another stomp
 		}
+		r := ENEMY_RADIUS[e.kind]
+		above := p.height - e.y
 		d := e.pos - p.pos
 		dist := length2(d)
-		if dist >= pr + ENEMY_RADIUS[e.kind] * 0.9 {
+		if above > r * 2.1 || above < r * 0.6 || dist >= pr * 0.8 + r {
 			continue
 		}
 		away := dist > 1e-4 ? d / dist : facing_dir(p.facing)
-		speed := bump_speed(p.kg * landing_speed, e.kind)
-		if speed >= min(WEAK_HIT, ENEMY_KO_SPEED[e.kind]) {
-			launch_enemy(&e, away, speed)
+		damage = STOMP_K * total_kg() * max(p.peak - e.y, 0)
+		drop_loot(&e)
+		e.hurt += damage
+		e.hit_t = 0.9
+		share := min(e.hurt / ENEMY_TOUGH[e.kind], 1)
+		if e.hurt >= ENEMY_TOUGH[e.kind] {
+			launch_enemy(&e, away, 5, 0) // flattened: knocked out
+			e.vy = 3
+			knocked_out = true
 		} else {
 			e.state = .Dizzy
 			e.ko = false
-			e.timer = 1.8
+			e.timer = 0.8 + 2.5 * share
 			e.vel = away * 2
 		}
-		burst({e.pos.x, 0.7, e.pos.y}, 8, 4, COLOR_STAR, 0.12)
-		stomped = true
+		pain_stars({e.pos.x, e.y + r * 1.8, e.pos.y}, damage / 12)
+		burst({e.pos.x, e.y + 0.7, e.pos.y}, 4 + int(damage / 25), 3 + damage / 60, COLOR_STAR, 0.12)
+		hit = true
 	}
-	if stomped {
+	if hit {
 		p.vy = 5
-		p.airborne = true
-		say("STOMP!", 0.8)
+		p.peak = p.height
+		g.shake = max(g.shake, min(damage / 400, 0.6))
+		say(knocked_out ? "MEGA STOMP!" : "STOMP!", 0.8)
 	}
+	return hit
 }

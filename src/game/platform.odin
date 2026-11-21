@@ -41,6 +41,8 @@ Button :: enum {
 	Eat, // from the sack
 	Sack_Prev,
 	Sack_Next,
+	Bag, // the sack and outfit menu
+	Gas, // letting his wind go, once his gut is trained to hold it
 	Restart,
 	Menu,
 	Confirm,
@@ -61,6 +63,8 @@ KEYS := [Button][3]rl.KeyboardKey {
 	.Eat     = {.Q, .KEY_NULL, .KEY_NULL},
 	.Sack_Prev = {.Z, .KEY_NULL, .KEY_NULL},
 	.Sack_Next = {.C, .KEY_NULL, .KEY_NULL},
+	.Bag     = {.M, .KEY_NULL, .KEY_NULL},
+	.Gas     = {.G, .V, .KEY_NULL},
 	.Restart = {.ENTER, .R, .KEY_NULL},
 	.Menu    = {.ESCAPE, .P, .KEY_NULL},
 	.Confirm = {.ENTER, .SPACE, .KP_ENTER},
@@ -130,13 +134,13 @@ when IS_WEB {
 }
 
 // How the shader paints a surface. The numbers must match scene.frag.
-Surface :: enum i32 { Solid, Meadow, Leaf, Shadow_Mask, Bark, Stone, Jacket }
+Surface :: enum i32 { Solid, Meadow, Leaf, Shadow_Mask, Bark, Stone, Jacket, Stripes }
 flash_location: i32
 surface_location: i32
 @(private = "file")
 uniforms: struct {
 	fade, wind_time, sway: i32,
-	fields, field_count, paths, path_count, forest, hills: i32,
+	fields, field_count, paths, path_count, forest, hills, pond: i32,
 }
 active_surface: Surface
 set_surface :: proc(surface: Surface) {
@@ -181,7 +185,7 @@ drawing_shadows :: proc() -> bool {
 // Where the fields, paths and regions are, for painting the ground. Each
 // field and region is {x0, z0, x1, z1} or {centre x, centre z, radius x,
 // radius z}; each path is a segment {x0, z0, x1, z1}.
-set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills: [4]f32) {
+set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills, pond: [4]f32) {
 	sh := material.shader
 	fc, pc := i32(len(fields)), i32(len(paths))
 	if fc > 0 {
@@ -192,9 +196,10 @@ set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills: [4
 	}
 	rl.SetShaderValue(sh, uniforms.field_count, &fc, .INT)
 	rl.SetShaderValue(sh, uniforms.path_count, &pc, .INT)
-	f, h := forest, hills
+	f, h, w := forest, hills, pond
 	rl.SetShaderValue(sh, uniforms.forest, &f, .VEC4)
 	rl.SetShaderValue(sh, uniforms.hills, &h, .VEC4)
+	rl.SetShaderValue(sh, uniforms.pond, &w, .VEC4)
 }
 
 // How far what follows sways in the wind at its top (leaves).
@@ -218,6 +223,7 @@ platform_init :: proc(title: cstring, width, height: i32) {
 		flags += {.WINDOW_HIGHDPI}
 	}
 	rl.SetConfigFlags(flags)
+	rl.SetTraceLogLevel(.WARNING) // no chatter about every file saved
 	rl.InitWindow(width, height, title)
 	rl.SetExitKey(.KEY_NULL)
 
@@ -244,6 +250,7 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	uniforms.path_count = rl.GetShaderLocation(material.shader, "pathCount")
 	uniforms.forest = rl.GetShaderLocation(material.shader, "forest")
 	uniforms.hills = rl.GetShaderLocation(material.shader, "hills")
+	uniforms.pond = rl.GetShaderLocation(material.shader, "pond")
 }
 
 // How much a tapered limb narrows from one end to the other.
@@ -567,6 +574,10 @@ ui_rect :: proc(x, y, w, h: f32, color: Color) {
 	rl.DrawRectangleRec({x, y, w, h}, rl.Color(color))
 }
 
+ui_circle :: proc(x, y, r: f32, color: Color) {
+	rl.DrawCircleV({x, y}, r, rl.Color(color))
+}
+
 ui_round_rect :: proc(x, y, w, h: f32, color: Color, roundness: f32 = 0.5) {
 	rl.DrawRectangleRounded({x, y, w, h}, roundness, 8, rl.Color(color))
 }
@@ -584,21 +595,73 @@ ui_format :: proc(format: cstring, value: i32) -> cstring {
 	return rl.TextFormat(format, value)
 }
 
+// The same with a name, e.g. ui_format_name("my %s", "PIE").
+ui_format_name :: proc(format: cstring, name: cstring) -> cstring {
+	return rl.TextFormat(format, name)
+}
+
 // The same with two numbers, e.g. ui_format2("%d/%d", 2, 3).
 ui_format2 :: proc(format: cstring, a, b: i32) -> cstring {
 	return rl.TextFormat(format, a, b)
 }
 
 // Darkens the edges of the screen a little, to draw the eye to the middle.
-ui_vignette :: proc(strength: u8) {
+// reach is how far in the dark comes: 1 is the usual narrow band.
+ui_vignette :: proc(strength: u8, reach: f32 = 1) {
 	w, h := rl.GetScreenWidth(), rl.GetScreenHeight()
 	edge := rl.Color{10, 20, 30, strength}
 	none := rl.Color{10, 20, 30, 0}
-	band_x, band_y := w / 6, h / 5
+	band_x, band_y := i32(f32(w) / 6 * reach), i32(f32(h) / 5 * reach)
 	rl.DrawRectangleGradientV(0, 0, w, band_y, edge, none)
 	rl.DrawRectangleGradientV(0, h - band_y, w, band_y, none, edge)
 	rl.DrawRectangleGradientH(0, 0, band_x, h, edge, none)
 	rl.DrawRectangleGradientH(w - band_x, 0, band_x, h, none, edge)
+}
+
+// Keeping the saved game from one sitting to the next: in a file beside the
+// program on the desktop, and in the browser's own storage on the web (the
+// page provides the two procedures: see index_template.html).
+SAVE_FILE :: "prosio.sav"
+
+when IS_WEB {
+	foreign import store "prosio_store"
+	@(default_calling_convention = "c")
+	foreign store {
+		store_save :: proc(data: [^]u8, size: i32) ---
+		store_load :: proc(data: [^]u8, room: i32) -> i32 ---
+	}
+}
+
+store_write :: proc(data: []u8) {
+	when IS_WEB {
+		store_save(raw_data(data), i32(len(data)))
+	} else {
+		rl.SaveFileData(rl.TextFormat("%s%s", rl.GetApplicationDirectory(), cstring(SAVE_FILE)), raw_data(data), i32(len(data)))
+	}
+}
+
+// Reads what was saved into data, and says how many bytes there were (0 if
+// nothing was saved, or it does not fit).
+store_read :: proc(data: []u8) -> int {
+	when IS_WEB {
+		return int(store_load(raw_data(data), i32(len(data))))
+	} else {
+		path := rl.TextFormat("%s%s", rl.GetApplicationDirectory(), cstring(SAVE_FILE))
+		if !rl.FileExists(path) {
+			return 0
+		}
+		size: i32
+		bytes := rl.LoadFileData(path, &size)
+		if bytes == nil {
+			return 0
+		}
+		defer rl.UnloadFileData(bytes)
+		if int(size) > len(data) {
+			return 0
+		}
+		copy(data, bytes[:size])
+		return int(size)
+	}
 }
 
 save_screenshot :: proc(path: cstring) {

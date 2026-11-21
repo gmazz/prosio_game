@@ -19,12 +19,39 @@
 	odinMemory.setIntSize(4);
 	var odinImports = odin.setupDefaultImports(odinMemory);
 
+	// The saved game is kept in the browser's own storage, as text.
+	var storeImports = {
+		prosio_store: {
+			store_save: (pointer, size) => {
+				try {
+					const bytes = new Uint8Array(odinMemory.memory.buffer, pointer, size);
+					let text = "";
+					for (let i = 0; i < size; i++) text += String.fromCharCode(bytes[i]);
+					localStorage.setItem("prosio-save", btoa(text));
+				} catch (e) {}
+			},
+			store_load: (pointer, room) => {
+				try {
+					const saved = localStorage.getItem("prosio-save");
+					if (!saved) return 0;
+					const text = atob(saved);
+					if (text.length > room) return 0;
+					const bytes = new Uint8Array(odinMemory.memory.buffer, pointer, room);
+					for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+					return text.length;
+				} catch (e) {
+					return 0;
+				}
+			},
+		},
+	};
+
 	var Module = {
 		canvas: document.getElementById("canvas"),
 		print: (...args) => console.log(...args),
 		printErr: (...args) => console.error(...args),
 		instantiateWasm: (imports, done) => {
-			const all = { ...odinImports, ...imports };
+			const all = { ...odinImports, ...storeImports, ...imports };
 			WebAssembly.instantiateStreaming(fetch("index.wasm"), all).then((result) => {
 				odinMemory.setExports(result.instance.exports);
 				odinMemory.setMemory(result.instance.exports.memory);

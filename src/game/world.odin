@@ -9,12 +9,41 @@ GRAVITY :: f32(25)
 // the meadow (see REGIONS), so he has to go out and fetch it.
 WORLD_HALF :: Vec2{100, 70}
 HOME :: Vec2{0, 0}
-BERRY_REGROW :: f32(9) // seconds for a bush to grow another bunch
-MAX_BERRIES :: 3
-MAX_APPLES :: 4 // apples hanging on one tree
-APPLE_LIFE :: f32(45) // seconds a fallen apple lies there before it rots away
-EGG_LIFE :: f32(90) // seconds a laid egg lies there before it is gone
-MAX_EGGS :: 10 // eggs lying about at once, all over the meadow
+
+// Food is scarce. Of each kind there is never more in the whole meadow than
+// FOOD_BUDGET calories' worth, counted at full size: so ten pumpkins, a dozen
+// sheaves of wheat, forty-odd apples, eighty bunches of berries. That is a
+// ceiling, not a promise. What is picked does not come straight back: after
+// a wait a new one sprouts, small, and grows to its full size, which differs
+// a little from one to the next. Picked early it is worth less.
+FOOD_BUDGET :: f32(4000)
+MUSHROOM_BUDGET :: f32(1200) // mushrooms are so light there would be far too many
+UNRIPE :: f32(0.25) // the share of its calories a thing has when it has only just sprouted
+SIZE_SPREAD :: f32(0.15) // how much one thing's full size can differ from the usual, either way
+MAX_BERRIES :: 2 // bunches on one bush
+BERRY_REGROW :: Vec2{60, 160} // seconds until a picked bush starts another bunch
+BERRY_GROW :: f32(120) // seconds for berries to ripen
+MAX_APPLES :: 3 // apples on one tree, with those lying under it
+APPLE_REGROW :: Vec2{120, 300} // seconds between a tree's new apples
+APPLE_GROW :: f32(200) // seconds for apples to ripen on the tree
+APPLE_LIFE :: f32(90) // seconds a fallen apple lies there before it rots away
+EGG_LIFE :: f32(240) // seconds a laid egg lies there before it is gone
+MAX_EGGS :: 10 // eggs lying about at once, all over the meadow: well under the budget
+SALT_ROCKS :: 4 // big rocks in the goat hills with rock salt growing on them (salt has no calories, so no budget)
+MAX_SALT :: 2 // lumps on one of them
+SALT_REGROW :: Vec2{300, 600} // seconds until another lump has grown
+SALT_ROCK_RADIUS :: f32(1.0)
+
+// The pond: the only water to drink. It is round, and too deep to walk into.
+POND :: Vec2{-26, -48}
+POND_RADIUS :: f32(7.5)
+POND_SPLASH :: Color{150, 206, 232, 255}
+
+// How many of a thing the budget allows.
+budget_count :: proc(item: Item) -> int {
+	budget := item == .Mushroom ? MUSHROOM_BUDGET : FOOD_BUDGET
+	return int(math.round(budget / RAW_KCAL[item]))
+}
 
 MAX_ROUNDS :: 640
 MAX_FOODS :: 360
@@ -27,6 +56,12 @@ Round_Kind :: enum {
 	Rock,
 	Bush,
 	Oven,
+	Mill,
+	Fire, // the cooking fire by the pond
+	Churn,
+	Block, // the chopping block by the fire, the stool by the churn
+	Hive,
+	Salt_Rock, // a big rock in the goat hills with rock salt growing on it
 }
 
 Tree_Species :: enum {
@@ -43,7 +78,8 @@ Round :: struct {
 	kind:    Round_Kind,
 	species: Tree_Species, // trees only
 	fruit:   int, // apples on an apple tree, bunches of berries on a bush
-	fruit_t: f32, // until the next apple or bunch grows (or falls)
+	fruit_t: f32, // until the next apple or bunch starts (or a ripe apple falls)
+	ripe:    f32, // how ripe its fruit is, 0 to 1
 	shake_t: f32, // just shaken: the leaves are still trembling
 }
 
@@ -55,6 +91,8 @@ Region_Kind :: enum {
 	Garden,
 	Turkeys,
 	Hills,
+	Pond,
+	Bees,
 }
 
 Region :: struct {
@@ -62,16 +100,17 @@ Region :: struct {
 	about:  cstring, // what is found there
 	centre: Vec2,
 	radius: Vec2,
-	sign:   cstring, // what its signpost by the house says
 }
 
 REGIONS := [Region_Kind]Region {
-	.Home    = {"HOME", "the oven", HOME, {13, 11}, ""},
-	.Forest  = {"THE FOREST", "berries, wild apples, mushrooms", {-62, -10}, {33, 50}, "FOREST"},
-	.Fields  = {"THE WHEAT FIELDS", "wheat", {58, 26}, {27, 20}, "WHEAT"},
-	.Garden  = {"THE PUMPKIN PATCH", "pumpkins", {-14, 48}, {17, 15}, "PUMPKINS"},
-	.Turkeys = {"TURKEY MEADOW", "eggs... and angry turkeys", {14, -46}, {25, 18}, "TURKEYS"},
-	.Hills   = {"GOAT HILLS", "rocks... and goats", {70, -42}, {26, 22}, "GOATS"},
+	.Home    = {"HOME", "the oven", HOME, {13, 11}},
+	.Forest  = {"THE FOREST", "berries, apples, mushrooms, nuts... and foxes", {-62, -10}, {33, 50}},
+	.Fields  = {"THE WHEAT FIELDS", "wheat, and the mill", {58, 26}, {27, 20}},
+	.Garden  = {"THE GARDEN", "pumpkins, cabbages", {-14, 48}, {17, 15}},
+	.Turkeys = {"TURKEY MEADOW", "eggs... and angry turkeys", {14, -46}, {25, 18}},
+	.Hills   = {"GOAT HILLS", "rock salt, goats to milk, and the churn", {70, -42}, {26, 22}},
+	.Pond    = {"THE POND", "water, fish, and the cooking fire", POND, {14, 11}},
+	.Bees    = {"BEE MEADOW", "honey... and bees", {-50, 56}, {13, 9}},
 }
 
 // The region a place is in, if any.
@@ -109,13 +148,41 @@ PATH_ENDS := [Region_Kind]Vec2 {
 	.Garden  = {-10, 34},
 	.Turkeys = {10, -29},
 	.Hills   = {50, -30},
+	.Pond    = {-21, -39},
+	.Bees    = {-38, 46},
 }
 
-// Where the signpost for a region stands, beside its path a little way from home.
-signpost_pos :: proc(kind: Region_Kind) -> Vec2 {
-	dir := normalize2(PATH_ENDS[kind] - HOME)
-	side := Vec2{-dir.y, dir.x}
-	return HOME + dir * 8.5 + side * 1.6
+// What Prosio has seen of the meadow, for the map: it is in squares of
+// MAP_CELL, and everything within SIGHT of him is uncovered as he goes.
+MAP_CELL :: f32(2.5)
+MAP_W :: 80 // 2 * WORLD_HALF.x / MAP_CELL
+MAP_H :: 56 // 2 * WORLD_HALF.y / MAP_CELL
+SIGHT :: f32(15) // further with plenty of vitamins, less without (see diet.odin)
+
+map_cell :: proc(pos: Vec2) -> (x, y: int) {
+	return int((pos.x + WORLD_HALF.x) / MAP_CELL), int((pos.y + WORLD_HALF.y) / MAP_CELL)
+}
+
+explored :: proc(pos: Vec2) -> bool {
+	x, y := map_cell(pos)
+	return x >= 0 && x < MAP_W && y >= 0 && y < MAP_H && g.seen[y * MAP_W + x]
+}
+
+explore :: proc(pos: Vec2) {
+	far := SIGHT * sight()
+	reach := int(far / MAP_CELL) + 1
+	cx, cy := map_cell(pos)
+	for y in max(cy - reach, 0) ..= min(cy + reach, MAP_H - 1) {
+		for x in max(cx - reach, 0) ..= min(cx + reach, MAP_W - 1) {
+			centre := Vec2{(f32(x) + 0.5) * MAP_CELL, (f32(y) + 0.5) * MAP_CELL} - WORLD_HALF
+			if length2(centre - pos) < far {
+				g.seen[y * MAP_W + x] = true
+			}
+		}
+	}
+	if region, inside := region_at(pos); inside {
+		g.seen_region[region] = true
+	}
 }
 
 // A ploughed field of wheat or a pumpkin bed: bare soil in rows.
@@ -133,13 +200,17 @@ Food_Kind :: enum {
 	Pumpkin,
 	Wheat,
 	Egg,
+	Cabbage,
+	Nuts, // a little heap under the forest trees; more drop on it with time
 }
 
 Food :: struct {
 	kind:    Food_Kind,
 	pos:     Vec2,
 	y, vy:   f32, // a falling apple's or egg's height and speed
-	respawn: f32, // seconds until it grows back; 0 means it is there
+	respawn: f32, // seconds until a new one sprouts; 0 means it is there
+	grow:    f32, // how far it has grown, 0 (just sprouted) to 1 (full size)
+	size:    f32, // its own full size, as a share of the usual
 	fallen:  bool, // an apple off a tree or a laid egg: once taken (or gone off) it is gone for good
 	gone:    bool, // this slot is free
 	life:    f32, // a fallen apple rots away, and an egg goes, when this runs out
@@ -153,13 +224,28 @@ FOOD_ITEM := [Food_Kind]Item {
 	.Pumpkin  = .Pumpkin,
 	.Wheat    = .Wheat,
 	.Egg      = .Egg,
+	.Cabbage  = .Cabbage,
+	.Nuts     = .Nuts,
 }
-FOOD_RESPAWN := [Food_Kind]f32 {
-	.Apple    = 0, // apples are not replanted: new ones fall from the trees
-	.Mushroom = 25,
-	.Pumpkin  = 40,
-	.Wheat    = 30,
-	.Egg      = 0, // the turkeys lay new ones
+// Seconds until a new one sprouts where one was picked (somewhere in this
+// range), and then to grow to full size.
+FOOD_REGROW := [Food_Kind]Vec2 {
+	.Apple    = {}, // apples are not replanted: new ones grow on the trees
+	.Mushroom = {90, 240},
+	.Pumpkin  = {240, 540},
+	.Wheat    = {240, 540},
+	.Egg      = {}, // the turkeys lay new ones
+	.Cabbage  = {200, 480},
+	.Nuts     = {150, 400},
+}
+FOOD_GROW := [Food_Kind]f32 {
+	.Apple    = 0,
+	.Mushroom = 100,
+	.Pumpkin  = 300,
+	.Wheat    = 260,
+	.Egg      = 0,
+	.Cabbage  = 240,
+	.Nuts     = 180,
 }
 // How big each is on the ground. Only a pumpkin is big enough to bump into.
 FOOD_SIZE := [Food_Kind]f32 {
@@ -168,11 +254,38 @@ FOOD_SIZE := [Food_Kind]f32 {
 	.Pumpkin  = 0.34,
 	.Wheat    = 0.22,
 	.Egg      = 0.1,
+	.Cabbage  = 0.26,
+	.Nuts     = 0.16,
 }
 
-// Food lying on the ground, ready to pick up.
+// Food lying on the ground, there to pick up (ripe or not).
 food_ready :: proc(f: ^Food) -> bool {
 	return !f.gone && f.respawn <= 0 && f.y <= 0.01
+}
+
+// The share of its full calories a thing has at this stage of growing.
+ripeness :: proc(grow: f32) -> f32 {
+	return lerp(UNRIPE, 1, clamp(grow, 0, 1))
+}
+
+random_size :: proc() -> f32 {
+	return random_range(1 - SIZE_SPREAD, 1 + SIZE_SPREAD)
+}
+
+// The calories in this piece as it is now.
+food_kcal :: proc(f: ^Food) -> f32 {
+	return math.round(RAW_KCAL[FOOD_ITEM[f.kind]] * f.size * ripeness(f.grow))
+}
+
+// And in a bunch of berries picked from this bush now.
+bush_kcal :: proc(b: ^Round) -> f32 {
+	if b.kind == .Hive {
+		return RAW_KCAL[.Honey]
+	}
+	if b.kind == .Salt_Rock {
+		return 0
+	}
+	return math.round(RAW_KCAL[.Berries] * ripeness(b.ripe))
 }
 
 Decor_Kind :: enum {
@@ -213,21 +326,16 @@ add_tree :: proc(pos: Vec2, species: Tree_Species) {
 	t := &g.rounds[i]
 	t.species = species
 	if species == .Apple {
-		t.fruit = 2 + int(random() * 3)
-		t.fruit_t = random_range(2, 8)
+		t.fruit = 1 + int(random() * f32(MAX_APPLES))
+		t.fruit_t = random_range(20, APPLE_REGROW.y)
+		t.ripe = random_range(0.2, 1)
 	}
 }
 
-// A forest tree: mostly broadleaves and pines, with wild apple trees.
+// A forest tree: broadleaves and pines. (The few wild apple trees are
+// planted separately, as many as the food budget allows.)
 forest_species :: proc() -> Tree_Species {
-	roll := random()
-	switch {
-	case roll < 0.2:
-		return .Apple
-	case roll < 0.55:
-		return .Pine
-	}
-	return .Broadleaf
+	return random() < 0.42 ? .Pine : .Broadleaf
 }
 
 // A lone tree out in the meadow: no fruit out here.
@@ -246,8 +354,9 @@ meadow_species :: proc() -> Tree_Species {
 add_bush :: proc(pos: Vec2) {
 	i := add_round(pos, random_range(0.45, 0.6), .Bush)
 	if i >= 0 {
-		g.rounds[i].fruit = MAX_BERRIES
-		g.rounds[i].fruit_t = BERRY_REGROW
+		g.rounds[i].fruit = 1 + int(random() * f32(MAX_BERRIES))
+		g.rounds[i].fruit_t = random_range(BERRY_REGROW.x, BERRY_REGROW.y)
+		g.rounds[i].ripe = random_range(0.2, 1)
 	}
 }
 
@@ -266,17 +375,22 @@ add_food :: proc(kind: Food_Kind, pos: Vec2) -> ^Food {
 		slot = g.food_count
 		g.food_count += 1
 	}
-	g.foods[slot] = Food{kind = kind, pos = pos, tree = -1}
+	g.foods[slot] = Food{kind = kind, pos = pos, tree = -1, grow = 1, size = random_size()}
 	return &g.foods[slot]
 }
 
-// A field, sown in rows step apart.
-add_field :: proc(lo, hi: Vec2, crop: Food_Kind, step: Vec2) {
+// A small field with this many plants, in rows; at the start they are at
+// every stage of growing.
+add_field :: proc(lo, hi: Vec2, crop: Food_Kind, columns, rows: int) {
 	g.fields[g.field_count] = Field{lo, hi, crop}
 	g.field_count += 1
-	for y := lo.y + step.y * 0.6; y < hi.y - step.y * 0.4; y += step.y {
-		for x := lo.x + step.x * 0.6; x < hi.x - step.x * 0.4; x += step.x {
-			add_food(crop, {x + random_range(-0.1, 0.1), y + random_range(-0.08, 0.08)})
+	size := hi - lo
+	for row in 0 ..< rows {
+		for column in 0 ..< columns {
+			at := lo + size * Vec2{(f32(column) + 0.5) / f32(columns), (f32(row) + 0.5) / f32(rows)}
+			if f := add_food(crop, at + {random_range(-0.1, 0.1), random_range(-0.08, 0.08)}); f != nil {
+				f.grow = random_range(0.15, 1)
+			}
 		}
 	}
 }
@@ -291,57 +405,94 @@ in_field :: proc(pos: Vec2, margin: f32) -> bool {
 }
 
 build_world :: proc() {
-	// Home: the oven, by the start.
-	g.oven.pos = HOME + {-4, -2.5}
-	add_round(g.oven.pos, OVEN_RADIUS, .Oven)
+	// First everything that is built or sown, so that the trees can keep
+	// out of its way. The places where things are made, each in its own part
+	// of the meadow: the oven at home, the fire by the pond, the churn in
+	// the goat hills, the mill by the wheat.
+	g.stations[.Oven].pos = HOME + {-4, -2.5}
+	g.stations[.Fire].pos = POND + {10.5, 4.5}
+	g.stations[.Churn].pos = {55, -33}
+	for st, kind in g.stations {
+		add_round(st.pos, STATION_RADIUS[kind], STATION_ROUND[kind])
+	}
+	add_round(g.stations[.Fire].pos + FIRE_BLOCK.xz, BLOCK_RADIUS, .Block)
+	add_round(g.stations[.Churn].pos + CHURN_STOOL.xz, 0.3, .Block)
+	g.mill.pos = {43, 22}
+	add_round(g.mill.pos, MILL_RADIUS, .Mill)
+	// The wheat fields and the garden beds: small, as the budget allows a
+	// dozen sheaves, ten pumpkins and sixteen cabbages.
+	add_field({47, 13}, {52, 17}, .Wheat, 2, 2)
+	add_field({56, 19}, {61, 23}, .Wheat, 2, 2)
+	add_field({48, 25}, {53, 29}, .Wheat, 2, 2)
+	add_field({-22, 41}, {-15, 46}, .Pumpkin, 3, 2)
+	add_field({-9, 44}, {-4, 48}, .Pumpkin, 2, 2)
+	add_field({-20, 51}, {-12, 57}, .Cabbage, 4, 4)
+	// The bee meadow's three hives.
+	for pos, i in ([MAX_HIVES]Vec2{{-54, 54}, {-46.5, 58}, {-50, 51}}) {
+		add_hive(i, pos)
+	}
 
-	// The forest: trees close together, with berry bushes in the gaps and
-	// round its edge, wild apple trees among them, and mushrooms in the shade.
-	for placed, tries := 0, 0; placed < 230 && tries < 4000; tries += 1 {
-		pos := spot_in(.Forest, 0.97)
-		if clear_spot(pos, 1.0) {
-			add_tree(pos, forest_species())
+	// The forest is groves and glades. The trees stand in tight groves,
+	// longer from north to south than they are wide, so that they hide as
+	// little ground as they can; between them are open glades. The wild
+	// apple trees stand alone in the glades, the berry bushes grow where no
+	// tree is in front of them, and mushrooms and nuts lie at the foot of
+	// the groves on the side the camera is on.
+	groves: [GROVES]Vec2
+	grove_count := 0
+	for tries := 0; grove_count < GROVES && tries < 3000; tries += 1 {
+		centre := spot_in(.Forest, 0.88)
+		apart := true
+		for other in groves[:grove_count] {
+			gap := (centre - other) / GROVE_GAP
+			if gap.x * gap.x + gap.y * gap.y < 1 {
+				apart = false
+			}
+		}
+		if apart {
+			groves[grove_count] = centre
+			grove_count += 1
+		}
+	}
+	for centre in groves[:grove_count] {
+		for placed, tries := 0, 0; placed < GROVE_TREES && tries < 300; tries += 1 {
+			a := random_range(0, math.TAU)
+			k := math.sqrt(random())
+			pos := centre + Vec2{math.cos(a), math.sin(a)} * GROVE_SIZE * k
+			if species := forest_species(); tree_spot(pos, 0.75, species) {
+				add_tree(pos, species)
+				placed += 1
+			}
+		}
+	}
+	for placed, tries := 0, 0; placed < budget_count(.Apple) / MAX_APPLES && tries < 4000; tries += 1 {
+		pos := spot_in(.Forest, 0.95)
+		if tree_spot(pos, 3, .Apple) && !hidden_by_tree(pos) {
+			add_tree(pos, .Apple)
 			placed += 1
 		}
 	}
-	for placed, tries := 0, 0; placed < 46 && tries < 3000; tries += 1 {
+	for placed, tries := 0, 0; placed < budget_count(.Berries) / MAX_BERRIES && tries < 6000; tries += 1 {
 		pos := spot_in(.Forest, 1.02)
-		if clear_spot(pos, 1.1) {
+		if clear_spot(pos, 1.1) && !hidden_by_tree(pos) {
 			add_bush(pos)
 			placed += 1
 		}
 	}
-	for placed, tries := 0, 0; placed < 45 && tries < 2000; tries += 1 {
-		t := g.rounds[int(random() * f32(g.round_count)) % g.round_count]
-		if t.kind != .Tree || inside_region(t.pos, .Forest) <= 0 {
-			continue
-		}
-		a := random_range(0, math.TAU)
-		pos := t.pos + Vec2{math.cos(a), math.sin(a)} * random_range(0.75, 1.5)
-		if clear_spot(pos, 0.3) {
-			add_food(.Mushroom, pos)
-			placed += 1
-		}
-	}
+	scatter_under_trees(.Mushroom, budget_count(.Mushroom))
+	scatter_under_trees(.Nuts, budget_count(.Nuts))
 
-	// The wheat fields, and the pumpkin patch.
-	add_field({40, 13}, {50, 21}, .Wheat, {1.3, 1.15})
-	add_field({56, 9}, {68, 16}, .Wheat, {1.3, 1.15})
-	add_field({48, 28}, {60, 37}, .Wheat, {1.3, 1.15})
-	add_field({66, 24}, {75, 32}, .Wheat, {1.3, 1.15})
-	add_field({-24, 40}, {-15, 46}, .Pumpkin, {1.5, 1.6})
-	add_field({-9, 42}, {-1, 48}, .Pumpkin, {1.5, 1.6})
-	add_field({-20, 51}, {-10, 57}, .Pumpkin, {1.5, 1.6})
 	// A few shady trees round the fields.
-	for placed, tries := 0, 0; placed < 8 && tries < 400; tries += 1 {
+	for placed, tries := 0, 0; placed < 8 && tries < 800; tries += 1 {
 		pos := spot_in(.Fields, 1.05)
-		if clear_spot(pos, 2) {
+		if tree_spot(pos, 2, .Broadleaf) {
 			add_tree(pos, .Broadleaf)
 			placed += 1
 		}
 	}
 
-	// The goat hills: rocks large and small, and a few pines.
+	// The goat hills: rocks large and small, a few pines, and the big rocks
+	// the salt grows on, out in the open.
 	for placed, tries := 0, 0; placed < 34 && tries < 2000; tries += 1 {
 		pos := spot_in(.Hills, 0.98)
 		size := random() < 0.3 ? random_range(0.9, 1.5) : random_range(0.35, 0.8)
@@ -350,28 +501,58 @@ build_world :: proc() {
 			placed += 1
 		}
 	}
-	for placed, tries := 0, 0; placed < 10 && tries < 400; tries += 1 {
+	for placed, tries := 0, 0; placed < 10 && tries < 800; tries += 1 {
 		pos := spot_in(.Hills, 0.95)
-		if clear_spot(pos, 2) {
+		if tree_spot(pos, 2, .Pine) {
 			add_tree(pos, .Pine)
+			placed += 1
+		}
+	}
+	for placed, tries := 0, 0; placed < SALT_ROCKS && tries < 800; tries += 1 {
+		pos := spot_in(.Hills, 0.8)
+		if clear_spot(pos, SALT_ROCK_RADIUS + 1.5) && !hidden_by_tree(pos) {
+			if i := add_round(pos, SALT_ROCK_RADIUS, .Salt_Rock); i >= 0 {
+				g.rounds[i].fruit = 1 + placed % MAX_SALT
+				g.rounds[i].fruit_t = random_range(SALT_REGROW.x, SALT_REGROW.y)
+				g.rounds[i].ripe = 1
+			}
+			placed += 1
+		}
+	}
+
+	// A few blossom trees in the bee meadow.
+	for placed, tries := 0, 0; placed < 4 && tries < 800; tries += 1 {
+		pos := spot_in(.Bees, 1)
+		if tree_spot(pos, 3.5, .Blossom) {
+			add_tree(pos, .Blossom)
+			placed += 1
+		}
+	}
+
+	// The pond, with a few trees leaning over it.
+	for placed, tries := 0, 0; placed < 5 && tries < 800; tries += 1 {
+		pos := spot_in(.Pond, 1)
+		if length2(pos - POND) > POND_RADIUS + 1.5 && tree_spot(pos, 2, .Broadleaf) {
+			add_tree(pos, .Broadleaf)
 			placed += 1
 		}
 	}
 
 	// Turkey meadow: open grass with a few shady trees.
-	for placed, tries := 0, 0; placed < 9 && tries < 400; tries += 1 {
+	for placed, tries := 0, 0; placed < 9 && tries < 800; tries += 1 {
 		pos := spot_in(.Turkeys, 0.95)
-		if clear_spot(pos, 3) {
-			add_tree(pos, meadow_species())
+		if species := meadow_species(); tree_spot(pos, 3, species) {
+			add_tree(pos, species)
 			placed += 1
 		}
 	}
 
 	// The open meadow in between: lone trees and rocks, but no food.
-	for placed, tries := 0, 0; placed < 70 && tries < 3000; tries += 1 {
+	for placed, tries := 0, 0; placed < 60 && tries < 4000; tries += 1 {
 		pos := random_spot()
-		if _, in_region := region_at(pos); !in_region && clear_spot(pos, 2.5) {
-			add_tree(pos, meadow_species())
+		species := meadow_species()
+		if _, in_region := region_at(pos); !in_region && tree_spot(pos, 2.5, species) {
+			add_tree(pos, species)
 			placed += 1
 		}
 	}
@@ -384,6 +565,8 @@ build_world :: proc() {
 	}
 
 	spawn_enemies()
+	spawn_fish()
+	spawn_pests()
 
 	// Scatter tufts and flowers where nothing else stands.
 	w := WORLD_HALF
@@ -395,11 +578,104 @@ build_world :: proc() {
 		}
 		g.decor[g.decor_count] = Decor {
 			pos     = pos,
-			kind    = g.decor_count % 3 == 0 ? .Flower : .Tuft,
+			kind    = g.decor_count % 3 == 0 || inside_region(pos, .Bees) > 0 ? .Flower : .Tuft, // the bee meadow is all flowers
 			variant = g.decor_count,
 		}
 		g.decor_count += 1
 	}
+}
+
+// Things that lie on the forest floor at the foot of the trees: always on
+// the side the camera is on, and never behind another tree.
+scatter_under_trees :: proc(kind: Food_Kind, count: int) {
+	for placed, tries := 0, 0; placed < count && tries < 6000; tries += 1 {
+		t := g.rounds[int(random() * f32(g.round_count)) % g.round_count]
+		if t.kind != .Tree || inside_region(t.pos, .Forest) <= 0 {
+			continue
+		}
+		pos := t.pos + Vec2{random_range(-1.4, 1.4), random_range(0.7, 1.9)}
+		if clear_spot(pos, 0.3) && !hidden_by_tree(pos) && food_in_reach(pos, 0.4) == nil {
+			if f := add_food(kind, pos); f != nil {
+				f.grow = random_range(0.15, 1)
+			}
+			placed += 1
+		}
+	}
+}
+
+// Where trees may stand. The camera always looks from the south, and from
+// above (rising VIEW_SLOPE metres back for every metre up): so a tree's
+// leaves hide a strip of ground to the north of its trunk, from under their
+// lowest to beyond their highest, as wide as its crown (see tree_cover). A
+// tall tree hides ground ten metres behind it. Two rules come of that:
+//
+//   nothing is planted where it would stand in front of something that has
+//   to stay in view: a path, a field, a building, a hive, a salt rock, a
+//   berry bush, food on the ground (see hides_something);
+//
+//   and what is put down after the trees (bushes, mushrooms, nuts, salt)
+//   goes only where no tree stands in front of it (see hidden_by_tree).
+VIEW_SLOPE :: f32(1.25)
+GROVES :: 12 // groves in the forest,
+GROVE_TREES :: 10 // each of about this many trees,
+GROVE_SIZE :: Vec2{2.8, 4.5} // this far across and from north to south (as radii),
+GROVE_GAP :: Vec2{12, 19} // and at least this far from the next, so there are glades between
+
+// The strip a tree hides: from near to far north of its trunk, and this far
+// to either side.
+tree_cover :: proc(t: Tree_Shape) -> (near, far, half_width: f32) {
+	low, high := foliage(t)
+	if t.species == .Pine {
+		// A pine's tip is too thin to hide much.
+		return low * VIEW_SLOPE - 0.4, high * 0.86 * VIEW_SLOPE, t.canopy * 0.75 + 0.3
+	}
+	return low * VIEW_SLOPE - 0.6, high * VIEW_SLOPE, t.canopy + 0.4
+}
+
+// Would a tree of this species, planted here next, hide something?
+hides_something :: proc(pos: Vec2, species: Tree_Species) -> bool {
+	near, far, half := tree_cover(tree_shape_of(species, g.round_count))
+	for d := near; d <= far; d += 1 {
+		behind := pos - {0, d} // a spot its leaves would cover
+		if in_field(behind, half - 0.5) {
+			return true
+		}
+		for kind in Region_Kind {
+			if kind != .Home && near_segment(behind, HOME, PATH_ENDS[kind], half) {
+				return true
+			}
+		}
+		for rd in g.rounds[:g.round_count] {
+			if rd.kind != .Tree && rd.kind != .Rock && length2(behind - rd.pos) < rd.r + half {
+				return true
+			}
+		}
+		for &f in g.foods[:g.food_count] {
+			if !f.gone && length2(behind - f.pos) < half {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+hidden_by_tree :: proc(pos: Vec2) -> bool {
+	for rd, i in g.rounds[:g.round_count] {
+		if rd.kind != .Tree || abs(rd.pos.x - pos.x) > 3 {
+			continue
+		}
+		near, far, half := tree_cover(tree_shape(i))
+		south := rd.pos.y - pos.y
+		if south > near && south < far && abs(rd.pos.x - pos.x) < half {
+			return true
+		}
+	}
+	return false
+}
+
+// A free spot where a tree would be in nobody's way.
+tree_spot :: proc(pos: Vec2, r: f32, species: Tree_Species) -> bool {
+	return clear_spot(pos, r) && !hides_something(pos, species)
 }
 
 random_spot :: proc() -> Vec2 {
@@ -435,7 +711,7 @@ near_segment :: proc(p, a, b: Vec2, reach: f32) -> bool {
 }
 
 // Keeps a circle out of everything solid: trees, rocks, bushes, the oven,
-// pumpkins and the fence round the meadow.
+// the mill, pumpkins, the pond, and the fence round the meadow.
 //
 // feet is how high off the ground the circle is: things fly or jump over
 // obstacles lower than that.
@@ -457,6 +733,14 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: b
 				top = 0.8
 			case .Oven:
 				top = 2.2
+			case .Mill:
+				top = 4
+			case .Fire, .Hive, .Salt_Rock:
+				top = 1.1
+			case .Churn:
+				top = 1.3
+			case .Block:
+				top = 0.5
 			}
 			if feet >= top {
 				continue
@@ -469,7 +753,13 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: b
 			if f.kind != .Pumpkin || !food_ready(&f) || feet >= 0.6 {
 				continue
 			}
-			if h, n := push_out_circle(pos, r, f.pos, FOOD_SIZE[f.kind]); h {
+			if h, n := push_out_circle(pos, r, f.pos, FOOD_SIZE[f.kind] * lerp(0.5, 1, f.grow)); h {
+				hit, normal = true, n
+			}
+		}
+		if feet < 0.6 {
+			// The water's edge: his toes get wet, no more.
+			if h, n := push_out_circle(pos, r, POND, POND_RADIUS - 0.5); h {
 				hit, normal = true, n
 			}
 		}
@@ -510,12 +800,18 @@ food_in_reach :: proc(pos: Vec2, reach: f32) -> ^Food {
 	return best
 }
 
-// The nearest bush with berries on it that Prosio can reach, if any.
+// At the water's edge, near enough to drink.
+pond_in_reach :: proc(pos: Vec2, r: f32) -> bool {
+	return length2(POND - pos) < POND_RADIUS + r + 0.4
+}
+
+// The nearest bush with berries on it, hive with honey in it or rock with
+// salt on it that Prosio can reach, if any.
 bush_in_reach :: proc(pos: Vec2, reach: f32) -> ^Round {
 	best: ^Round
 	best_dist := reach
 	for &b in g.rounds[:g.round_count] {
-		if b.kind != .Bush || b.fruit <= 0 {
+		if (b.kind != .Bush && b.kind != .Hive && b.kind != .Salt_Rock) || b.fruit <= 0 {
 			continue
 		}
 		d := length2(b.pos - pos) - b.r
@@ -526,7 +822,30 @@ bush_in_reach :: proc(pos: Vec2, reach: f32) -> ^Round {
 	return best
 }
 
-// An apple comes loose from tree t and falls from somewhere in its crown.
+// How many bunches, combs or lumps one bush, hive or salt rock holds, and how
+// long until it has another.
+plant_max :: proc(kind: Round_Kind) -> int {
+	#partial switch kind {
+	case .Hive:
+		return MAX_HONEY
+	case .Salt_Rock:
+		return MAX_SALT
+	}
+	return MAX_BERRIES
+}
+
+plant_regrow :: proc(kind: Round_Kind) -> Vec2 {
+	#partial switch kind {
+	case .Hive:
+		return HONEY_REGROW
+	case .Salt_Rock:
+		return SALT_REGROW
+	}
+	return BERRY_REGROW
+}
+
+// An apple comes loose from tree t and falls from somewhere in its crown,
+// on the side the camera is on, where it can be seen.
 drop_apple :: proc(t: int) {
 	tree := &g.rounds[t]
 	if tree.fruit <= 0 {
@@ -534,8 +853,8 @@ drop_apple :: proc(t: int) {
 	}
 	shape := tree_shape(t)
 	for tries in 0 ..< 6 {
-		a := random_range(0, math.TAU)
-		pos := tree.pos + Vec2{math.cos(a), math.sin(a)} * random_range(0.5, shape.canopy * 0.85)
+		a := random_range(0.2, math.PI - 0.2)
+		pos := tree.pos + Vec2{math.cos(a), math.sin(a)} * random_range(0.6, shape.canopy * 0.85)
 		probe := pos
 		if hit, _ := collide_static(&probe, 0.15, 0, true); hit && tries < 5 {
 			continue
@@ -547,6 +866,7 @@ drop_apple :: proc(t: int) {
 		f.fallen = true
 		f.life = APPLE_LIFE
 		f.tree = t
+		f.grow = tree.ripe // an apple shaken down early is small and green
 		f.y = shape.canopy_y - shape.canopy * 0.5
 		tree.fruit -= 1
 		return
@@ -621,7 +941,7 @@ update_world :: proc(dt: f32) {
 		}
 		if f.respawn > 0 {
 			f.respawn -= dt
-			// Food does not grow back under someone standing there.
+			// Nothing sprouts under someone standing there.
 			if f.respawn <= 0 {
 				crowded := length2(g.prosio.pos - f.pos) < prosio_radius(g.prosio.kg) + FOOD_SIZE[f.kind] + 0.1
 				for &e in g.enemies[:g.enemy_count] {
@@ -633,40 +953,67 @@ update_world :: proc(dt: f32) {
 					f.respawn = 0.3
 				} else {
 					f.respawn = 0
+					f.grow = FOOD_GROW[f.kind] > 0 ? 0 : 1
+					f.size = random_size()
 					burst({f.pos.x, 0.2, f.pos.y}, 4, 1.2, COLOR_LEAF_LIGHT, 0.06)
 				}
 			}
+		} else if FOOD_GROW[f.kind] > 0 {
+			f.grow = min(f.grow + dt / FOOD_GROW[f.kind], 1)
 		}
 	}
-	// Apple trees grow apples, and now and then one drops; bushes grow berries.
+	// Berries and apples ripen where they hang. A picked bush starts another
+	// bunch after a while; a tree starts another apple while it has fewer
+	// than MAX_APPLES (counting those lying under it), and now and then a
+	// ripe one drops.
 	for &t, i in g.rounds[:g.round_count] {
 		t.shake_t = max(t.shake_t - dt, 0)
-		if t.kind == .Bush && t.fruit < MAX_BERRIES {
+		if t.kind == .Bush {
+			if t.fruit > 0 {
+				t.ripe = min(t.ripe + dt / BERRY_GROW, 1)
+			}
+			if t.fruit < MAX_BERRIES {
+				t.fruit_t -= dt
+				if t.fruit_t <= 0 {
+					t.ripe = t.ripe * f32(t.fruit) / f32(t.fruit + 1) // the new bunch is green
+					t.fruit += 1
+					t.fruit_t = random_range(BERRY_REGROW.x, BERRY_REGROW.y)
+				}
+			}
+		}
+		if (t.kind == .Hive || t.kind == .Salt_Rock) && t.fruit < plant_max(t.kind) {
+			// The bees fill another comb; another lump of salt grows.
 			t.fruit_t -= dt
 			if t.fruit_t <= 0 {
 				t.fruit += 1
-				t.fruit_t = BERRY_REGROW
+				t.fruit_t = random_range(plant_regrow(t.kind).x, plant_regrow(t.kind).y)
 			}
 		}
 		if t.kind == .Tree && t.species == .Apple {
+			if t.fruit > 0 {
+				t.ripe = min(t.ripe + dt / APPLE_GROW, 1)
+			}
 			t.fruit_t -= dt
 			if t.fruit_t <= 0 {
-				t.fruit_t = random_range(8, 18)
+				t.fruit_t = random_range(APPLE_REGROW.x, APPLE_REGROW.y)
 				lying := 0
 				for &f in g.foods[:g.food_count] {
 					if !f.gone && f.fallen && f.tree == i {
 						lying += 1
 					}
 				}
-				if t.fruit > 0 && lying < 2 && random() < 0.45 {
-					drop_apple(i)
-				} else if t.fruit < MAX_APPLES {
+				if t.fruit + lying < MAX_APPLES {
+					t.ripe = t.ripe * f32(t.fruit) / f32(t.fruit + 1)
 					t.fruit += 1
+				} else if t.fruit > 0 && t.ripe >= 1 {
+					drop_apple(i)
 				}
 			}
 		}
 	}
-	update_oven(dt)
+	update_stations(dt)
+	update_critters(dt)
+	update_mill(dt)
 	g.shake = max(g.shake - dt * 2.5, 0)
 }
 

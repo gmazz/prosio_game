@@ -54,6 +54,7 @@ GRAB_REACH :: f32(0.85) // how far beyond touching he can reach: about an arm
 LIFT_TIME :: f32(0.35) // seconds to lift something of his own weight
 CARRY_DRAIN :: f32(5) // stamina per second for holding his own weight
 LIFT_LIMIT :: f32(0.9) // he can swing or throw up to this share of his own weight
+ROCK_LIMIT :: f32(2) // he can lift a rock of up to twice his own weight
 // A rock of radius 0.3 weighs about 10 kg, 0.6 about 82 kg, and the big
 // boulders (0.9) about 280 kg: liftable only by a heavy, rested Prosio.
 ROCK_DENSITY :: f32(380)
@@ -91,6 +92,7 @@ ENEMY_THROW_KO := [Enemy_Kind]f32 {
 	.Turkey = 14,
 	.Goat   = 5.5,
 	.Billy  = 3.5,
+	.Fox    = 12,
 }
 
 // The points of a held animal's body, in its own model (units of its
@@ -101,12 +103,14 @@ CHAIN_MODEL := [Enemy_Kind][3]Vec3 {
 	.Turkey = {{0, 0.02, -0.08}, {0, 1.2, -0.08}, {0, 1.6, 0.5}},
 	.Goat   = {{0, 0.05, -0.78}, {0, 1.05, -0.12}, {0, 1.2, 0.58}},
 	.Billy  = {{0, 0.05, -0.78}, {0, 1.05, -0.12}, {0, 1.2, 0.58}},
+	.Fox    = {{0, 0.05, -0.72}, {0, 0.97, -0.1}, {0, 1.1, 0.5}},
 }
 // Where the held leg leaves the body, in the same units.
 GRIP_ROOT := [Enemy_Kind]Vec3 {
 	.Turkey = {0, 0.85, -0.08},
 	.Goat   = {0.3, 0.88, -0.55},
 	.Billy  = {0.3, 0.88, -0.55},
+	.Fox    = {0.3, 0.8, -0.5},
 }
 
 // A turkey is lifted off its feet by them and dangles head down; anything
@@ -143,11 +147,11 @@ grab_target :: proc() -> (target: Grab_Target, found: bool) {
 	pr := prosio_radius(p.kg)
 	best := f32(1e9)
 	for &e, i in g.enemies[:g.enemy_count] {
-		if !on_ground(&e) {
+		if !on_ground(&e) && e.state != .Dead {
 			continue
 		}
 		gap := length2(e.pos - p.pos) - pr - ENEMY_RADIUS[e.kind]
-		if gap < GRAB_REACH && gap < best {
+		if gap < GRAB_REACH * deft_reach() && gap < best {
 			best = gap
 			target = {.Enemy, i, ENEMY_KG[e.kind]}
 			found = true
@@ -199,10 +203,19 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		}
 		target, found := grab_target()
 		if !found {
-			hint("Nothing to grab here.")
+			// At the pond there may be a fish.
+			if pond_in_reach(p.pos, prosio_radius(p.kg)) {
+				grab_fish()
+			} else {
+				hint("Nothing to grab here.")
+			}
 			return
 		}
 		ratio := target.kg / p.kg
+		if target.kind == .Rock && ratio > ROCK_LIMIT * strength() {
+			hint("Way too heavy to lift!")
+			return
+		}
 		cost := 6 + 25 * min(ratio, 1)
 		if p.stamina < cost {
 			hint("Too tired to grab that!")
@@ -230,7 +243,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			switch {
 			case held_up(e.kind):
 				say("Got you by the legs!", 1)
-			case ratio > LIFT_LIMIT:
+			case ratio > LIFT_LIMIT * strength():
 				say("Got your leg! Uh-oh...", 1)
 			case:
 				say("Got your leg!", 1)
@@ -262,6 +275,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		e := &g.enemies[p.carry_index]
 		struggling := e.limp <= 0 && !e.ko
 		p.stamina -= CARRY_DRAIN * ratio * (struggling ? 1 : 0.25) * dt
+		train(.Arms, CARRY_WORK * min(ratio, 1.5) * dt)
 		if p.stamina <= 0 {
 			p.stamina = 0
 			drop_carry()
@@ -287,7 +301,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		if p.lift_t > 0 {
 			return
 		}
-		too_heavy := ratio > LIFT_LIMIT
+		too_heavy := ratio > LIFT_LIMIT * strength()
 		if pressed(.Grab) {
 			if too_heavy {
 				drop_carry()
@@ -308,6 +322,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 
 	case .Rock:
 		p.stamina -= CARRY_DRAIN * ratio * dt
+		train(.Arms, CARRY_WORK * min(ratio, 1.5) * dt)
 		if p.stamina <= 0 {
 			p.stamina = 0
 			drop_carry()
@@ -327,6 +342,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 
 // The chain of a freshly grabbed animal: its points as it stands now.
 start_hold :: proc(e: ^Enemy) {
+	drop_loot(e)
 	r := ENEMY_RADIUS[e.kind]
 	m := translate({e.pos.x, e.y, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
 	for k in 0 ..< 3 {
@@ -377,6 +393,7 @@ begin_swing :: proc(throw: bool) {
 	}
 	p.stamina -= cost
 	burn(FIGHT_BURN)
+	train(.Arms, SWING_WORK * min(ratio, 1.5))
 
 	from := direction_to_prosio(p.hand - prosio_to_world(holding_shoulder()))
 	p.swing_from = linalg.normalize0(from)
@@ -389,7 +406,7 @@ begin_swing :: proc(throw: bool) {
 	p.bash_queued = false
 	// A heavier animal is slower to get round, so it hits less hard; a
 	// heavier Prosio is quicker with it.
-	p.swing_total = clamp(0.3 + 0.45 * ratio, 0.3, 0.75)
+	p.swing_total = clamp(0.3 + 0.45 * ratio, 0.3, 0.75) * stiffness()
 	if throw {
 		// Back, over his head, and up and away in front.
 		p.swing_total *= 0.8
@@ -434,6 +451,7 @@ heave :: proc(dt: f32) {
 		return
 	}
 	p.stamina -= 10
+	train(.Arms, SWING_WORK * 1.5)
 	p.heave_t = 0.6
 	lift := 6 * min(p.kg / p.carry_kg, 1)
 	e.chain_old[1].y -= lift * dt
@@ -806,7 +824,7 @@ throw_animal :: proc() {
 	r := ENEMY_RADIUS[e.kind]
 	kg := ENEMY_KG[e.kind]
 	dir := facing_dir(p.facing)
-	speed := min(ANIMAL_THROW_GAIN * p.kg / kg, MAX_THROW)
+	speed := min(ANIMAL_THROW_GAIN * strength() * p.kg / kg, MAX_THROW)
 	rise := random_range(0.15, 0.4)
 	knocked := e.ko
 	e.pos = p.pos + dir * (prosio_radius(p.kg) + r * 0.9)
@@ -823,6 +841,7 @@ throw_animal :: proc() {
 
 	p.vel -= dir * min(speed * kg / p.kg, 6)
 	p.carry = .Nothing
+	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.swinging = false
 	p.stretch_vel -= 3
@@ -847,7 +866,8 @@ pain_stars :: proc(pos: Vec3, strength: f32) {
 throw_rock :: proc() {
 	p := &g.prosio
 	dir := facing_dir(p.facing)
-	speed := min(THROW_GAIN * p.kg / p.carry_kg, MAX_THROW)
+	speed := min(THROW_GAIN * strength() * p.kg / p.carry_kg, MAX_THROW)
+	train(.Arms, SWING_WORK * min(p.carry_kg / p.kg, 1.5))
 	_, height := carry_place()
 	for &t in g.thrown {
 		if t.active {
@@ -868,6 +888,7 @@ throw_rock :: proc() {
 	// Every push pushes back.
 	p.vel -= dir * min(speed * p.carry_kg / p.kg, 4)
 	p.carry = .Nothing
+	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.stretch_vel -= 3
 	burn(FIGHT_BURN)
@@ -902,6 +923,7 @@ drop_carry :: proc() {
 	case .Nothing:
 	}
 	p.carry = .Nothing
+	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.swinging = false
 }

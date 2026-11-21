@@ -9,10 +9,12 @@ uniform float fade;     // 0 = solid, 1 = see-through
 // The layout of the meadow (see set_ground_layout in game.odin).
 uniform vec4 fields[8]; // ploughed fields: x0, z0, x1, z1
 uniform int fieldCount;
-uniform vec4 paths[6];  // paths from home: x0, z0, x1, z1
+uniform vec4 paths[8];  // paths from home: x0, z0, x1, z1
 uniform int pathCount;
 uniform vec4 forest;    // centre x, z and radii of the forest
 uniform vec4 hills;     // and of the goat hills
+uniform vec4 pond;      // the pond: centre x, z and its radius
+uniform float windTime;
 
 float hash(vec2 p) {
     vec3 q = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
@@ -81,7 +83,7 @@ vec3 meadow(vec2 p, float dither) {
     // yard round the house.
     vec2 w = p + vec2(1.6 * sin(p.y * .17) + .6 * sin(p.y * .41), 1.4 * sin(p.x * .15) + .5 * sin(p.x * .37));
     float d = length(p) - 4.5;
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 8; i++) {
         if (i >= pathCount) break;
         d = min(d, segment_distance(w, paths[i].xy, paths[i].zw));
     }
@@ -100,6 +102,19 @@ vec3 meadow(vec2 p, float dither) {
             vec3 soil = mix(vec3(.42, .3, .2), vec3(.53, .39, .26), furrow);
             ground = mix(soil, vec3(.36, .26, .18), step(.82, fine) * .6);
         }
+    }
+    // The pond: a sandy shore, then water, deeper and darker towards the
+    // middle, with slow glints drifting across it.
+    float shore = length(p - pond.xy) - pond.z + .7 * (wash(p * .45) - .5);
+    vec3 sand = mix(vec3(.74, .66, .47), vec3(.88, .8, .6), steps(fine, 2.0, dither));
+    ground = mix(ground, sand, step(shore, .9 + .5 * (dither - .5)));
+    if (shore < 0.0) {
+        float depth = clamp(-shore / (pond.z * .7), 0.0, 1.0);
+        vec3 water = mix(vec3(.5, .78, .8), vec3(.2, .46, .68), steps(depth, 3.0, dither));
+        float glint = wash(p * vec2(1.1, 2.6) + vec2(windTime * .35, windTime * .22));
+        water += .1 * step(.74, glint);
+        water = mix(water, vec3(.86, .94, .95), step(-.22 - .1 * sin(windTime * 1.3 + p.x), shore)); // foam at the edge
+        ground = water;
     }
     // Warm sunlight falls in broad soft patches, as through gaps in leaves.
     float sun = smoothstep(.55, .8, wash(p * .09 + 7.3) * .7 + wash(p * .23) * .3);
@@ -148,6 +163,10 @@ void main() {
         float moss = smoothstep(.59, .74, mineral * .64 + .42 * n.y);
         pigment = mix(pigment, vec3(.47, .55, .32), steps(moss, 2.0, dither) * .81);
         pigment *= .90 + .16 * mineral;
+    }
+    if (surface == 7) {
+        // Sailor stripes, round the body.
+        pigment = mix(pigment, vec3(.2, .27, .51), step(.5, fract(local.y * 4.5)));
     }
     if (surface == 6) {
         // Bias-cut lapel crossing the curved jacket.

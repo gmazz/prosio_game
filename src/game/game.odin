@@ -17,7 +17,14 @@ Options :: struct {
 	release_at: int, // stop holding the --hold buttons on this frame
 	menu:       bool, // start on the menu even in a test run
 	crowd:      bool, // put a few animals round Prosio at the start
+	bodies:     bool, // put a dead turkey, a dead goat and a fox round him at the start
 	stock:      bool, // start with a sack full of food
+	needs:      [6]f32, // the levels of his stores and needs at the start, in the order of Need
+	has_needs:  bool,
+	traits:     [7]f32, // his muscles and skills at the start, in the order of Trait
+	has_traits: bool,
+	outfit:     [11]u8, // what he wears, one number per row of the outfit menu
+	has_outfit: bool,
 	detail:     int, // 1 to 6: pixel density to start with (0 = default)
 }
 
@@ -31,12 +38,18 @@ Game :: struct {
 	food_count:    int,
 	fields:        [MAX_FIELDS]Field,
 	field_count:   int,
+	seen:          [MAP_W * MAP_H]bool, // the squares of the map he has uncovered
+	seen_region:   [Region_Kind]bool, // the parts of the meadow he has been to
 	decor:         [MAX_DECOR]Decor,
 	decor_count:   int,
 	particles:     [MAX_PARTICLES]Particle,
 	particle_next: int,
 	thrown:        [MAX_THROWN]Thrown_Rock,
-	oven:          Oven,
+	stations:      [Station_Kind]Station, // the oven, the fire and the churn
+	fish:          [MAX_FISH]Fish,
+	pests:         [MAX_PESTS]Pest,
+	hives:         [MAX_HIVES]Hive,
+	mill:          Mill,
 	region:        Region_Kind, // where Prosio is, if in_region
 	in_region:     bool,
 	region_t:      f32, // how long he has been there
@@ -62,7 +75,8 @@ Scene :: enum {
 	Menu,
 	Playing,
 	Paused,
-	Oven, // choosing what to bake; the game waits
+	Oven, // choosing what to make at the oven, the fire or the churn; the game waits
+	Bag, // the sack and outfit menu; the game waits
 }
 
 scene: Scene
@@ -75,13 +89,25 @@ init :: proc(opts: Options) {
 	if opts.detail > 0 {
 		pixel_level = clamp(opts.detail - 1, 0, PIXEL_LEVELS - 1)
 	}
-	new_game()
+	if opts.has_outfit {
+		for n, row in opts.outfit {
+			change_outfit(Outfit_Row(row), int(n))
+		}
+	}
+	continue_game()
 	set_ground_layout() // the same in every game
 	// Test runs go straight into the game.
 	scene = (opts.shot_path != nil && !opts.menu) ? .Playing : .Menu
 }
 
-// Throws the current game away and builds a fresh one.
+// Builds the meadow afresh and puts the saved Prosio in it, if there is one.
+continue_game :: proc() {
+	new_game()
+	load_game()
+	explore(g.prosio.pos)
+}
+
+// Throws the current game away and builds a fresh one, with a new Prosio.
 new_game :: proc() {
 	opts := g.opts
 	g = {}
@@ -89,8 +115,15 @@ new_game :: proc() {
 	g.rng = 0x2545f491
 	reset_prosio()
 	build_world()
+	if opts.has_traits {
+		for t in Trait {
+			g.prosio.trait[t] = opts.traits[int(t)]
+		}
+		g.prosio.trait_was = g.prosio.trait
+		g.prosio.kg = weight_with(g.prosio.fat)
+	}
 	if opts.start_kg > 0 {
-		g.prosio.kg = opts.start_kg
+		set_weight(opts.start_kg)
 	}
 	if opts.has_pos {
 		g.prosio.pos = opts.start_pos
@@ -103,14 +136,47 @@ new_game :: proc() {
 			add_enemy(kind, g.prosio.pos + facing_dir(f32(i) * math.TAU / 4 + 0.4) * (i == 0 ? 1.15 : 2.6))
 		}
 	}
+	if opts.bodies {
+		// For looking at bodies: a dead turkey within reach, a dead goat,
+		// and a fox with something stolen in its mouth.
+		kinds := [?]Enemy_Kind{.Turkey, .Goat, .Fox}
+		for kind, i in kinds {
+			add_enemy(kind, g.prosio.pos + facing_dir(f32(i) * 1.9 + 0.5) * (i == 0 ? 1.15 : 2.6))
+			e := &g.enemies[g.enemy_count - 1]
+			if kind == .Fox {
+				e.has_loot, e.loot = true, .Apple
+				e.home = e.pos
+			} else {
+				e.state, e.ko, e.body_t = .Dead, true, BODY_LIFE
+			}
+		}
+	}
+	if opts.bodies {
+		// And a rabbit and a crow, caught close by and making off.
+		for i in ([2]int{0, 2}) {
+			c := &g.pests[i]
+			c.pos = g.prosio.pos + (i == 0 ? Vec2{-2.4, 1.2} : Vec2{2.6, 2.2})
+			c.state = .Fleeing
+			c.y = i == 0 ? 0 : 1.2
+		}
+	}
+	if opts.has_needs {
+		for n in Need {
+			g.prosio.need[n] = opts.needs[int(n)]
+		}
+		g.prosio.kg = body_kg()
+	}
 	if opts.stock {
 		for it in Item {
-			g.prosio.sack[it] = it < FIRST_DISH ? 3 : 1
+			for _ in 0 ..< (it < FIRST_DISH ? 3 : 1) {
+				sack_add(it, item_kcal(it))
+			}
 		}
 		g.prosio.sack_sel = .Apple_Pie
 	}
 	g.camera = g.prosio.pos
 	g.camera_zoom = 1
+	explore(g.prosio.pos)
 }
 
 // Tells the ground shader where the fields, paths and regions are.
@@ -133,6 +199,7 @@ set_ground_layout :: proc() {
 		paths[:count],
 		{forest.centre.x, forest.centre.y, forest.radius.x, forest.radius.y},
 		{hills.centre.x, hills.centre.y, hills.radius.x, hills.radius.y},
+		{POND.x, POND.y, POND_RADIUS, 0},
 	)
 }
 
@@ -162,13 +229,18 @@ update_menu :: proc() {
 	}
 	menu_choice = 0
 	switch choice {
-	case .Play, .Restart:
+	case .Play:
+		scene = .Playing // the game is already there, behind the menu
+	case .Restart:
+		// A new Prosio: the old one is forgotten.
 		new_game()
+		save_game()
 		scene = .Playing
 	case .Resume:
 		scene = .Playing
 	case .Exit_To_Menu:
-		new_game()
+		save_game()
+		continue_game()
 		scene = .Menu
 	case .Quit:
 		g.quit = true
@@ -218,14 +290,27 @@ frame :: proc() {
 			g.time += dt // the meadow stays alive behind the main menu
 		}
 	case .Oven:
-		update_oven_menu(dt)
+		update_cook_menu(dt)
+	case .Bag:
+		update_bag(dt)
 	case .Playing:
 		if button_pressed(.Menu) {
 			scene = .Paused
 			menu_choice = 0
+			save_game()
+			break
+		}
+		if button_pressed(.Bag) && g.prosio.fail == .None {
+			open_bag()
 			break
 		}
 		g.time += dt
+		// He is saved every so often as the game goes on.
+		save_t -= dt
+		if save_t <= 0 {
+			save_t = 15
+			save_game()
+		}
 		// Physics runs in small fixed-size steps, so fast things cannot skip
 		// through thin ones on a slow frame.
 		steps := clamp(int(math.ceil(dt * 120)), 1, 6)
@@ -239,6 +324,7 @@ frame :: proc() {
 			update_world(step)
 			update_particles(step)
 		}
+		explore(g.prosio.pos)
 		// Which part of the meadow he is in.
 		region, inside := region_at(g.prosio.pos)
 		if inside != g.in_region || region != g.region {
@@ -249,11 +335,16 @@ frame :: proc() {
 
 	// The camera follows Prosio smoothly from above and behind.
 	focus := g.prosio.pos
-	zoom: f32 = 1
+	zoom := view_zoom() // further back when his eyes are sharp, closer when they are dim
 	if scene == .Menu {
 		// A slow drift over the meadow round home.
 		focus += {math.sin(g.time * 0.15) * 6, -3}
 		zoom = 1.25
+	}
+	if scene == .Bag && bag_tab == .Outfit {
+		// In close, with Prosio to the right of the menu.
+		zoom = 0.42
+		focus.x -= 1.3
 	}
 	g.camera += (focus - g.camera) * (1 - math.exp(-5 * dt))
 	g.camera_zoom += (zoom - g.camera_zoom) * (1 - math.exp(-4 * dt))
@@ -283,7 +374,9 @@ frame :: proc() {
 		draw_menu()
 	case .Oven:
 		draw_ui()
-		draw_oven_menu()
+		draw_cook_menu()
+	case .Bag:
+		draw_bag()
 	}
 
 	if g.opts.shot_path != nil && g.frame == max(g.opts.shot_frame, 30) {
@@ -297,12 +390,17 @@ frame :: proc() {
 draw_things :: proc() {
 	draw_world()
 	draw_oven()
+	draw_fire()
+	draw_churn()
+	draw_mill()
 	for f, i in g.foods[:g.food_count] {
 		draw_food(f, i)
 	}
 	for e in g.enemies[:g.enemy_count] {
 		draw_enemy(e)
 	}
+	draw_pests()
+	draw_bees()
 	draw_prosio()
 	draw_grab()
 }

@@ -15,7 +15,7 @@ main :: proc() {
 	//   --frame 90        which frame to take the picture on
 	//   --hold ub         hold buttons from frame 10: l r u d, b = bump, a = pick up or oven,
 	//                     j = jump, s = sprint, g = grab or throw, q = eat,
-	//                     z c = choose in the sack, e = enter
+	//                     z c = choose in the sack, e = enter, m = sack and outfit menu
 	//   --tap j           press buttons once on frame 10 (same letters)
 	//   --tap-at 40       press the --tap buttons on this frame instead
 	//   --release-at 90   let go of the --hold buttons on this frame
@@ -24,6 +24,8 @@ main :: proc() {
 	//   --menu            show the menu instead of starting the game
 	//   --crowd           put turkeys and goats round Prosio at the start
 	//   --stock           start with a sack full of food
+	//   --outfit 23101211 what he wears: one digit per row (hat, glasses, face,
+	//                     earrings, shirt, on top, legs, feet), 0 the first choice
 	//   --detail 4        pixel size: 1 chunkiest ... 6 finest (default 4)
 	opts: game.Options
 	args := os.args
@@ -78,8 +80,44 @@ main :: proc() {
 			}
 		case "--crowd":
 			opts.crowd = true
+		case "--bodies":
+			opts.bodies = true
 		case "--stock":
 			opts.stock = true
+		case "--traits":
+			// Seven levels, 0 to 1 (the first two may go down to -1), with
+			// commas: arms, legs, lungs, hide, gut, hooves, cooking.
+			if i + 1 < len(args) {
+				for part, k in strings.split(args[i + 1], ",") {
+					if k < len(opts.traits) {
+						opts.traits[k], _ = strconv.parse_f32(part)
+					}
+				}
+				opts.has_traits = true
+				i += 1
+			}
+		case "--needs":
+			// Six levels, 0 to 100, with commas: carbs, protein, fibre,
+			// water, vitamins, electrolytes.
+			if i + 1 < len(args) {
+				for part, k in strings.split(args[i + 1], ",") {
+					if k < len(opts.needs) {
+						opts.needs[k], _ = strconv.parse_f32(part)
+					}
+				}
+				opts.has_needs = true
+				i += 1
+			}
+		case "--outfit":
+			if i + 1 < len(args) {
+				for ch, k in args[i + 1] {
+					if k < len(opts.outfit) {
+						opts.outfit[k] = u8(ch - '0')
+					}
+				}
+				opts.has_outfit = true
+				i += 1
+			}
 		case "--menu":
 			opts.menu = true
 		case "--tap":
@@ -131,6 +169,10 @@ buttons :: proc(letters: string) -> (set: bit_set[game.Button]) {
 			set += {.Sack_Prev}
 		case 'e':
 			set += {.Confirm}
+		case 'm':
+			set += {.Bag}
+		case 'w':
+			set += {.Gas}
 		}
 	}
 	return
