@@ -10,7 +10,6 @@ WORLD_HALF :: Vec2{44, 30} // the meadow reaches this far from the centre
 WALL_HEIGHT :: f32(1.3) // taller than Prosio's highest jump
 DOOR_GAP :: f32(1.2) // width of the skinny door
 PLATE_KG :: f32(105) // weight needed on the pressure plate
-BERRY_KG :: f32(2) // one bunch of berries off a bush
 BERRY_REGROW :: f32(9) // seconds for a bush to grow another bunch
 MAX_BERRIES :: 3
 MAX_APPLES :: 4 // apples hanging on one tree
@@ -19,7 +18,7 @@ TOWER_HEIGHT :: f32(2.0) // the jumping tower next to the catapult
 
 MAX_WALLS :: 32
 MAX_ROUNDS :: 230
-MAX_FOODS :: 80
+MAX_FOODS :: 120
 MAX_PARTICLES :: 256
 MAX_PLATFORMS :: 4
 MAX_DECOR :: 420
@@ -47,6 +46,7 @@ Round_Kind :: enum {
 	Rock,
 	Crate,
 	Bush,
+	Oven,
 }
 
 Tree_Species :: enum {
@@ -76,12 +76,16 @@ Platform :: struct {
 }
 
 // Food is found, not served: apples fall from apple trees, mushrooms grow
-// in the shade under trees, pumpkins in patches out in the open. Berries are
-// eaten straight off the bushes (see Round).
+// in the shade under trees, pumpkins in patches out in the open, wheat in
+// little fields, and turkeys lay eggs in their nests. Berries are picked
+// straight off the bushes (see Round). All of it goes into Prosio's sack
+// (see kitchen.odin).
 Food_Kind :: enum {
 	Apple,
 	Mushroom,
 	Pumpkin,
+	Wheat,
+	Egg,
 }
 
 Food :: struct {
@@ -95,21 +99,28 @@ Food :: struct {
 	tree:      int, // the tree a fallen apple came from
 }
 
-FOOD_KG := [Food_Kind]f32 {
-	.Apple    = 3,
-	.Mushroom = 5,
-	.Pumpkin  = 12,
+// What each becomes in the sack.
+FOOD_ITEM := [Food_Kind]Item {
+	.Apple    = .Apple,
+	.Mushroom = .Mushroom,
+	.Pumpkin  = .Pumpkin,
+	.Wheat    = .Wheat,
+	.Egg      = .Egg,
 }
 FOOD_RESPAWN := [Food_Kind]f32 {
 	.Apple    = 0, // apples are not replanted: new ones fall from the trees
 	.Mushroom = 25,
 	.Pumpkin  = 40,
+	.Wheat    = 30,
+	.Egg      = 35, // the turkey lays another
 }
 // How big each is on the ground. Only a pumpkin is big enough to bump into.
 FOOD_SIZE := [Food_Kind]f32 {
 	.Apple    = 0.12,
 	.Mushroom = 0.14,
 	.Pumpkin  = 0.34,
+	.Wheat    = 0.22,
+	.Egg      = 0.16,
 }
 
 // Food lying on the ground, ready to eat.
@@ -258,7 +269,7 @@ build_world :: proc() {
 	g.plate_pos = {vault.x, vault.y + 6.5}
 	g.truffles[1] = {pos = vault + {0, -0.6}, visible = true}
 
-	// The third truffle appears when the big boar is knocked out,
+	// The third truffle appears when the big billy goat is knocked out,
 	// the fourth when the catapult's boulder smashes the crate.
 
 	// The cage: its gate opens when the lever tips.
@@ -266,11 +277,18 @@ build_world :: proc() {
 	add_room(cage, {1.7, 1.7}, 1.7, COLOR_VAULT, 1)
 	g.truffles[4] = {pos = cage + {0, -0.2}, visible = true}
 
-	// Near the start: an apple tree, a berry bush and a few pumpkins.
+	// Near the start: an apple tree, a berry bush, a few pumpkins, the oven
+	// with a little wheat field beside it, and a turkey's nest.
 	add_tree({3.6, 11.2}, Tree_Species.Apple)
 	add_bush({-3.2, 9.6})
 	add_food(.Pumpkin, {-1.5, 10.6})
 	add_food(.Pumpkin, {1.2, 11.1})
+	g.oven.pos = {-7, 8.5}
+	add_round(g.oven.pos, OVEN_RADIUS, .Oven)
+	for k in 0 ..< 6 {
+		add_food(.Wheat, {-12.4 + f32(k % 3) * 0.95, 7.9 + f32(k / 3) * 0.95 + f32(k % 2) * 0.2})
+	}
+	add_food(.Egg, {8.6, 9.6})
 	// And something to eat near each building.
 	add_bush({-25, 4})
 	add_food(.Pumpkin, {17, -7})
@@ -350,6 +368,17 @@ build_world :: proc() {
 			placed += 1
 		}
 	}
+	// Little fields of wheat.
+	for field := 0; field < 4; {
+		centre := random_spot()
+		if !clear_spot(centre, 2) {
+			continue
+		}
+		field += 1
+		for k in 0 ..< 4 {
+			add_food(.Wheat, centre + {f32(k % 2) * 0.95 - 0.5, f32(k / 2) * 0.9 - 0.45})
+		}
+	}
 	// Pumpkin patches out in the open.
 	for patch := 0; patch < 4; {
 		centre := random_spot()
@@ -362,10 +391,19 @@ build_world :: proc() {
 			add_food(.Pumpkin, centre + Vec2{math.cos(a), math.sin(a)} * random_range(0.6, 1.1))
 		}
 	}
+	// Turkeys, most of them with a nest of eggs near by.
 	for placed := 0; placed < 10; {
 		pos := random_spot()
 		if clear_spot(pos, 1.5) && length2(pos - g.prosio.pos) > 14 {
-			add_enemy(.Fox, pos)
+			if placed < 7 {
+				a := random_range(0, math.TAU)
+				nest := pos + Vec2{math.cos(a), math.sin(a)} * 1.4
+				probe := nest
+				if hit, _ := collide_static(&probe, 0.3, 0, true); !hit {
+					add_food(.Egg, nest)
+				}
+			}
+			add_enemy(.Turkey, pos)
 			placed += 1
 		}
 	}
@@ -401,12 +439,13 @@ clear_spot :: proc(pos: Vec2, r: f32) -> bool {
 	catapult := g.seesaws[CATAPULT].pivot
 	lever := g.seesaws[LEVER].pivot
 	keep_out := [?]Keep_Out {
-		{{0, 8}, 7}, // the start and the picnic
+		{{0, 8}, 7}, // the start
+		{g.oven.pos + {-3, 0.3}, 4}, // the oven and its wheat field
 		{g.door_pos + {0, 2}, 4}, // in front of the skinny door
 		{g.plate_pos, 5}, // the pressure plate and the vault's gate
 		{catapult + {2, 1}, 10}, // catapult, tower, ramp and firing line
 		{lever + {1, -3}, 7}, // lever and cage
-		{{0, -22}, 4}, // the boar's patch
+		{{0, -22}, 5}, // the goats' patch
 	}
 	for k in keep_out {
 		if length2(pos - k.centre) < k.radius + r {
@@ -490,6 +529,8 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: b
 				top = 1.2
 			case .Bush:
 				top = 0.8
+			case .Oven:
+				top = 2.2
 			}
 			if feet >= top || rd.r <= 0 {
 				continue
@@ -728,6 +769,7 @@ update_world :: proc(dt: f32) {
 		target: f32 = gate.open ? 1 : 0
 		gate.anim += clamp(target - gate.anim, -dt * 1.5, dt * 1.5)
 	}
+	update_oven(dt)
 	g.shake = max(g.shake - dt * 2.5, 0)
 	if g.truffle_count == len(g.truffles) {
 		g.win_t += dt

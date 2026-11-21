@@ -17,15 +17,21 @@ BONK :: f32(31)
 // Throws slower than this do not get an enemy off its feet.
 WEAK_HIT :: f32(3)
 
+// Bad-tempered turkeys roam the meadow, and a few goats keep to their patch
+// in the north, led by a big billy goat.
 Enemy_Kind :: enum {
-	Fox,
-	Boar,
+	Turkey,
+	Goat,
+	Billy,
 }
 
-// How a fox hunts. Like wolves round their prey, the foxes near Prosio
+// How a turkey hunts. Like wolves round their prey, the turkeys near Prosio
 // spread out round him at a distance, drifting towards his back, and take it
 // in turns to dart in, preferably from where he is not looking. After a
 // strike they fall back and circle again.
+//
+// Goats square up instead: they keep a few steps off, facing him, then
+// lower their heads and charge in a straight line, and back off again.
 Hunt :: enum {
 	Stalk, // circling at a distance
 	Charge, // darting in
@@ -61,37 +67,44 @@ Enemy :: struct {
 	stuck_t:    f32, // how long it has been pressing against things
 	stuck_from: Vec2, // where it was when it started
 	turn_lock:  f32, // having turned back from a dead end, it keeps going this way for a while
-	// While held by the tail its body is a floppy chain (see grab.odin):
-	chain:     [3]Vec3, // the tail tip in Prosio's hand, the middle of its body, its shoulders
+	// While held its body is a floppy chain (see grab.odin):
+	chain:     [3]Vec3, // the feet (or hoof) in Prosio's hand, the middle of its body, its shoulders
 	chain_old: [3]Vec3, // where they were a step ago
 	side:      Vec3, // which way its side points
 	dangle:    [2]Vec3, // which way the hind and the front legs hang
 	limp:      f32, // bashed about: limp for this long
 }
 
-// Weight goes with volume: the boar is about 2.1 times the fox's size, so it
-// is about 9.4 times as heavy (weight grows with size cubed).
+// A big farm turkey, a goat, and the billy goat, who weighs more than an
+// ordinary Prosio.
 ENEMY_KG := [Enemy_Kind]f32 {
-	.Fox  = 20,
-	.Boar = 190,
+	.Turkey = 16,
+	.Goat   = 55,
+	.Billy  = 95,
 }
 ENEMY_RADIUS := [Enemy_Kind]f32 {
-	.Fox  = 0.45,
-	.Boar = 0.95,
+	.Turkey = 0.42,
+	.Goat   = 0.62,
+	.Billy  = 0.78,
 }
 ENEMY_SPEED := [Enemy_Kind]f32 {
-	.Fox  = 2.6,
-	.Boar = 1.7,
+	.Turkey = 2.8,
+	.Goat   = 2.3,
+	.Billy  = 2.0,
 }
 ENEMY_GRIP := [Enemy_Kind]f32 {
-	.Fox  = 600,
-	.Boar = 700,
+	.Turkey = 560,
+	.Goat   = 450,
+	.Billy  = 500,
 }
 // An enemy bumped at least this fast is knocked out. A heavy animal needs
-// less speed: it hits the ground that much harder.
+// less speed: it hits the ground that much harder. A turkey is knocked out
+// by a bump from a Prosio of about 90 kg, a goat about 95 kg, and the billy
+// goat only by a huge one, about 115 kg.
 ENEMY_KO_SPEED := [Enemy_Kind]f32 {
-	.Fox  = 12,
-	.Boar = 1.6,
+	.Turkey = 15,
+	.Goat   = 6,
+	.Billy  = 4,
 }
 
 add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
@@ -106,11 +119,14 @@ add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
 }
 
 spawn_enemies :: proc() {
-	add_enemy(.Fox, {-5, -2})
-	add_enemy(.Fox, {5, -3})
-	add_enemy(.Fox, {-12, -0.5})
-	add_enemy(.Fox, {10, 8})
-	add_enemy(.Boar, {0, -22})
+	add_enemy(.Turkey, {-5, -2})
+	add_enemy(.Turkey, {5, -3})
+	add_enemy(.Turkey, {-12, -0.5})
+	add_enemy(.Turkey, {10, 8})
+	add_enemy(.Billy, {0, -22})
+	add_enemy(.Goat, {-2.6, -20.5})
+	add_enemy(.Goat, {2.4, -21})
+	add_enemy(.Goat, {0.5, -24.5})
 }
 
 // How fast a hit with this much momentum throws an enemy.
@@ -136,7 +152,7 @@ update_enemies :: proc(dt: f32) {
 		e.hit_t -= dt
 		switch e.state {
 		case .Gone:
-			if e.kind == .Fox {
+			if e.kind != .Billy {
 				e.timer -= dt
 				if e.timer <= 0 && length2(p.pos - e.home) > 3 {
 					e.state = .Chase
@@ -154,13 +170,13 @@ update_enemies :: proc(dt: f32) {
 			e.timer -= dt
 			e.turn_lock -= dt
 			target := chase_velocity(&e, index, dt)
-			accel: f32 = e.kind == .Fox ? 14 : 10
+			accel: f32 = e.kind == .Turkey ? 14 : 10
 			e.vel = approach2(e.vel, target, accel * dt)
 			e.pos += e.vel * dt
 			speed := length2(e.vel)
 			look := e.vel
-			if e.kind == .Fox && e.hunt == .Stalk {
-				// Circling, it keeps its eyes on him.
+			if e.hunt == .Stalk && length2(p.pos - e.pos) < 9 {
+				// Circling or squaring up, it keeps its eyes on him.
 				look = normalize2(e.vel) * 0.6 + normalize2(p.pos - e.pos)
 			}
 			if speed > 0.3 && look != {} {
@@ -261,7 +277,7 @@ update_enemies :: proc(dt: f32) {
 					e.state = .Gone
 					e.timer = 12
 					burst({e.pos.x, 0.6, e.pos.y}, 18, 5, COLOR_STAR, 0.15)
-					if e.kind == .Boar && !g.truffles[2].visible {
+					if e.kind == .Billy && !g.truffles[2].visible {
 						g.truffles[2] = {pos = e.pos, visible = true}
 					}
 				} else {
@@ -306,14 +322,21 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 	speed := ENEMY_SPEED[e.kind]
 	to := p.pos - e.pos
 	dist := length2(to)
-	if p.fail != .None || dist > 11 || (e.kind == .Boar && dist > 9) {
+	goat := e.kind != .Turkey
+	if p.fail != .None || dist > 11 || (goat && dist > 8) {
 		// Nothing to hunt: amble home. When it spots him again it first
 		// takes its time to fan out round him.
 		e.hunt = .Stalk
 		e.hunt_t = random_range(1.5, 3)
 		e.orbit = math.atan2(-to.x, -to.y)
-		if e.timer <= 0 && length2(e.home - e.pos) > 1 {
-			return normalize2(e.home - e.pos) * speed * 0.6
+		home := e.home
+		if goat {
+			// Goats wander about their patch, grazing.
+			k := f32(index)
+			home += Vec2{math.sin(g.time * 0.13 + k * 1.7), math.cos(g.time * 0.11 + k * 2.3)} * 2.2
+		}
+		if e.timer <= 0 && length2(home - e.pos) > 1 {
+			return normalize2(home - e.pos) * speed * (goat ? 0.35 : 0.6)
 		}
 		return {}
 	}
@@ -321,17 +344,20 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 	if way, ok := way_up(e, p.pos, p.height); ok {
 		return normalize2(way - e.pos) * speed * 1.2
 	}
-	if e.kind == .Boar || e.y > 0.3 {
-		// A boar just charges. Up on the ramp or the tower there is no room
-		// to circle, so a fox goes straight for him too.
+	if e.y > 0.3 {
+		// Up on the ramp or the tower there is no room to circle, so it goes
+		// straight for him.
 		return e.timer > 0 ? Vec2{} : to / max(dist, 0.001) * speed
 	}
 
 	e.hunt_t -= dt
 	toward := to / max(dist, 0.001)
+	if goat {
+		return goat_velocity(e, index, dist, toward)
+	}
 	switch e.hunt {
 	case .Stalk:
-		// Circle at a distance, each fox heading for its own place round him,
+		// Circle at a distance, each turkey heading for its own place round him,
 		// the places spread round his back.
 		slot, count := hunt_slot(index)
 		spread := min(f32(1.1), math.TAU / f32(max(count, 1)))
@@ -384,8 +410,42 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 	return {}
 }
 
-// Which place round Prosio this fox has, out of how many hunting him. The
-// places are handed out in the order the foxes already stand round him, so
+// A goat squares up to him, charges head down, and backs off again.
+goat_velocity :: proc(e: ^Enemy, index: int, dist: f32, toward: Vec2) -> Vec2 {
+	speed := ENEMY_SPEED[e.kind]
+	switch e.hunt {
+	case .Stalk:
+		// A few steps off, facing him, pawing the ground.
+		closing := clamp((dist - 4) * 1.2, -0.8 * speed, 0.8 * speed)
+		v := toward * closing + keep_apart(e, index) * speed
+		if e.hunt_t <= 0 {
+			e.hunt_t = random_range(0.3, 0.8)
+			if e.timer <= 0 && dist < 6.5 && random() < 0.6 {
+				e.hunt = .Charge
+				e.hunt_t = clamp(dist / (speed * 2.2) + 0.5, 0.8, 1.8)
+				e.orbit = math.atan2(toward.x, toward.y) // straight at where he is now
+				e.facing = e.orbit
+			}
+		}
+		return v
+	case .Charge:
+		if e.hunt_t <= 0 {
+			e.hunt = .Retreat
+			e.hunt_t = random_range(0.7, 1.2)
+		}
+		return facing_dir(e.orbit) * speed * 2.2
+	case .Retreat:
+		if e.hunt_t <= 0 {
+			e.hunt = .Stalk
+			e.hunt_t = random_range(1, 2.4)
+		}
+		return normalize2(-toward + keep_apart(e, index)) * speed * 0.8
+	}
+	return {}
+}
+
+// Which place round Prosio this turkey has, out of how many hunting him. The
+// places are handed out in the order the turkeys already stand round him, so
 // they fan out without crossing each other's paths.
 hunt_slot :: proc(index: int) -> (slot, count: int) {
 	p := &g.prosio
@@ -393,7 +453,7 @@ hunt_slot :: proc(index: int) -> (slot, count: int) {
 	mine := g.enemies[index].pos - p.pos
 	my_angle := angle_diff(math.atan2(mine.x, mine.y), back)
 	for &o, i in g.enemies[:g.enemy_count] {
-		if o.kind != .Fox || o.state != .Chase || length2(o.pos - p.pos) > 11 {
+		if o.kind != .Turkey || o.state != .Chase || length2(o.pos - p.pos) > 11 {
 			continue
 		}
 		count += 1
@@ -408,7 +468,7 @@ hunt_slot :: proc(index: int) -> (slot, count: int) {
 
 chargers :: proc() -> (n: int) {
 	for &o in g.enemies[:g.enemy_count] {
-		if o.state == .Chase && o.hunt == .Charge {
+		if o.kind == .Turkey && o.state == .Chase && o.hunt == .Charge {
 			n += 1
 		}
 	}
@@ -509,7 +569,7 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 				p.winded = false
 				say("Wooo... dizzy...", 1.2)
 			} else {
-				say("Ouch!", 0.8)
+				say(e.kind == .Turkey ? "Ouch! It pecked me!" : "Oof! Headbutt!", 0.9)
 			}
 			e.vel = away * 4
 			e.timer = 1.2

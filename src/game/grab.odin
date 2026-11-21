@@ -6,24 +6,26 @@ import "core:math/linalg"
 // Grabbing, dragging, bashing and throwing. F grabs, and F again throws:
 // nothing has to be held down.
 //
-//   Animals are caught by the tail with one hand and dragged along behind
-//   him as he walks. The animal is not stiff: its body is a short chain of
-//   points (the tail tip in his hand, the middle of its body, its shoulders)
-//   that swing, fall and drag on the ground under their own weight, and its
-//   legs dangle. So when he whacks it about it flops like a sack.
+//   Animals are caught by the legs with one hand: a turkey by both feet,
+//   held up so that it dangles head down, flapping; a goat by a hind leg,
+//   dragged along behind him as he walks. The animal is not stiff: its body
+//   is a short chain of points (the feet in his hand, the middle of its body,
+//   its shoulders) that swing, fall and drag on the ground under their own
+//   weight, and its other legs dangle. So when he whacks it about it flops
+//   like a sack.
 //
-//   The tail is a rope. While it is taut, Prosio and the animal are pulled
-//   together and each gives way by the other's share of their weight (an
-//   animal standing on its feet digs in, and counts DIG times its weight).
-//   A fox hardly slows him down. A boar weighs more than he does: it drags
-//   him about on his heels while he leans back and strains.
+//   The held leg is a rope. While it is taut, Prosio and the animal are
+//   pulled together and each gives way by the other's share of their weight
+//   (an animal standing on its feet digs in, and counts DIG times its
+//   weight). A turkey hardly slows him down. The billy goat weighs more than
+//   he does: it drags him about on his heels while he leans back and strains.
 //
 //   SPACE swings the animal like a club, roughly the way he is walking: over
 //   his head or round his side, slamming it into the ground in front of him
 //   and into anything standing there. Each swing goes a little differently.
 //   F hurls it away the way he is walking. Only something lighter than
-//   LIFT_LIMIT times his own weight can be swung or thrown; a boar can only
-//   be hung on to, until it pulls free or he lets go.
+//   LIFT_LIMIT times his own weight can be swung or thrown; the billy goat
+//   can only be hung on to, until it pulls free or he lets go.
 //
 //   Rocks are lifted overhead and held there. F again hurls them down in
 //   front of him, and they skim across the ground.
@@ -63,7 +65,7 @@ SKIP_KEEP :: f32(0.82) // share of forward speed kept at each skip
 SKIP_BOUNCE :: f32(0.55) // share of falling speed that bounces back up
 SKIP_SPIN :: f32(0.18) // share of falling speed the spin turns into forward speed
 ARM_LEN :: f32(0.55) // from his shoulder to his hoof, arm outstretched
-HOLD_SIDE :: f32(1) // which hand holds a tail: +1 is the side his model's +x points to
+HOLD_SIDE :: f32(1) // which hand holds an animal by the leg: +1 is the side his model's +x points to
 FOLLOW_THROUGH :: f32(0.12) // seconds his arm stays down after a swing lands
 KO_LIMP :: f32(7) // bashed until this limp, an animal is knocked out: a handful of good whacks
 
@@ -86,22 +88,31 @@ Thrown_Rock :: struct {
 
 // A thrown enemy that leaves his hands at least this fast is knocked out.
 ENEMY_THROW_KO := [Enemy_Kind]f32 {
-	.Fox  = 12,
-	.Boar = 1.5,
+	.Turkey = 14,
+	.Goat   = 5.5,
+	.Billy  = 3.5,
 }
 
 // The points of a held animal's body, in its own model (units of its
-// radius): the tip of its tail, the middle of its body and its shoulders.
-// The back half of the model hangs between the first two, the front half
-// between the last two.
+// radius): the feet or hoof in his hand, the middle of its body and its
+// shoulders. The back half of the model hangs between the first two, the
+// front half between the last two.
 CHAIN_MODEL := [Enemy_Kind][3]Vec3 {
-	.Fox  = {{0, 1.57, -2.18}, {0, 1.0, -0.1}, {0, 1.05, 0.55}},
-	.Boar = {{0.05, 0.78, -1.32}, {0, 1.1, -0.1}, {0, 1.25, 0.6}},
+	.Turkey = {{0, 0.02, -0.08}, {0, 1.2, -0.08}, {0, 1.6, 0.5}},
+	.Goat   = {{0, 0.05, -0.78}, {0, 1.05, -0.12}, {0, 1.2, 0.58}},
+	.Billy  = {{0, 0.05, -0.78}, {0, 1.05, -0.12}, {0, 1.2, 0.58}},
 }
-// Where the tail leaves the body, in the same units.
-TAIL_ROOT := [Enemy_Kind]Vec3 {
-	.Fox  = {0, 1.08, -0.8},
-	.Boar = {0, 1.38, -1.07},
+// Where the held leg leaves the body, in the same units.
+GRIP_ROOT := [Enemy_Kind]Vec3 {
+	.Turkey = {0, 0.85, -0.08},
+	.Goat   = {0.3, 0.88, -0.55},
+	.Billy  = {0.3, 0.88, -0.55},
+}
+
+// A turkey is lifted off its feet by them and dangles head down; anything
+// bigger is dragged by a hind leg and can still stand on the other three.
+held_up :: proc(kind: Enemy_Kind) -> bool {
+	return kind == .Turkey
 }
 
 rock_kg :: proc(r: f32) -> f32 {
@@ -211,11 +222,18 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		towards: Vec2
 		switch target.kind {
 		case .Enemy:
-			p.lift_total = 0.12 // catching a tail is quick; it is the dragging that is hard
+			p.lift_total = 0.12 // catching a leg is quick; it is the dragging that is hard
 			e := &g.enemies[target.index]
 			towards = e.pos - p.pos
 			start_hold(e)
-			say(ratio > LIFT_LIMIT ? "Got your tail! Uh-oh..." : "Got your tail!", 1)
+			switch {
+			case held_up(e.kind):
+				say("Got you by the legs!", 1)
+			case ratio > LIFT_LIMIT:
+				say("Got your leg! Uh-oh...", 1)
+			case:
+				say("Got your leg!", 1)
+			}
 		case .Rock:
 			p.lift_total = clamp(LIFT_TIME * ratio, 0.08, 1.2)
 			p.vel = {}
@@ -338,7 +356,7 @@ direction_to_prosio :: proc(v: Vec3) -> Vec3 {
 	return {dot2(v.xz, right), v.y, dot2(v.xz, facing_dir(p.facing))}
 }
 
-// The shoulder of the arm that holds a tail, in his own frame.
+// The shoulder of the arm that holds an animal by the leg, in his own frame.
 holding_shoulder :: proc() -> Vec3 {
 	p := &g.prosio
 	return {HOLD_SIDE * prosio_chest(p.kg) * 0.86, SHOULDER_HEIGHT, 0.035}
@@ -346,7 +364,7 @@ holding_shoulder :: proc() -> Vec3 {
 
 // SPACE (bash = false) or F (bash = true... a throw): a swing of the held
 // animal. His hand sweeps from where it is, round through a waypoint, to
-// where the swing ends; the animal follows on the end of its tail.
+// where the swing ends; the animal follows on the end of its leg.
 begin_swing :: proc(throw: bool) {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
@@ -419,7 +437,7 @@ heave :: proc(dt: f32) {
 }
 
 // Keeps a held animal moving: its body swings, falls and drags on its own,
-// hanging from his hand by the tail. Called after Prosio has moved this step.
+// hanging from his hand by a leg. Called after Prosio has moved this step.
 update_drag :: proc(dt: f32) {
 	p := &g.prosio
 	p.heave_t -= dt
@@ -431,7 +449,7 @@ update_drag :: proc(dt: f32) {
 	r := ENEMY_RADIUS[e.kind]
 	kg := ENEMY_KG[e.kind]
 	ratio := kg / p.kg
-	tail_len, body_len := chain_lengths(e.kind)
+	leg_len, body_len := chain_lengths(e.kind)
 	e.limp -= dt
 	alive := e.limp <= 0 && !e.ko
 
@@ -456,7 +474,7 @@ update_drag :: proc(dt: f32) {
 	// towards the animal at the end of his arm.
 	shoulder := prosio_to_world(holding_shoulder())
 	hand: Vec3
-	swing_aim: Vec3 // during a swing: where his arm and the tail point, in the world
+	swing_aim: Vec3 // during a swing: where his arm and the held leg point, in the world
 	if p.swinging {
 		k := min(p.swing_t / p.swing_total, 1)
 		if p.swing_throw {
@@ -469,24 +487,31 @@ update_drag :: proc(dt: f32) {
 		world := right * dir.x + facing_dir(p.facing) * dir.z
 		swing_aim = Vec3{world.x, dir.y, world.y}
 		hand = shoulder + swing_aim * ARM_LEN
+	} else if held_up(e.kind) {
+		// A turkey he holds up and out to his side, at arm's length.
+		right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
+		out := right * HOLD_SIDE * 0.75 + facing_dir(p.facing) * 0.45
+		hand = shoulder + linalg.normalize(Vec3{out.x, 0.15, out.y}) * ARM_LEN
 	} else {
 		to := e.chain[1] - shoulder
 		hand = shoulder + linalg.normalize0(to) * ARM_LEN
 	}
 	hand.y = max(hand.y, p.height + 0.2)
 
-	// Its body falls and flies freely between steps.
-	standing := alive && !p.swinging
+	// Its body falls and flies freely between steps. Held up by the feet, a
+	// turkey cannot stand: it flaps, and every beat of its wings jerks it
+	// about.
+	standing := alive && !p.swinging && !held_up(e.kind)
 	for k in 1 ..= 2 {
 		step := (e.chain[k] - e.chain_old[k]) * 0.995
 		e.chain_old[k] = e.chain[k]
 		e.chain[k] += step + Vec3{0, -GRAVITY * dt * dt, 0}
 	}
 	// In a swing he whips its back end round on the end of his arm, as if
-	// the tail were a handle; it lags behind his hand a little, and the front
+	// the leg were a handle; it lags behind his hand a little, and the front
 	// half just flops along after it.
 	if p.swinging {
-		ideal := hand + swing_aim * tail_len
+		ideal := hand + swing_aim * leg_len
 		e.chain[1] += (ideal - e.chain[1]) * 0.3
 	}
 
@@ -494,6 +519,12 @@ update_drag :: proc(dt: f32) {
 	p.lunge_t -= dt
 	if alive && p.lunge_t < -random_range(0.5, 1.1) {
 		p.lunge_t = 0.25
+		if held_up(e.kind) && !p.swinging {
+			flap := Vec3{random_range(-1, 1), random_range(0.5, 1.5), random_range(-1, 1)} * 2.2
+			e.chain_old[1] -= flap * dt
+			e.chain_old[2] -= flap * dt * 1.4
+			burst({e.chain[1].x, e.chain[1].y, e.chain[1].z}, 2, 1.5, TURKEY_TIP, 0.07)
+		}
 	}
 	away := normalize2(e.chain[2].xz - p.pos)
 	wander := 0.6 * math.sin(g.time * 1.3 + f32(p.carry_index))
@@ -509,16 +540,16 @@ update_drag :: proc(dt: f32) {
 
 	moved_him: f32
 	for _ in 0 ..< 4 {
-		// The tail is a rope from his hand to its middle. When it is taut
+		// The held leg is a rope from his hand to its middle. When it is taut
 		// they pull against each other, each giving way by the other's share.
 		d := e.chain[1] - hand
 		dist := linalg.length(d)
-		if dist > tail_len {
+		if dist > leg_len {
 			if !p.swinging {
 				his_weight := 1 / (p.kg * PROSIO_GRIP)
 				its_weight := 1 / (kg * (!on_floor ? 1 : (standing ? DIG : DRAG_SLIDE)))
 				share := his_weight / (his_weight + its_weight)
-				shift := d.xz / dist * (dist - tail_len) * share
+				shift := d.xz / dist * (dist - leg_len) * share
 				p.pos += shift
 				hand += {shift.x, 0, shift.y}
 				shoulder += {shift.x, 0, shift.y}
@@ -526,14 +557,14 @@ update_drag :: proc(dt: f32) {
 				d = e.chain[1] - hand
 				dist = linalg.length(d)
 			}
-			e.chain[1] = hand + d / dist * tail_len
-		} else if dist < tail_len * 0.5 && !p.swinging {
+			e.chain[1] = hand + d / dist * leg_len
+		} else if dist < leg_len * 0.5 && !p.swinging {
 			// Too close: it is pushed out sideways, never lifted.
 			flat := normalize2(d.xz)
 			if flat == {} {
 				flat = normalize2(e.chain[1].xz - p.pos)
 			}
-			need := math.sqrt(max(tail_len * tail_len * 0.25 - d.y * d.y, 0))
+			need := math.sqrt(max(leg_len * leg_len * 0.25 - d.y * d.y, 0))
 			if length2(d.xz) < need {
 				e.chain[1].x = hand.x + flat.x * need
 				e.chain[1].z = hand.z + flat.y * need
@@ -607,7 +638,8 @@ update_drag :: proc(dt: f32) {
 	}
 
 	// Its pose: where it is, which way it points, which way is up for it, and
-	// how its legs dangle.
+	// how its legs dangle. (A turkey hanging by its feet keeps its legs
+	// together in his hand.)
 	e.pos = e.chain[1].xz
 	e.y = max(e.chain[1].y - r * CHAIN_MODEL[e.kind][1].y, 0)
 	along := e.chain[2] - e.chain[1]
@@ -653,8 +685,8 @@ update_drag :: proc(dt: f32) {
 	}
 }
 
-// How long its tail is (from his hand to its middle) and its body.
-chain_lengths :: proc(kind: Enemy_Kind) -> (tail, body: f32) {
+// How long its held leg is (from his hand to its middle) and its body.
+chain_lengths :: proc(kind: Enemy_Kind) -> (leg, body: f32) {
 	r := ENEMY_RADIUS[kind]
 	c := CHAIN_MODEL[kind]
 	return r * linalg.length(c[1] - c[0]), r * linalg.length(c[2] - c[1])
@@ -690,8 +722,8 @@ slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 //     it flies off at   (1 + e) * m' / (m' + M) * v,   with m' = CLUB_SHARE * m
 //     the club goes on  (m' - e * M) / (m' + M) * v
 //
-// So a fox swung into a fox knocks it about half as fast as it was swung,
-// and swung into the boar it barely rocks it and bounces back.
+// So a turkey swung into a turkey knocks it about half as fast as it was
+// swung, and swung into the billy goat it barely rocks it and bounces back.
 CLUB_SHARE :: f32(0.6)
 BASH_BOUNCE :: f32(0.35)
 bash_hits :: proc(e: ^Enemy, dt: f32) {
@@ -845,7 +877,7 @@ drop_carry :: proc() {
 	pr := prosio_radius(p.kg)
 	switch p.carry {
 	case .Enemy:
-		// Let go of the tail: it lies where it is, dazed for as long as it
+		// Let go of the leg: it lies where it is, dazed for as long as it
 		// was limp. A knocked-out one stays down.
 		e := &g.enemies[p.carry_index]
 		e.pos = e.chain[1].xz

@@ -1,5 +1,7 @@
 package game
 
+import "core:math"
+
 UI_WHITE :: Color{255, 255, 255, 255}
 UI_DARK :: Color{30, 34, 40, 255}
 UI_PANEL :: Color{20, 30, 24, 150}
@@ -46,6 +48,16 @@ draw_ui :: proc() {
 	}
 	if !g.gates[0].open {
 		world_label(ui_format("%d kg", i32(PLATE_KG)), {g.plate_pos.x, 1.2, g.plate_pos.y}, 20 * s, UI_YELLOW)
+	}
+	oven_top := Vec3{g.oven.pos.x, 2.9, g.oven.pos.y}
+	switch {
+	case g.oven.ready:
+		pulse := 1 + 0.08 * math.sin(g.time * 6)
+		world_label("READY!", oven_top, 24 * s * pulse, UI_GREEN)
+	case g.oven.baking:
+		world_label(ui_format("BAKING... %d", i32(math.ceil(g.oven.bake_t))), oven_top, 20 * s, UI_ORANGE)
+	case:
+		world_label("OVEN", oven_top, 18 * s, UI_YELLOW)
 	}
 
 	// Speech bubble.
@@ -111,6 +123,8 @@ draw_ui :: proc() {
 	truffles := ui_format("GOLDEN TRUFFLES  %d / 5", i32(g.truffle_count))
 	label(truffles, sw - ui_text_width(truffles, 22 * s) - 24 * s, 22 * s, 22 * s, UI_YELLOW)
 
+	draw_sack(s)
+
 	// What the action button does right now.
 	if p.fail == .None {
 		action: cstring = "Hold E: push-ups"
@@ -126,15 +140,17 @@ draw_ui :: proc() {
 				action = "F: throw it down"
 			}
 		} else if food_in_reach(p.pos, prosio_radius(p.kg) + 0.75) != nil || bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6) != nil {
-			action = "E: eat"
+			action = "E: put it in the sack"
+		} else if oven_in_reach(p.pos, prosio_radius(p.kg)) {
+			action = g.oven.ready ? "E: take it out of the oven" : (g.oven.baking ? "Baking... wait for the ding!" : "E: bake something")
 		} else if _, found := grab_target(); found {
 			action = "F: grab     Hold E: push-ups"
 		}
 		label_centred(action, sw / 2, sh - 74 * s, 22 * s, UI_YELLOW)
 	}
-	label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Eat / push-ups: E   Menu: ESC", sw / 2, sh - 40 * s, 20 * s)
+	label_centred("Move: WASD   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Gather / push-ups: E   Sack: Z C   Eat: Q   Menu: ESC", sw / 2, sh - 40 * s, 18 * s)
 
-	if g.truffle_count == len(g.truffles) && g.win_t < 6 {
+	if g.truffle_count == len(g.truffles) {
 		label_centred("ALL THE GOLDEN TRUFFLES!", sw / 2, sh * 0.26, 54 * s, UI_YELLOW)
 		label_centred("Well done, Prosio!", sw / 2, sh * 0.26 + 62 * s, 30 * s)
 	}
@@ -155,6 +171,7 @@ draw_ui :: proc() {
 
 Menu_Item :: enum {
 	Play,
+	Play_Again,
 	Resume,
 	Look,
 	Restart,
@@ -164,6 +181,7 @@ Menu_Item :: enum {
 
 MENU_TEXT := [Menu_Item]cstring {
 	.Play         = "PLAY",
+	.Play_Again   = "PLAY AGAIN",
 	.Resume       = "RESUME",
 	.Look         = "",
 	.Restart      = "RESTART",
@@ -178,10 +196,14 @@ look_text :: proc() -> cstring {
 MENU_MAIN := [?]Menu_Item{.Play, .Look, .Quit}
 MENU_MAIN_WEB := [?]Menu_Item{.Play, .Look} // the browser has nothing to quit to
 MENU_PAUSE := [?]Menu_Item{.Resume, .Look, .Restart, .Exit_To_Menu}
+MENU_WON := [?]Menu_Item{.Play_Again, .Exit_To_Menu}
 
 menu_items :: proc() -> []Menu_Item {
 	if scene == .Paused {
 		return MENU_PAUSE[:]
+	}
+	if scene == .Won {
+		return MENU_WON[:]
 	}
 	return IS_WEB ? MENU_MAIN_WEB[:] : MENU_MAIN[:]
 }
@@ -204,7 +226,18 @@ draw_menu :: proc() {
 		label_centred("the pig who eats, runs and bumps", sw / 2, top + size + 4 * s, 24 * s, UI_YELLOW)
 	}
 
-	y := sh * 0.5
+	draw_menu_items(sh * 0.5, s)
+
+	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE     Pixel size any time: 1 to 6", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
+	if scene == .Menu {
+		// While paused, the game's own controls line is already showing.
+		label_centred("Move: WASD   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Gather / push-ups: E   Sack: Z C   Eat: Q", sw / 2, sh - 70 * s, 18 * s)
+	}
+}
+
+draw_menu_items :: proc(top, s: f32) {
+	sw, _ := screen_size()
+	y := top
 	for i in 0 ..< menu_length() {
 		item := menu_items()[i]
 		text := item == .Look ? look_text() : MENU_TEXT[item]
@@ -219,10 +252,27 @@ draw_menu :: proc() {
 		}
 		y += 64 * s
 	}
+}
 
-	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE     Pixel size any time: 1 to 6", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
-	if scene == .Menu {
-		// While paused, the game's own controls line is already showing.
-		label_centred("Move: WASD or arrows   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Eat / push-ups: E", sw / 2, sh - 70 * s, 20 * s)
+// The end: all five golden truffles found.
+draw_won :: proc() {
+	sw, sh := screen_size()
+	s := min(sw / 1280, sh / 720)
+	fade := u8(min(g.win_t - 2.5, 1) * 130)
+	ui_rect(0, 0, sw, sh, {10, 24, 20, fade})
+	label_centred("CONGRATULATIONS, PROSIO!", sw / 2, sh * 0.12, 64 * s, UI_YELLOW)
+	label_centred("You collected all the golden truffles!", sw / 2, sh * 0.12 + 80 * s, 32 * s)
+	// Five truffles in a row.
+	for i in 0 ..< 5 {
+		x := sw / 2 + (f32(i) - 2) * 60 * s
+		y := sh * 0.12 + 150 * s + 6 * s * math.sin(g.time * 4 + f32(i))
+		ui_round_rect(x - 20 * s, y - 16 * s, 40 * s, 34 * s, COLOR_GOLD, 0.8)
+		ui_round_rect(x - 8 * s, y - 10 * s, 12 * s, 9 * s, {255, 240, 160, 255}, 0.8)
 	}
+	stats := sh * 0.12 + 196 * s
+	label_centred(ui_format("Weight at the finish: %d kg", i32(g.prosio.kg + 0.5)), sw / 2, stats, 24 * s, UI_WHITE)
+	label_centred(ui_format("Dishes baked: %d", i32(g.oven.baked)), sw / 2, stats + 32 * s, 24 * s, UI_WHITE)
+	label_centred(ui_format("Time: %d minutes", i32(g.time / 60 + 0.5)), sw / 2, stats + 64 * s, 24 * s, UI_WHITE)
+	draw_menu_items(sh * 0.62, s)
+	label_centred("Choose: UP / DOWN     Select: ENTER or SPACE", sw / 2, sh - 60 * s, 20 * s, UI_YELLOW)
 }

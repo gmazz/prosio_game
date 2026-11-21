@@ -75,9 +75,11 @@ Prosio :: struct {
 	heave_t:      f32, // time left in a heave at an animal too heavy to swing
 	lunge_t:      f32, // a held animal is lunging while this is positive
 	throw_queued: bool, // F was pressed while still lifting a rock
-	hand:         Vec3, // where the hand that holds a tail is
+	hand:         Vec3, // where the hand that holds an animal by the leg is
 	fail:         Fail,
 	fail_t:       f32,
+	sack:         [Item]int, // what he has gathered or baked
+	sack_sel:     Item, // what he would eat next
 	bubble:       cstring, // speech bubble text
 	bubble_t:     f32,
 	hint_cd:      f32,
@@ -185,7 +187,10 @@ update_prosio :: proc(dt: f32) {
 		collide_static(&p.pos, body_r, p.height)
 		prosio_vertical(dt)
 		if p.fail_t > 1 && pressed(.Restart) {
+			sack := p.sack // the sack is still there when he comes round
 			reset_prosio()
+			g.prosio.sack = sack
+			sack_step(0)
 		}
 		return
 	}
@@ -202,44 +207,34 @@ update_prosio :: proc(dt: f32) {
 	can_act := p.dazed_t <= 0 && p.dash_t <= 0
 	food := food_in_reach(p.pos, r + 0.75)
 	bush := bush_in_reach(p.pos, r + 0.6)
+	oven := oven_in_reach(p.pos, r)
 
 	// Grabbing and throwing.
 	update_grab(dt, can_act)
 	carrying := p.carry != .Nothing
 
-	// Eating: tap the action button next to food.
-	// Eating: tap the action button next to food, or next to a bush with
-	// berries on it.
-	if grounded && can_act && !carrying && (food != nil || bush != nil) && pressed(.Action) {
-		at: Vec2
-		if food != nil {
-			p.kg += FOOD_KG[food.kind]
-			if food.fallen {
-				food.gone = true
-			} else {
-				food.respawn = FOOD_RESPAWN[food.kind]
-			}
-			at = food.pos
-			EATEN := [Food_Kind]cstring{.Apple = "Crunch! Yum!", .Mushroom = "Mmm, mushroom!", .Pumpkin = "A whole pumpkin! Burp!"}
-			say(EATEN[food.kind])
-			burst({at.x, 0.5, at.y}, 10, 3, food.kind == .Mushroom ? COLOR_DUST : COLOR_CRUMB, 0.08)
-		} else {
-			p.kg += BERRY_KG
-			bush.fruit -= 1
-			bush.fruit_t = BERRY_REGROW
-			bush.shake_t = 0.4
-			at = bush.pos
-			say("Berries! Yum!")
-			burst({at.x, 0.7, at.y}, 8, 2.5, BERRY_COLOR, 0.06)
+	// The action button next to food puts it in the sack; at the oven it
+	// bakes.
+	if grounded && can_act && !carrying && pressed(.Action) {
+		if food != nil || bush != nil {
+			gather(food, bush)
+		} else if oven {
+			use_oven()
 		}
-		p.eat_t = 0.5
-		p.wobble_vel += 2.5
-		to_food := at - p.pos
-		p.facing = math.atan2(to_food.x, to_food.y)
+	}
+	// The sack: choose with Z and C, eat with Q.
+	if pressed(.Sack_Next) {
+		sack_step(1)
+	}
+	if pressed(.Sack_Prev) {
+		sack_step(-1)
+	}
+	if grounded && can_act && !carrying && !p.pushups && pressed(.Eat) {
+		eat_from_sack()
 	}
 
 	// Push-ups: hold the action button anywhere else.
-	if grounded && food == nil && bush == nil && !carrying && pressed(.Action) && can_act && !p.pushups_on {
+	if grounded && food == nil && bush == nil && !oven && !carrying && pressed(.Action) && can_act && !p.pushups_on {
 		p.pushups_on = true
 		p.pushup_phase = 0
 		p.pushup_reps = 0
@@ -442,7 +437,7 @@ update_prosio :: proc(dt: f32) {
 	} else if p.kg >= KG_MAX {
 		p.fail = .Heart_Attack
 	} else if p.kg < KG_MIN + KG_DANGER {
-		hint("So hungry... I must eat!")
+		hint(sack_has_food() ? "So hungry... Q: eat from my sack!" : "So hungry... I must find food!")
 	} else if p.kg > KG_MAX - KG_DANGER {
 		hint("So full... I must exercise!")
 	}

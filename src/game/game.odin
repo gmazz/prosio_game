@@ -17,6 +17,8 @@ Options :: struct {
 	release_at: int, // stop holding the --hold buttons on this frame
 	menu:       bool, // start on the menu even in a test run
 	crowd:      bool, // put a few animals round Prosio at the start
+	stock:      bool, // start with a sack full of food
+	last_truffle: bool, // four truffles found, the fifth at his feet
 	detail:     int, // 1 to 6: pixel density to start with (0 = default)
 }
 
@@ -48,6 +50,7 @@ Game :: struct {
 	crate_pos:     Vec2,
 	crate_round:   int,
 	crate_broken:  bool,
+	oven:          Oven,
 	camera:        Vec2, // the point on the ground the camera looks at
 	camera_zoom:   f32, // 1 is the normal distance; larger is further away
 	shake:         f32,
@@ -71,6 +74,8 @@ Scene :: enum {
 	Menu,
 	Playing,
 	Paused,
+	Oven, // choosing what to bake; the game waits
+	Won, // all the truffles found
 }
 
 scene: Scene
@@ -104,11 +109,25 @@ new_game :: proc() {
 	}
 	g.prosio.height, _ = ground_at(g.prosio.pos)
 	if opts.crowd {
-		// For trying out the club: three foxes and a boar close by.
-		kinds := [?]Enemy_Kind{.Fox, .Fox, .Boar, .Fox}
+		// For trying out the club: turkeys and goats close by.
+		kinds := [?]Enemy_Kind{.Turkey, .Turkey, .Billy, .Goat}
 		for kind, i in kinds {
-			add_enemy(kind, g.prosio.pos + facing_dir(f32(i) * math.TAU / 4 + 0.4) * 3.2)
+			add_enemy(kind, g.prosio.pos + facing_dir(f32(i) * math.TAU / 4 + 0.4) * (i == 0 ? 1.15 : 2.6)) // the first, a turkey, within reach
 		}
+	}
+	if opts.stock {
+		for it in Item {
+			g.prosio.sack[it] = it < FIRST_DISH ? 3 : 1
+		}
+		g.prosio.sack_sel = .Apple_Pie
+	}
+	if opts.last_truffle {
+		for &t, i in g.truffles {
+			t.visible = true
+			t.taken = i < 4
+		}
+		g.truffle_count = 4
+		g.truffles[4].pos = g.prosio.pos + {0.9, 0}
 	}
 	g.camera_zoom = 1
 }
@@ -139,7 +158,7 @@ update_menu :: proc() {
 	}
 	menu_choice = 0
 	switch choice {
-	case .Play, .Restart:
+	case .Play, .Restart, .Play_Again:
 		new_game()
 		scene = .Playing
 	case .Resume:
@@ -194,6 +213,20 @@ frame :: proc() {
 		if scene == .Menu {
 			g.time += dt // the meadow stays alive behind the main menu
 		}
+	case .Oven:
+		update_oven_menu(dt)
+	case .Won:
+		update_menu()
+		// Golden sparkles rain round the champion.
+		g.time += dt
+		g.win_t += dt
+		for _ in 0 ..< 2 {
+			p := g.prosio.pos
+			a := random_range(0, math.TAU)
+			at := Vec3{p.x + math.cos(a) * random_range(0.5, 2.5), random_range(2.5, 4), p.y + math.sin(a) * random_range(0.5, 2.5)}
+			spawn_particle(at, {0, -0.5, 0}, random_range(1, 1.8), random_range(0.05, 0.09), random() < 0.3 ? COLOR_WHITE : COLOR_GOLD, 1.5)
+		}
+		update_particles(dt)
 	case .Playing:
 		if button_pressed(.Menu) {
 			scene = .Paused
@@ -215,6 +248,11 @@ frame :: proc() {
 			update_world(step)
 			update_particles(step)
 		}
+		// All five truffles: a moment to enjoy it, then the end.
+		if g.truffle_count == len(g.truffles) && g.win_t > 2.5 && g.prosio.fail == .None {
+			scene = .Won
+			menu_choice = 0
+		}
 	}
 
 	// The camera follows Prosio smoothly from above and behind.
@@ -225,6 +263,9 @@ frame :: proc() {
 		// A slow drift over the meadow.
 		focus += {math.sin(g.time * 0.15) * 6, -3}
 		zoom = 1.25
+	}
+	if scene == .Won {
+		zoom = 0.8 // in close on the hero
 	}
 	catapult := g.seesaws[CATAPULT].pivot
 	if !g.crate_broken && (length2(g.prosio.pos - catapult) < 8 || g.boulder.state == .Flying) {
@@ -241,6 +282,7 @@ frame :: proc() {
 	begin_world(eye, target, 38, g.time)
 	draw_world()
 	draw_seesaws()
+	draw_oven()
 	draw_throw_marker()
 	for f, i in g.foods[:g.food_count] {
 		draw_food(f, i)
@@ -255,13 +297,19 @@ frame :: proc() {
 	draw_grab()
 	draw_particles()
 	end_world()
-	if scene == .Menu {
+	switch scene {
+	case .Menu:
 		draw_menu()
-	} else {
+	case .Playing:
 		draw_ui()
-		if scene == .Paused {
-			draw_menu()
-		}
+	case .Paused:
+		draw_ui()
+		draw_menu()
+	case .Oven:
+		draw_ui()
+		draw_oven_menu()
+	case .Won:
+		draw_won()
 	}
 
 	if g.opts.shot_path != nil && g.frame == max(g.opts.shot_frame, 30) {

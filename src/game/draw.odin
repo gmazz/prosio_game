@@ -258,6 +258,8 @@ draw_world :: proc() {
 			draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
 		case .Crate:
 		// Drawn with the seesaws.
+		case .Oven:
+		// Drawn by draw_oven.
 		}
 	}
 
@@ -511,11 +513,26 @@ draw_throw_marker :: proc() {
 	tube(IDENTITY, {spot.x, y + 0.01, spot.y}, pulse * 0.45, 0.01, {255, 255, 255, 220})
 }
 
+NEST :: Color{150, 112, 70, 255}
+WHEAT :: Color{230, 190, 88, 255}
+
 draw_food :: proc(f: Food, index: int) {
-	if f.gone || f.respawn > 0 || !on_screen(f.pos, 1) {
+	if f.gone || !on_screen(f.pos, 1) {
 		return
 	}
 	m := translate({f.pos.x, f.y, f.pos.y}) * rot_y(f32(index) * 2.1)
+	if f.kind == .Egg {
+		// The nest stays when the egg is taken.
+		draw_shape(.Torus, m * translate({0, 0.05, 0}) * rot_x(math.PI / 2) * scale({0.17, 0.17, 0.1}), NEST)
+		ball(m, {0, 0.03, 0}, {0.16, 0.04, 0.16}, shade(NEST, 0.7))
+		for k in 0 ..< 5 {
+			a := f32(k) * 1.3
+			limb(m, {math.cos(a) * 0.2, 0.08, math.sin(a) * 0.2}, {math.cos(a + 1.1) * 0.22, 0.1, math.sin(a + 1.1) * 0.22}, 0.02, shade(NEST, 1.15))
+		}
+	}
+	if f.respawn > 0 {
+		return
+	}
 	switch f.kind {
 	case .Apple:
 		// Fallen apples brown a little as they start to rot.
@@ -541,6 +558,22 @@ draw_food :: proc(f: Food, index: int) {
 		ball(m, {0, 0.23, 0}, {0.26, 0.21, 0.26}, orange)
 		tube(m, {0, 0.4, 0}, 0.035, 0.1, {96, 110, 56, 255})
 		ball(m, {0.1, 0.42, 0.04}, {0.1, 0.02, 0.07}, COLOR_LEAF)
+	case .Wheat:
+		// A little sheaf: stalks bound at the middle, heavy ears on top.
+		set_sway(0.05)
+		for k in 0 ..< 7 {
+			a := f32(k) * 0.9
+			spread := 0.08 + 0.03 * f32(k % 3)
+			base := Vec3{math.cos(a) * spread, 0, math.sin(a) * spread}
+			top := Vec3{math.cos(a) * spread * 1.9, 0.6 + 0.07 * f32(k % 2), math.sin(a) * spread * 1.9}
+			limb(m, base, top, 0.018, shade(WHEAT, 0.85))
+			ball(m, top + {0, 0.07, 0}, {0.04, 0.1, 0.04}, k % 2 == 0 ? WHEAT : shade(WHEAT, 0.9))
+		}
+		set_sway(0)
+		tube(m, {0, 0.24, 0}, 0.1, 0.06, COLOR_TRUNK)
+	case .Egg:
+		ball(m, {0, 0.13, 0}, {0.085, 0.11, 0.085}, {246, 236, 214, 255})
+		ball(m, {0.03, 0.17, 0.05}, {0.015, 0.015, 0.015}, {176, 136, 104, 255})
 	}
 }
 
@@ -584,12 +617,12 @@ hash01 :: proc(n: f32) -> f32 {
 }
 
 // How an animal's body is placed. Standing, both halves of its body share
-// one frame; held by the tail, the back and the front halves hang between
+// one frame; held by a leg, the back and the front halves hang between
 // the points of its floppy chain, and its legs dangle.
 Animal_Pose :: struct {
 	rear, front: Mat4,
 	legs:        [2][2]Vec2, // [side][hind, front]: how far each leg turns forward (x) and outward (y)
-	held:        bool, // its tail runs to Prosio's hand
+	held:        bool, // a leg runs to Prosio's hand
 	hand:        Vec3,
 	dizzy:       bool,
 }
@@ -625,10 +658,11 @@ draw_enemy :: proc(e: Enemy) {
 			}
 		}
 	}
-	if e.kind == .Boar {
-		draw_boar(pose, e)
-	} else {
-		draw_fox(pose, e)
+	switch e.kind {
+	case .Turkey:
+		draw_turkey(pose, e)
+	case .Goat, .Billy:
+		draw_goat(pose, e)
 	}
 	if e.state == .Dizzy || (e.state == .Held && (e.limp > 0 || e.ko)) {
 		head := pose.front * [4]f32{0, 2.3, 0.6, 1}
@@ -687,7 +721,7 @@ held_pose :: proc(e: Enemy) -> (pose: Animal_Pose) {
 	pose.dizzy = e.limp > 0 || e.ko
 	alive := !pose.dizzy
 	ground, _ := ground_at(e.chain[1].xz)
-	on_feet := alive && e.chain[1].y < ground + r * c[1].y + 0.05
+	on_feet := alive && !held_up(e.kind) && e.chain[1].y < ground + r * c[1].y + 0.05
 	for si in 0 ..< 2 {
 		side := f32(si * 2 - 1)
 		for ei in 0 ..< 2 {
@@ -709,67 +743,199 @@ held_pose :: proc(e: Enemy) -> (pose: Animal_Pose) {
 	return
 }
 
-FOX_COAT :: Color{212, 116, 55, 255}
-FOX_FEET :: Color{84, 60, 52, 255}
 ANIMAL_CREAM :: Color{248, 222, 178, 255}
 ANIMAL_INK :: Color{58, 47, 48, 255}
+ANIMAL_BLUSH :: Color{255, 150, 165, 255}
 
-draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
-	coat, feet, cream, ink := FOX_COAT, FOX_FEET, ANIMAL_CREAM, ANIMAL_INK
+TURKEY_BRONZE :: Color{124, 86, 60, 255}
+TURKEY_DARK :: Color{78, 56, 46, 255}
+TURKEY_RUST :: Color{176, 100, 58, 255}
+TURKEY_TIP :: Color{240, 222, 182, 255}
+TURKEY_SKIN :: Color{156, 200, 238, 255}
+TURKEY_RED :: Color{222, 58, 58, 255}
+TURKEY_LEG :: Color{216, 152, 134, 255}
+BEAK :: Color{242, 198, 96, 255}
+
+// A big, cross farm turkey: a round bronze body on two pink legs, a fan of
+// barred tail feathers it spreads when it means trouble, and a bare blue head
+// with a red wattle. Held, it hangs from Prosio's hand by its feet.
+draw_turkey :: proc(pose: Animal_Pose, e: Enemy) {
 	r := ENEMY_RADIUS[e.kind]
+	cross := e.state == .Chase
+	charging := cross && e.hunt == .Charge
+	// Its wings beat madly when it is held up or charges, and droop when it
+	// is limp.
+	wing: f32 = 0.12
+	switch {
+	case pose.dizzy:
+		wing = pose.held ? 0.9 : 0.35
+	case pose.held:
+		wing = 0.9 + 0.8 * math.sin(e.hop * 2.4)
+	case charging:
+		wing = 0.6 + 0.4 * math.sin(e.hop * 2)
+	}
+
+	// Legs: feathered thighs, then thin pink shanks and toes.
+	if pose.held {
+		for side in ([2]f32{-1, 1}) {
+			ball(pose.rear, {side * 0.22, 0.86, -0.08}, {0.2, 0.26, 0.22}, TURKEY_DARK)
+			hip := pose.rear * [4]f32{side * 0.18, 0.72, -0.08, 1}
+			limb(IDENTITY, hip.xyz, pose.hand, 0.065 * r, TURKEY_LEG)
+		}
+	} else {
+		for si in 0 ..< 2 {
+			side := f32(si * 2 - 1)
+			turn := pose.legs[si][0]
+			leg := pose.rear * translate({side * 0.22, 0.86, -0.06}) * rot_z(turn.y) * rot_x(turn.x)
+			ball(leg, {}, {0.2, 0.26, 0.22}, TURKEY_DARK)
+			foot := Vec3{0, -0.83, 0.04}
+			limb(leg, {0, -0.12, 0}, foot, 0.06, TURKEY_LEG)
+			for toe in ([3]f32{-1, 0, 1}) {
+				limb(leg, foot, foot + {toe * 0.13, -0.02, 0.22}, 0.035, TURKEY_LEG)
+			}
+			limb(leg, foot, foot + {0, -0.02, -0.15}, 0.035, TURKEY_LEG)
+		}
+	}
+
+	// The tail fan: barred feathers with pale tips, spread wide when cross,
+	// folded when held or knocked about.
+	spread: f32 = cross ? 1.25 : 0.55
+	if pose.held || pose.dizzy {
+		spread = 0.3
+	}
+	fan := pose.rear * translate({0, 1.3, -0.62}) * rot_x(cross ? -0.25 : -1.0)
+	for k in 0 ..< 9 {
+		a := (f32(k) / 8 - 0.5) * 2 * spread
+		feather := fan * rot_z(a)
+		ball(feather, {0, 0.5, 0}, {0.14, 0.5, 0.05}, k % 2 == 0 ? TURKEY_BRONZE : TURKEY_RUST)
+		ball(feather, {0, 0.72, 0.01}, {0.12, 0.08, 0.05}, TURKEY_DARK)
+		ball(feather, {0, 0.88, 0.01}, {0.12, 0.1, 0.05}, TURKEY_TIP)
+	}
+
+	// The body: a plump back and a puffed-out breast.
+	ball(pose.rear, {0, 1.22, -0.25}, {0.7, 0.6, 0.72}, TURKEY_BRONZE)
+	ball(pose.front, {0, 1.2, 0.18}, {0.62, 0.64, 0.6}, TURKEY_BRONZE)
+	ball(pose.front, {0, 1.08, 0.4}, {0.42, 0.42, 0.34}, TURKEY_DARK)
+	// A tuft of a beard on the breast.
+	limb(pose.front, {0, 1.32, 0.68}, {0, 0.98, 0.74}, 0.05, ANIMAL_INK)
+	// Wings, hinged at the shoulder.
+	for side in ([2]f32{-1, 1}) {
+		w := pose.rear * translate({side * 0.52, 1.5, -0.08}) * rot_z(side * wing)
+		ball(w, {side * 0.08, -0.3, -0.06}, {0.15, 0.42, 0.6}, TURKEY_DARK)
+		ball(w, {side * 0.1, -0.5, -0.24}, {0.11, 0.18, 0.42}, TURKEY_TIP)
+	}
+
+	// The bare neck and head.
+	limb(pose.front, {0, 1.35, 0.42}, {0, 1.86, 0.62}, 0.14, TURKEY_SKIN)
+	h := pose.front * translate({0, 1.92, 0.66}) * scale({1.15, 1.15, 1.15})
+	if pose.held && !pose.dizzy {
+		h = h * rot_y(0.4 * math.sin(e.hop * 0.9)) // looking wildly about
+	} else if charging {
+		h = h * rot_x(0.35) // head down
+	}
+	ball(h, {}, {0.24, 0.26, 0.27}, TURKEY_SKIN)
+	draw_shape(.Cone, h * translate({0, -0.03, 0.2}) * rot_x(math.PI / 2) * scale({0.07, 0.17, 0.06}), BEAK)
+	// The snood over the beak, and the wattle under the chin.
+	limb(h, {0.02, 0.08, 0.2}, {0.05, -0.2, 0.33}, 0.045, TURKEY_RED)
+	ball(h, {0, -0.25, 0.08}, {0.1, 0.15, 0.1}, TURKEY_RED)
+	ball(pose.front, {0, 1.55, 0.66}, {0.1, 0.14, 0.08}, TURKEY_RED)
+	for side in ([2]f32{-1, 1}) {
+		draw_cute_eye(h * translate({side * 0.15, 0.06, 0.18}) * rot_y(side * 0.5), 0.085, pose.dizzy)
+		if cross && !pose.dizzy {
+			// A cross little brow.
+			brow := h * translate({side * 0.14, 0.17, 0.2}) * rot_z(-side * 0.45)
+			box(brow, {}, {0.12, 0.03, 0.04}, ANIMAL_INK)
+		}
+	}
+}
+
+GOAT_WHITE :: Color{240, 234, 222, 255}
+GOAT_PATCH :: Color{168, 146, 128, 255}
+BILLY_COAT :: Color{156, 132, 106, 255}
+BILLY_DARK :: Color{98, 82, 68, 255}
+GOAT_HOOF :: Color{62, 52, 50, 255}
+GOAT_HORN :: Color{216, 202, 170, 255}
+GOAT_PINK :: Color{240, 182, 172, 255}
+
+// A goat: a barrel of a body on four thin legs, a short perky tail, floppy
+// ears, a little beard and horns. The billy goat is bigger and brown, with a
+// long beard and great curling horns. Held, one hind leg runs to Prosio's
+// hand.
+draw_goat :: proc(pose: Animal_Pose, e: Enemy) {
+	billy := e.kind == .Billy
+	r := ENEMY_RADIUS[e.kind]
+	coat := billy ? BILLY_COAT : GOAT_WHITE
+	dark := billy ? BILLY_DARK : GOAT_PATCH
+	charging := e.state == .Chase && e.hunt == .Charge
 	for si in 0 ..< 2 {
 		side := f32(si * 2 - 1)
 		for ei in 0 ..< 2 {
 			end := f32(ei * 2 - 1)
+			if pose.held && si == 1 && ei == 0 {
+				// The leg in Prosio's hand.
+				hip := pose.rear * [4]f32{GRIP_ROOT[e.kind].x, GRIP_ROOT[e.kind].y, GRIP_ROOT[e.kind].z, 1}
+				limb(IDENTITY, hip.xyz, pose.hand, 0.1 * r, coat)
+				ball(IDENTITY, pose.hand, {0.08, 0.08, 0.08} * r, GOAT_HOOF)
+				continue
+			}
 			turn := pose.legs[si][ei]
-			frame := end < 0 ? pose.rear : pose.front
-			leg := frame * translate({side * 0.34, 0.77, end * 0.59}) * rot_z(turn.y) * rot_x(turn.x)
-			knee := Vec3{0, -0.35, end < 0 ? -0.10 : 0.05}
-			paw := Vec3{0, -0.69, 0.04}
-			taper(leg, {0, 0.05, 0}, knee, 0.2, coat)
-			taper(leg, knee, paw, 0.12, feet)
-			ball(leg, paw + {0, 0, 0.035}, {0.12, 0.105, 0.16}, feet)
+			leg := (end < 0 ? pose.rear : pose.front) * translate({side * 0.3, 0.84, end * 0.55}) * rot_z(turn.y) * rot_x(turn.x)
+			knee := Vec3{0, -0.4, end < 0 ? -0.08 : 0.04}
+			ankle := Vec3{0, -0.74, 0.02}
+			taper(leg, {0, 0.12, 0}, knee, 0.17, coat)
+			ball(leg, knee, {0.1, 0.1, 0.1}, coat)
+			taper(leg, knee, ankle, 0.09, billy ? dark : coat)
+			ball(leg, ankle + {0, -0.03, 0.03}, {0.09, 0.07, 0.11}, GOAT_HOOF)
 		}
 	}
-	// The body in three overlapping parts, so it can bend in the middle.
-	ball(pose.rear, {0, 0.97, -0.45}, {0.51, 0.53, 0.6}, coat)
-	ball(pose.rear, {0, 0.98, -0.07}, {0.5, 0.52, 0.45}, coat)
-	ball(pose.front, {0, 0.99, 0.27}, {0.5, 0.52, 0.56}, coat)
-	limb(pose.front, {0, 1.07, 0.36}, {0, 1.47, 0.64}, 0.40, cream)
-	if pose.held {
-		// The bushy tail runs straight to Prosio's hoof.
-		root := pose.rear * [4]f32{TAIL_ROOT[.Fox].x, TAIL_ROOT[.Fox].y, TAIL_ROOT[.Fox].z, 1}
-		mid := root.xyz + (pose.hand - root.xyz) * 0.6
-		limb(IDENTITY, root.xyz, pose.hand + (root.xyz - pose.hand) * 0.25, 0.305 * r, coat)
-		limb(IDENTITY, mid, pose.hand, 0.2 * r, cream)
+
+	// The body, with a patch or two.
+	ball(pose.rear, {0, 1.06, -0.42}, {0.5, 0.5, 0.55}, coat)
+	ball(pose.rear, {0, 1.1, -0.06}, {0.55, 0.55, 0.5}, coat)
+	ball(pose.front, {0, 1.14, 0.3}, {0.5, 0.56, 0.5}, coat)
+	if !billy {
+		ball(pose.rear, {0.3, 1.28, -0.22}, {0.3, 0.28, 0.32}, dark)
+		ball(pose.front, {-0.26, 1.2, 0.32}, {0.28, 0.3, 0.26}, dark)
 	} else {
-		wag: f32 = 0.39 + 0.20 * math.sin(e.hop * 0.52)
-		tail := pose.rear * translate({0, 1.04, -0.75}) * rot_y(wag)
-		limb(tail, {0, 0, 0.07}, {0, 0.30, -1.12}, 0.305, coat)
-		limb(tail, {0, 0.26, -0.87}, {0, 0.53, -1.43}, 0.20, cream)
+		ball(pose.front, {0, 1.32, 0.38}, {0.5, 0.42, 0.42}, dark) // a shaggy mane
 	}
+	cone(pose.rear * translate({0, 1.38, -0.86}) * rot_x(-0.7), {}, 0.08, 0.26, coat)
 
-	h := pose.front * translate({0, 1.51, 0.65}) * scale({1.12, 1.12, 1.12}) // a big head is a cute head
+	// The neck and head. Charging, the head goes down, horns first.
+	limb(pose.front, {0, 1.3, 0.5}, {0, 1.72, 0.84}, 0.22, coat)
+	tilt: f32 = charging ? 0.85 : 0.15
 	if pose.held && !pose.dizzy {
-		h = h * rot_y(0.3 * math.sin(e.hop * 0.7)) // looking wildly about
+		tilt = 0.3 * math.sin(e.hop * 0.7)
 	}
-	ball(h, {0, 0, 0}, {0.51, 0.44, 0.47}, coat)
-	ball(h, {0, -0.15, 0.31}, {0.36, 0.21, 0.35}, cream)
-	ball(h, {0, -0.10, 0.58}, {0.19, 0.15, 0.22}, coat)
-	ball(h, {0, -0.095, 0.76}, {0.12, 0.083, 0.078}, ink)
+	h := pose.front * translate({0, 1.78, 0.9}) * rot_x(tilt) * scale({1.12, 1.12, 1.12})
+	ball(h, {}, {0.3, 0.32, 0.34}, coat)
+	taper(h, {0, -0.05, 0.12}, {0, -0.2, 0.55}, 0.21, coat)
+	ball(h, {0, -0.21, 0.56}, {0.13, 0.1, 0.08}, GOAT_PINK)
 	for side in ([2]f32{-1, 1}) {
-		ear := h * translate({side * 0.31, 0.28, -0.14}) * rot_z(-side * 0.24)
-		draw_shape(.Cone, ear * scale({0.215, 0.63, 0.185}), coat)
-		draw_shape(.Cone, ear * translate({0, 0.059, 0.106}) * scale({0.139, 0.44, 0.077}), ink)
-		patch := h * translate({side * 0.32, -0.085, 0.265}) * rot_z(side * 0.32)
-		ball(patch, {}, {0.23, 0.16, 0.18}, cream)
-		draw_cute_eye(h * translate({side * 0.24, 0.07, 0.36}) * rot_y(side * 0.45), 0.13, pose.dizzy)
-		ball(h, {side * 0.3, -0.12, 0.31}, {0.085, 0.045, 0.035}, ANIMAL_BLUSH)
+		ball(h, {side * 0.05, -0.2, 0.63}, {0.025, 0.03, 0.015}, ANIMAL_INK)
+		ear := h * translate({side * 0.27, 0.06, -0.04}) * rot_z(side * 1.2)
+		ball(ear, {0, 0.16, 0}, {0.07, 0.18, 0.1}, coat)
+		ball(ear, {0, 0.17, 0.04}, {0.04, 0.12, 0.05}, GOAT_PINK)
+		draw_cute_eye(h * translate({side * 0.19, 0.08, 0.22}) * rot_y(side * 0.55), 0.09, pose.dizzy)
+		if billy {
+			// Great horns curling back and round.
+			prev := Vec3{side * 0.12, 0.24, 0.02}
+			for k in 1 ..= 8 {
+				a := f32(k) / 8 * 3.6
+				at := Vec3{side * (0.12 + 0.03 * a), 0.24 + 0.32 * math.sin(a), 0.02 - 0.3 * (1 - math.cos(a))}
+				limb(h, prev, at, 0.09 - 0.006 * f32(k), GOAT_HORN)
+				prev = at
+			}
+		} else {
+			horn := h * translate({side * 0.11, 0.24, -0.02}) * rot_x(-0.7) * rot_z(-side * 0.25)
+			cone(horn, {}, 0.06, 0.3, GOAT_HORN)
+		}
 	}
-	draw_smile(h * translate({0, -0.2, 0.62}), 0.06)
+	// A beard under the chin.
+	beard := h * translate({0, -0.3, 0.38}) * rot_x(math.PI - 0.25)
+	cone(beard, {}, billy ? 0.1 : 0.06, billy ? 0.38 : 0.2, billy ? dark : GOAT_PATCH)
+	draw_smile(h * translate({0, -0.3, 0.55}), 0.045)
 }
-
-ANIMAL_BLUSH :: Color{255, 150, 165, 255}
 
 // A big glossy cartoon eye: a dark oval with a large and a small highlight.
 // Shut tight when dizzy.
@@ -789,100 +955,6 @@ draw_smile :: proc(m: Mat4, size: f32) {
 		arc := m * translate({side * size * 0.55, 0, 0}) * rot_z(side * 0.5)
 		box(arc, {}, {size * 1.1, size * 0.3, size * 0.3}, ANIMAL_INK)
 	}
-}
-
-BOAR_COAT :: Color{116, 90, 76, 255}
-BOAR_DARK :: Color{70, 55, 51, 255}
-BOAR_BELLY :: Color{152, 124, 102, 255}
-BOAR_SNOUT :: Color{204, 152, 140, 255}
-BOAR_HOOF :: Color{48, 40, 40, 255}
-
-// The height of the boar's back along its length, for placing its bristles:
-// a high hump over the shoulders, sloping down to the rump and to the neck.
-boar_back :: proc(z: f32) -> f32 {
-	switch {
-	case z > 0.42:
-		return 2.0 - (z - 0.42) * 0.9
-	case z > 0:
-		return lerp(1.74, 2.0, z / 0.42)
-	}
-	return 1.74 + z * 0.3
-}
-
-// A wild boar: a heavy front with a hump of shoulders over thin legs, small
-// hindquarters, a crest of bristles, and a long snout with tusks.
-draw_boar :: proc(pose: Animal_Pose, e: Enemy) {
-	coat, dark, ink := BOAR_COAT, BOAR_DARK, ANIMAL_INK
-	r := ENEMY_RADIUS[e.kind]
-	for si in 0 ..< 2 {
-		side := f32(si * 2 - 1)
-		for ei in 0 ..< 2 {
-			end := f32(ei * 2 - 1)
-			turn := pose.legs[si][ei]
-			// Thick at the body, slim down to a small cloven hoof.
-			leg := (end < 0 ? pose.rear : pose.front) * translate({side * 0.4, 0.8, end * 0.6}) * rot_z(turn.y) * rot_x(turn.x)
-			knee := Vec3{0, -0.36, end < 0 ? -0.09 : 0.06}
-			ankle := Vec3{0, -0.67, 0.02}
-			taper(leg, {0, 0.14, 0}, knee, 0.27, coat)
-			ball(leg, knee, {0.165, 0.165, 0.165}, coat)
-			taper(leg, knee, ankle, 0.16, dark)
-			for toe in ([2]f32{-1, 1}) {
-				ball(leg, ankle + {toe * 0.055, -0.045, 0.05}, {0.065, 0.07, 0.1}, BOAR_HOOF)
-			}
-		}
-	}
-
-	// Torso: haunches, barrel and a hump of shoulders, with a paler belly.
-	ball(pose.rear, {0, 1.02, -0.55}, {0.52, 0.55, 0.62}, coat)
-	ball(pose.rear, {0, 1.08, -0.15}, {0.62, 0.66, 0.6}, coat)
-	ball(pose.front, {0, 1.1, 0.1}, {0.62, 0.66, 0.5}, coat)
-	ball(pose.front, {0, 1.28, 0.42}, {0.64, 0.72, 0.6}, coat)
-	ball(pose.rear, {0, 0.86, -0.15}, {0.46, 0.3, 0.55}, BOAR_BELLY)
-	ball(pose.front, {0, 0.88, 0.2}, {0.44, 0.3, 0.45}, BOAR_BELLY)
-	// A crest of stiff bristles along the spine, tallest over the shoulders.
-	for i in 0 ..< 9 {
-		z := 0.85 - f32(i) * 0.2
-		tall := 0.34 - abs(z - 0.35) * 0.18
-		tuft := (z < -0.1 ? pose.rear : pose.front) * translate({0, boar_back(z) - 0.08, z}) * rot_x(-0.55)
-		cone(tuft, {}, 0.1, tall, dark)
-	}
-	// A thin tail ending in a tuft.
-	if pose.held {
-		root := pose.rear * [4]f32{TAIL_ROOT[.Boar].x, TAIL_ROOT[.Boar].y, TAIL_ROOT[.Boar].z, 1}
-		limb(IDENTITY, root.xyz, pose.hand, 0.05 * r, coat)
-	} else {
-		limb(pose.rear, {0, 1.4, -1.07}, {0.04, 0.95, -1.3}, 0.05, coat)
-		ball(pose.rear, {0.05, 0.8, -1.32}, {0.08, 0.15, 0.075}, dark)
-	}
-
-	// Head held low, with a long snout ending in a flat disc of a nose.
-	h := pose.front * translate({0, 1.22, 0.98}) * rot_x(0.22) * scale({1.15, 1.15, 1.15}) // a big head is a cute head
-	ball(h, {0, 0, 0}, {0.44, 0.48, 0.5}, coat)
-	taper(h, {0, -0.06, 0.2}, {0, -0.18, 0.86}, 0.34, coat)
-	nose := h * translate({0, -0.19, 0.84}) * rot_x(math.PI / 2)
-	draw_shape(.Cylinder, nose * scale({0.2, 0.07, 0.17}), BOAR_SNOUT)
-	for side in ([2]f32{-1, 1}) {
-		ball(h, {side * 0.07, -0.19, 0.915}, {0.04, 0.05, 0.02}, ink)
-		// Tusks curving up from the corners of the mouth.
-		tusk := h * translate({side * 0.17, -0.3, 0.6}) * rot_x(-0.45) * rot_z(-side * 0.4)
-		cone(tusk, {}, 0.06, 0.26, ANIMAL_CREAM)
-		// Upright pointed ears, dark outside and pink inside.
-		ear := h * translate({side * 0.27, 0.36, -0.12}) * rot_z(-side * 0.45) * rot_x(-0.25)
-		draw_shape(.Cone, ear * scale({0.15, 0.36, 0.11}), dark)
-		draw_shape(.Cone, ear * translate({0, 0.04, 0.06}) * scale({0.09, 0.24, 0.05}), BOAR_SNOUT)
-		// Shaggy cheeks with a blush, big glossy eyes under a grumpy little brow.
-		ball(h, {side * 0.36, -0.14, 0.12}, {0.15, 0.2, 0.16}, dark)
-		ball(h, {side * 0.32, -0.1, 0.34}, {0.1, 0.055, 0.045}, ANIMAL_BLUSH)
-		// A pale rim round each eye makes them stand out on the dark face.
-		eye := h * translate({side * 0.21, 0.1, 0.42}) * rot_y(side * 0.45)
-		if !pose.dizzy {
-			ball(eye, {0, 0, -0.02}, {0.15, 0.17, 0.08}, BOAR_SNOUT)
-		}
-		draw_cute_eye(eye, 0.15, pose.dizzy)
-		brow := h * translate({side * 0.21, 0.3, 0.43}) * rot_z(side * 0.3)
-		box(brow, {}, {0.14, 0.035, 0.05}, dark)
-	}
-	draw_smile(h * translate({0, -0.32, 0.72}), 0.05)
 }
 
 // Prosio is short and stocky: short legs, a compact body and a big head.

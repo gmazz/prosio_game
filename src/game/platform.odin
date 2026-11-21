@@ -38,6 +38,9 @@ Button :: enum {
 	Bump,
 	Action,
 	Grab,
+	Eat, // from the sack
+	Sack_Prev,
+	Sack_Next,
 	Restart,
 	Menu,
 	Confirm,
@@ -55,6 +58,9 @@ KEYS := [Button][3]rl.KeyboardKey {
 	.Bump    = {.SPACE, .KEY_NULL, .KEY_NULL},
 	.Action  = {.E, .K, .KEY_NULL},
 	.Grab    = {.F, .L, .KEY_NULL},
+	.Eat     = {.Q, .KEY_NULL, .KEY_NULL},
+	.Sack_Prev = {.Z, .KEY_NULL, .KEY_NULL},
+	.Sack_Next = {.C, .KEY_NULL, .KEY_NULL},
 	.Restart = {.ENTER, .R, .KEY_NULL},
 	.Menu    = {.ESCAPE, .P, .KEY_NULL},
 	.Confirm = {.ENTER, .SPACE, .KP_ENTER},
@@ -484,6 +490,11 @@ ui_text_width :: proc(text: cstring, size: f32) -> f32 {
 // Formats a number into a short text, e.g. ui_format("%d kg", 80).
 ui_format :: proc(format: cstring, value: i32) -> cstring {
 	return rl.TextFormat(format, value)
+}
+
+// The same with two numbers, e.g. ui_format2("%d/%d", 2, 3).
+ui_format2 :: proc(format: cstring, a, b: i32) -> cstring {
+	return rl.TextFormat(format, a, b)
 }
 
 // Darkens the edges of the screen a little, to draw the eye to the middle.
