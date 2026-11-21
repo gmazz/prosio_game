@@ -164,7 +164,7 @@ draw_ui :: proc() {
 	if p.fail != .None && p.fail_t > 0.8 {
 		ui_rect(0, 0, sw, sh, {0, 0, 0, 110})
 		title: cstring = "PROSIO FAINTED!"
-		line: cstring = "Too thin... he needed to eat more."
+		line: cstring = "No fat and no carbs left... nothing to keep him going."
 		if p.fail == .Heart_Attack {
 			title = "HEART ATTACK!"
 			line = "Too heavy... his heart could not keep up."

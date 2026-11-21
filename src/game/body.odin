@@ -15,9 +15,11 @@ import "core:math"
 //   Muscle is built out of protein, kilogram for kilogram: training takes
 //   it from the protein in him, and with little there it builds little.
 //   When he lacks protein, or is starving, his muscles waste away below
-//   their ordinary size. Muscle that fades or wastes is not lost: it turns
-//   back into carbs. Muscle is also heavy, and hungry: it burns a little
-//   weight all the time.
+//   their ordinary size. Muscle that wastes or fades simply goes, the way
+//   burned fat goes: it is not something to live on. Muscle is also heavy,
+//   and hungry: every kilogram of it
+//   burns energy all the time (BASAL), carbs first and then fat, so a
+//   muscular pig needs feeding more than a lean one.
 //
 // A trait's level is 0 when ordinary and 1 at the most it can be; a muscle
 // can go below 0, down to -1, when it has wasted away.
@@ -68,7 +70,7 @@ FADE :: f32(0.00064) // the share of a trait lost every second it is not used: h
 WASTE :: f32(0.0015) // how fast muscle wastes each second without protein, or starving: ordinary to wasted in 11 minutes
 RECOVER :: f32(0.002) // and how fast wasted muscle comes back to ordinary once he is fed
 BULK :: f32(2) // full of protein, muscle builds this much faster
-MUSCLE_UPKEEP :: f32(0.0005) // kg burned each second for every kg of muscle beyond the ordinary
+BASAL :: f32(0.00023) // kg of energy each kg of muscle burns every second: 0.18 kg a minute for ordinary muscle, 0.41 at the most, 0.11 wasted
 
 // How much each thing he does trains (a trait gains this share of what it
 // still lacks).
@@ -157,12 +159,12 @@ train :: proc(t: Trait, work: f32) {
 
 update_body :: proc(dt: f32) {
 	p := &g.prosio
-	starving := p.fat < FAT_DANGER
+	hungry := starving()
 	for t in Trait {
 		level := p.trait[t]
 		change: f32
 		switch {
-		case is_muscle(t) && (lacks(.Protein) || starving):
+		case is_muscle(t) && (lacks(.Protein) || hungry):
 			change = max(level - WASTE * dt, -1) - level
 		case level > 0:
 			change = -level * FADE * dt
@@ -170,12 +172,10 @@ update_body :: proc(dt: f32) {
 			change = min(level + RECOVER * dt, 0) - level
 		}
 		if is_muscle(t) {
-			// Muscle that goes turns into carbs (and what they cannot hold,
-			// into fat); muscle that comes back is made of protein.
+			// Muscle that goes simply goes; muscle that comes back is made of
+			// protein.
 			kg := change * muscle_span(t)
-			if kg < 0 {
-				p.fat += store_add(.Carbs, -kg)
-			} else {
+			if kg > 0 {
 				kg = min(kg, store_kg(.Protein))
 				store_add(.Protein, -kg)
 				change = kg / muscle_span(t)
@@ -183,9 +183,8 @@ update_body :: proc(dt: f32) {
 		}
 		p.trait[t] = level + change
 	}
-	// Muscle beyond the ordinary has to be fed.
-	extra := max(muscle_kg(.Arms) - ARMS_KG[1], 0) + max(muscle_kg(.Legs) - LEGS_KG[1], 0)
-	burn(MUSCLE_UPKEEP * extra * dt)
+	// His muscles keep burning, the more of them the more: carbs first.
+	burn(BASAL * part_kg(.Muscle) * dt, true)
 	p.fat = clamp(p.fat, 0, FAT_MAX)
 	p.kg = body_kg()
 

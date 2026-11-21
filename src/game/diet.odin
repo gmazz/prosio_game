@@ -28,11 +28,15 @@ import "core:math"
 //   protein  into his protein; what will not fit turns to carbs
 //   fibre and water into his; what will not fit passes through
 //
-// What he burns comes out of his carbs in proportion to how full they are,
-// and the rest off his fat. Training turns protein into muscle, kilogram
-// for kilogram, and muscle that fades or wastes turns back into carbs. So
-// nothing appears from nowhere, and nothing he has can be at odds with what
-// he weighs.
+// What he burns comes out of his carbs and his fat. His muscle burns all
+// the time, in proportion to how much of it there is, and that, with
+// sprinting, jumping and fighting, takes carbs first and only then fat;
+// walking, picking and being hurt take from both, carbs in proportion to
+// how full they are. With no fat left he lives on his carbs, and with
+// neither he faints. Training turns protein into muscle, kilogram for
+// kilogram; muscle that fades or wastes goes, as burned fat does. So nothing
+// appears from nowhere, and nothing he has can be at odds with what he
+// weighs.
 //
 // The four stores (carbs, protein, fibre, water) and the two weightless
 // needs are each kept as a level from 0 to 100, a store's level being how
@@ -250,16 +254,35 @@ eat :: proc(m: Meal) {
 	train(.Gut, GUT_WORK * m.fibre)
 }
 
-// Weight burned. It comes out of his carbs in proportion to how full they
-// are, and the rest off his fat. Fights and knocks are the dearest; see the
+// Weight burned, as energy. Muscle work (carbs_first: his muscles keeping
+// going, sprinting, jumping, fighting) takes carbs first, and fat only when
+// they are gone; anything else takes carbs in proportion to how full they
+// are, and the rest off his fat. With his fat gone, the rest comes out of
+// whatever carbs he has; with both gone there is nothing left to burn (and
+// he faints: see update_prosio). Fights and knocks are the dearest; see the
 // *_BURN numbers in prosio.odin. Full of protein, his body is busy building
 // and burns more of everything.
-burn :: proc(kg: f32) {
+burn :: proc(kg: f32, carbs_first := false) {
 	p := &g.prosio
 	cost := kg * (full_of(.Protein) ? BULK_BURN : 1)
-	from_carbs := min(cost * p.need[.Carbs] / 100, store_kg(.Carbs))
+	share := carbs_first ? 1 : p.need[.Carbs] / 100
+	from_carbs := min(cost * share, store_kg(.Carbs))
 	store_add(.Carbs, -from_carbs)
-	p.fat -= cost - from_carbs
+	cost -= from_carbs
+	from_fat := min(cost, max(p.fat, 0))
+	p.fat -= from_fat
+	cost -= from_fat
+	store_add(.Carbs, -min(cost, store_kg(.Carbs)))
+}
+
+// What he has left to burn: his fat and his carbs.
+energy_kg :: proc() -> f32 {
+	return max(g.prosio.fat, 0) + store_kg(.Carbs)
+}
+
+// Nearly out of anything to burn: next to no fat, and few carbs.
+starving :: proc() -> bool {
+	return g.prosio.fat < FAT_DANGER && lacks(.Carbs)
 }
 
 // What his stores weigh, all together.
@@ -406,10 +429,11 @@ salty :: proc() -> bool {
 update_diet :: proc(dt: f32) {
 	p := &g.prosio
 	// At rest everything is slowly used up; too much of anything moves on
-	// faster. Carbs are simply burned, unless there are too many, when they
-	// turn to fat. Protein turns to carbs. The rest passes out of him.
+	// faster. Protein turns to carbs; fibre, vitamins and electrolytes pass
+	// out of him. Carbs are not used up here: his muscles burn them (see
+	// update_body), unless there are too many, when the surplus turns to fat.
 	for n in Need {
-		if n == .Water {
+		if n == .Water || (n == .Carbs && !too_much(n)) {
 			continue
 		}
 		used := p.need[n] * NEED_FADE * (too_much(n) ? SHED : 1) * dt
@@ -739,8 +763,10 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	zone: cstring = "CHUBBY"
 	zone_color := UI_YELLOW
 	switch {
-	case p.fat < FAT_DANGER:
+	case starving():
 		zone, zone_color = "STARVING!", UI_RED
+	case p.fat < FAT_DANGER:
+		zone, zone_color = "ON CARBS ONLY", UI_ORANGE
 	case p.fat < FAT_LEAN:
 		zone, zone_color = "LEAN", UI_GREEN
 	case p.fat > FAT_MAX - FAT_DANGER:
@@ -835,12 +861,12 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	ry += 22 * s
 
 	// What to do about it: what to eat for the thing he lacks most.
-	if advised {
+	if starving() {
+		label("EAT: anything! Nothing left to burn.", x, ry, text, UI_RED)
+	} else if advised {
 		label(ui_format_name("EAT: %s", NEED_EAT[advice]), x, ry, text, urgent ? UI_RED : UI_ORANGE)
 	} else if over {
 		label("Too much? It soon passes.", x, ry, text, NEED_SILLY)
-	} else if p.fat < FAT_DANGER {
-		label("EAT: anything! He is starving.", x, ry, text, UI_RED)
 	}
 	return
 }

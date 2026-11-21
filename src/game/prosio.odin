@@ -3,7 +3,8 @@ package game
 import "core:math"
 
 // Prosio's fat, in kilograms. (His weight is this and the rest of him, added
-// up in diet.odin.) Running out of it, or carrying too much, is a fail.
+// up in diet.odin.) Running out of it and of his carbs as well, or carrying
+// too much fat, is a fail.
 FAT_MAX :: f32(100) // heart gives up
 FAT_START :: f32(45)
 FAT_LEAN :: f32(30) // below this he is lean
@@ -287,7 +288,7 @@ update_prosio :: proc(dt: f32) {
 		if p.stamina >= cost {
 			p.stamina -= cost
 			p.regen_delay = 0.4
-			burn(JUMP_BURN)
+			burn(JUMP_BURN, true)
 			train(.Legs, JUMP_WORK)
 			height := jump_height(total_kg())
 			if lacks(.Electrolytes) {
@@ -315,7 +316,7 @@ update_prosio :: proc(dt: f32) {
 			// A bump out of a sprint keeps the extra speed.
 			p.vel = dir * max(dash_speed(), length2(p.vel) + 2)
 			p.facing = math.atan2(dir.x, dir.y)
-			burn(FIGHT_BURN)
+			burn(FIGHT_BURN, true)
 			p.wobble_vel -= 2
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2, COLOR_DUST, 0.12)
 		} else {
@@ -332,7 +333,7 @@ update_prosio :: proc(dt: f32) {
 	if p.sprinting {
 		p.stamina -= sprint_drain() * (p.rush ? RUSH_DRAIN : 1) * dt
 		p.regen_delay = lerp(0.3, 1.0, t)
-		burn(SPRINT_BURN * p.kg / KG_START * dt)
+		burn(SPRINT_BURN * p.kg / KG_START * dt, true)
 		train(.Legs, SPRINT_WORK * dt)
 		train(.Lungs, SPRINT_WORK * dt)
 		p.dust_t -= dt
@@ -429,11 +430,11 @@ update_prosio :: proc(dt: f32) {
 	// The limits of his fat.
 	if p.fail != .None {
 		// His diet has done for him.
-	} else if p.fat <= 0 {
-		p.fail = .Fainted
+	} else if energy_kg() <= 0.001 {
+		p.fail = .Fainted // nothing left to burn: no fat, no carbs
 	} else if p.fat >= FAT_MAX {
 		p.fail = .Heart_Attack
-	} else if p.fat < FAT_DANGER {
+	} else if starving() {
 		hint(sack_has_food() ? "So hungry... Q: eat from my sack!" : "So hungry... I must find food!")
 	} else if p.fat > FAT_MAX - FAT_DANGER {
 		hint("So full... no more food for now!")

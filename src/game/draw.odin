@@ -891,7 +891,7 @@ draw_prosio :: proc() {
 	m := base * translate({0, bob, 0})
 	eyes_closed := math.mod(g.time, 3.2) < 0.12
 	brow_tilt: f32 = 0 // positive is worried, negative is fierce
-	if p.fat < FAT_DANGER || p.fat > FAT_MAX - FAT_DANGER || p.winded {
+	if starving() || p.fat > FAT_MAX - FAT_DANGER || p.winded {
 		brow_tilt = 0.4
 	}
 	switch {

@@ -127,13 +127,19 @@ Two more things he needs weigh nothing: vitamins and electrolytes.
 - **Protein** goes into his protein. What that cannot hold turns to carbs.
 - **Fibre and water** go into his; what will not fit passes through.
 
-**What he burns** comes out of his carbs in proportion to how full they are (all of it when they are full, half when they are half full), and the rest off his fat. **Training** turns protein into muscle, kilogram for kilogram, and muscle that fades or wastes turns back into carbs. Nothing comes from nowhere.
+**What he burns** comes out of his carbs and his fat, and **muscle is what burns it**: every kilogram of muscle uses energy all the time, so a muscular pig needs proportionally more feeding than a lean one (see [Burning weight](#burning-weight)).
+
+- **Muscle work takes carbs first, then fat.** That is his muscles keeping going, sprinting, jumping and fighting.
+- **Everything else takes from both:** walking, picking and being hurt take carbs in proportion to how full they are (half the cost when they are half full), and the rest off his fat.
+- **With no fat left he lives on his carbs, and with neither he faints.** Nothing else keeps him going: muscle that fades or wastes simply goes, as burned fat does.
+
+**Training** turns protein into muscle, kilogram for kilogram. Nothing comes from nowhere.
 
 It is his fat that has limits:
 
 | Zone | Fat |
 |---|---|
-| Faints | none left |
+| Faints | no fat **and** no carbs left |
 | Lean | under 30 kg |
 | Chubby | 30 to 70 kg |
 | Huge | 70 kg or more |
@@ -153,10 +159,21 @@ Everything he does burns some, from very little for walking to more for fighting
 | One jump | 0.06 kg |
 | One bump, grab, bash or throw | 0.2 kg |
 | Being pecked or butted | 0.35 kg, times how much of it he feels |
-| Muscle beyond the ordinary | 0.03 kg a minute for each extra kg, all the time |
-| Standing still | his carbs only: a thousandth of them each second |
+| His muscles, all the time | 0.014 kg a minute for each kg of muscle, carbs first: 0.11 kg a minute wasted (8 kg), 0.18 ordinary (13 kg), 0.41 at the most (30 kg) |
 
-Five minutes of walking with nothing to eat takes him from 80 to about 73 kg: 4 kg off his fat, 2 off his carbs, and the rest fibre and protein used up. Ten seconds in the middle of an angry flock of turkeys can cost him 2 kg.
+Sprinting, jumping and fighting take carbs first too; walking, picking and knocks take from carbs and fat together.
+
+Five minutes of walking with nothing to eat takes an ordinary Prosio from 80 to about 73 kg: 4 kg off his fat, over 2 off his carbs, and the rest fibre and protein used up. Ten seconds in the middle of an angry flock of turkeys can cost him 2 kg.
+
+How muscle changes what he needs, in scripted runs:
+
+| | Wasted (8 kg) | Ordinary (13 kg) | Muscular (25 kg) | Most muscle (30 kg) |
+|---|---|---|---|---|
+| Burned in 10 minutes standing still | 0.8 kg | 1.1 kg | 2.8 kg | 3.5 kg |
+| Burned in 5 minutes walking | 5.7 kg | 6.4 kg | 7.9 kg | 8.6 kg |
+| With no fat and full carbs, faints after | | 51 min | 27 min | 22 min |
+
+So a strong pig is hungry: he gets through his carbs in under 20 minutes at rest and wants bread, honey or fruit, where an ordinary one hardly notices.
 
 ## The sack and the oven
 
@@ -268,7 +285,7 @@ Prosio becomes what he does. Besides his fat he has **seven traits**: the muscle
 - **Doing the thing trains it.** Each time, the trait gains a share of what it still lacks, so it rises quickly at first and more slowly near the top.
 - **Left alone it fades**, as in real life: it loses half of what he had built in about 18 minutes of play (only play counts, not time with the game closed). So a habit shows on him after a few minutes, and he cannot keep everything up at once.
 - **Muscle is built out of protein, kilogram for kilogram.** Training takes it from the protein in him: with little there it builds little, with none it builds nothing. So a goat's five pieces of roast meat are over 6 kg of muscle waiting to be trained, and a pig that eats no protein stays ordinary however hard he works. When he lacks protein (or is starving) his muscles waste away below their ordinary size, in about 11 minutes, and come back in about 8 once he is fed.
-- **Muscle is heavy and hungry.** It adds to his weight, and every kilogram beyond the ordinary burns a little all the time. Muscle that fades or wastes is not lost: it turns back into carbs.
+- **Muscle is heavy and hungry.** It adds to his weight, and every kilogram of it burns energy all the time, carbs first and then fat (see [Burning weight](#burning-weight)). Muscle that fades or wastes simply goes, as burned fat does: it is not something to live on.
 
 | Trait | Grows by | At its most | Shows as |
 |---|---|---|---|
@@ -289,8 +306,8 @@ The **muscle bar** under the fat shows arms and legs together: wasted to the lef
 Four of his parts are **stores** that fill and empty as he eats and lives: carbs, protein, fibre and water. Each has a bar that shows how full it is, and its kilograms. Two more things, **vitamins** and **electrolytes**, weigh nothing but have bars of the same kind. (Fats are not a separate level: the fat he eats is the fat on him.)
 
 - **Eating** fills them with what the food contains (see the tables in [The sack and the oven](#the-sack-and-the-oven)).
-- **At rest** each loses a thousandth of what is in it every second, so half in about 11 minutes. Carbs are burned; protein turns into carbs; fibre passes.
-- **Activity** burns his carbs faster, in proportion to how full they are.
+- **Carbs** are what his muscles burn, all the time and faster when he works: the more muscle, the faster they go (see [Burning weight](#burning-weight)).
+- **The others**, at rest, each lose a thousandth of what is in them every second, so half in about 11 minutes: protein turns into carbs; fibre passes.
 - **Water** runs down steadily: a full drink lasts a good quarter of an hour, less if he sprints. `E` at the pond fills it; juicy food helps a little.
 
 A game starts with everything half full and water at 80%.
@@ -298,7 +315,7 @@ A game starts with everything half full and water at 80%.
 **The system is forgiving, and what matters is what he lacks.**
 
 - **Too much of anything never ends the game.** Above 90% a store moves its surplus on six times as fast: too many carbs turn to fat, too much protein turns to carbs, the rest passes, and a drink at the pond washes out too much fibre, vitamins or electrolytes at once. (Only too much *fat* is dangerous.)
-- **Running out of carbs, protein or fibre never ends the game either.** His fat keeps him going; he is just the worse for it.
+- **Running out of carbs, protein or fibre never ends the game by itself.** His fat keeps him going; he is just the worse for it. But with **no fat and no carbs** he faints.
 - **Running right out of water, vitamins or electrolytes does**, but slowly: under 4% (for water: none left) the bar's name blinks and a countdown of **three minutes** runs beside it. Eating nothing at all, that point is over 40 minutes away.
 - **What to eat is always on the screen:** whenever he lacks something, a line under the bars says what to eat for it ("EAT: eggs, fish, meat, nuts").
 
@@ -306,7 +323,7 @@ A store between 15% and 70% does nothing. Below 15% he **lacks** it, which is a 
 
 | | Lacking it (under 15%) | Full of it (over 70%) | Too much (over 90%) |
 |---|---|---|---|
-| Carbs | **No fuel:** stamina comes back half as fast, and everything he burns comes off his fat | **Sugar rush:** 25% faster, and a sprint costs under a third of the stamina. When it wears off, an 8-second **sugar crash** | **Hiccups:** every few seconds one jerks him into a little jump, while the surplus turns to fat |
+| Carbs | **No fuel:** stamina comes back half as fast, and everything he burns comes off his fat (with no fat either, he faints) | **Sugar rush:** 25% faster, and a sprint costs under a third of the stamina. When it wears off, an 8-second **sugar crash** | **Hiccups:** every few seconds one jerks him into a little jump, while the surplus turns to fat |
 | Protein | **Wasting:** his muscles waste away (see [Body and skills](#body-and-skills)) | **Bulking:** training builds muscle twice as fast; but everything burns 1.4 times the weight | **Stiff as a board:** swinging and stooping take 1.6 times as long |
 | Fibre | **Tummy ache:** every 10 to 16 seconds he doubles up for a second | **Gassy:** every 5 to 8 seconds he breaks wind with a green cloud and a little hop, and every animal within 7.5 m runs from him for 5 seconds | **A gas storm:** one every second or two, whatever his gut is trained to |
 | Water | **Thirsty** (under 25%): his stamina only comes back half way | There is no such thing as too much | |

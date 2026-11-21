@@ -223,7 +223,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		}
 		p.stamina -= cost
 		p.regen_delay = 0.5
-		burn(FIGHT_BURN)
+		burn(FIGHT_BURN, true)
 		p.carry = target.kind
 		p.carry_index = target.index
 		p.carry_kg = target.kg
@@ -392,7 +392,7 @@ begin_swing :: proc(throw: bool) {
 		return
 	}
 	p.stamina -= cost
-	burn(FIGHT_BURN)
+	burn(FIGHT_BURN, true)
 	train(.Arms, SWING_WORK * min(ratio, 1.5))
 
 	from := direction_to_prosio(p.hand - prosio_to_world(holding_shoulder()))
@@ -845,7 +845,7 @@ throw_animal :: proc() {
 	p.carry_kg = 0
 	p.swinging = false
 	p.stretch_vel -= 3
-	burn(FIGHT_BURN)
+	burn(FIGHT_BURN, true)
 	g.shake = max(g.shake, min(speed * kg / 600, 0.6))
 	say(speed > 11 ? "HAI-YA!" : "Hup!", 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
@@ -891,7 +891,7 @@ throw_rock :: proc() {
 	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.stretch_vel -= 3
-	burn(FIGHT_BURN)
+	burn(FIGHT_BURN, true)
 	say(speed > 9 ? "HAI-YA!" : "Oof!", 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 }
