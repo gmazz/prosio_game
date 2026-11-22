@@ -9,7 +9,7 @@ uniform float fade;     // 0 = solid, 1 = see-through
 // The layout of the meadow (see set_ground_layout in game.odin).
 uniform vec4 fields[8]; // ploughed fields: x0, z0, x1, z1
 uniform int fieldCount;
-uniform vec4 paths[8];  // paths from home: x0, z0, x1, z1
+uniform vec4 paths[12]; // paths from home, and trails: x0, z0, x1, z1
 uniform int pathCount;
 uniform vec4 forest;    // centre x, z and radii of the forest
 uniform vec4 hills;     // and of the goat hills
@@ -83,9 +83,9 @@ vec3 meadow(vec2 p, float dither) {
     // yard round the house.
     vec2 w = p + vec2(1.6 * sin(p.y * .17) + .6 * sin(p.y * .41), 1.4 * sin(p.x * .15) + .5 * sin(p.x * .37));
     float d = length(p) - 4.5;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 12; i++) {
         if (i >= pathCount) break;
-        d = min(d, segment_distance(w, paths[i].xy, paths[i].zw));
+        d = min(d, segment_distance(w, paths[i].xy, paths[i].zw) + (i >= 7 ? .6 : 0.0)); // (a trail is narrower)
     }
     float verge = d + .72 * (wash(p * 1.3) - .5) + .25 * (fine - .5);
     float path = step(.35 + .3 * dither, 1.0 - smoothstep(.41, 1.28, verge));

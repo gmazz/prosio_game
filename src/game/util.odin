@@ -133,3 +133,17 @@ push_out_circle :: proc(pos: ^Vec2, r: f32, centre: Vec2, centre_r: f32) -> (hit
 	pos^ = centre + normal * (r + centre_r)
 	return true, normal
 }
+
+// How far a point is from the nearest point of a segment.
+segment_distance :: proc(p, a, b: Vec2) -> f32 {
+	ab := b - a
+	t := clamp(dot2(p - a, ab) / max(dot2(ab, ab), 1e-6), 0, 1)
+	return length2(p - (a + ab * t))
+}
+
+// Pushes a circle out of a segment (a wall with no thickness).
+push_out_segment :: proc(pos: ^Vec2, r: f32, a, b: Vec2) -> (hit: bool, normal: Vec2) {
+	ab := b - a
+	t := clamp(dot2(pos^ - a, ab) / max(dot2(ab, ab), 1e-6), 0, 1)
+	return push_out_circle(pos, r, a + ab * t, 0)
+}

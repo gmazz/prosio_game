@@ -541,7 +541,7 @@ forced_pressed: bit_set[Button]
 keyboard_enabled := true
 
 button_down :: proc(b: Button) -> bool {
-	if b in forced_down {
+	if b in forced_down || b in forced_pressed { // a button that has just gone down is down
 		return true
 	}
 	if !keyboard_enabled {
@@ -593,6 +593,16 @@ ui_text_width :: proc(text: cstring, size: f32) -> f32 {
 // Formats a number into a short text, e.g. ui_format("%d kg", 80).
 ui_format :: proc(format: cstring, value: i32) -> cstring {
 	return rl.TextFormat(format, value)
+}
+
+// Three numbers.
+ui_format3 :: proc(format: cstring, a, b, c: i32) -> cstring {
+	return rl.TextFormat(format, a, b, c)
+}
+
+// A name and two numbers, e.g. ui_format_title("%s: +%d%% (up to %d%%)", "Baker", 40, 80).
+ui_format_title :: proc(format: cstring, name: cstring, a, b: i32) -> cstring {
+	return rl.TextFormat(format, name, a, b)
 }
 
 // The same with a name, e.g. ui_format_name("my %s", "PIE").

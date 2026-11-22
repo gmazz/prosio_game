@@ -3,7 +3,9 @@ package main_desktop
 // Entry point for Mac, Linux and Windows.
 
 import game "../game"
+import "core:fmt"
 import "core:os"
+import "core:reflect"
 import "core:strconv"
 import "core:strings"
 
@@ -23,11 +25,24 @@ main :: proc() {
 	//   --tap2-at 90      ...on this frame
 	//   --menu            show the menu instead of starting the game
 	//   --crowd           put turkeys and goats round Prosio at the start
+	//   --far             with --near: five metres off, to throw at
+	//   --pebbles         start with six pebbles, chosen in the sack
+	//   --choose Spear    this is chosen in the sack at the start, if he has any (a
+	//                     thing by its name in the code: Apple, Apple_Pie, Wood, Rod...)
+	//   --built           start with things built: a turkey in a pen beside him, a
+	//                     scarecrow, a spear in the ground, wood and tools in the sack
+	//   --bruises 50      start bruised: this many points off the top of his stamina
+	//   --near fox        one animal (turkey, goat, billy or fox) within reach in
+	//                     front of him, and no others anywhere
 	//   --stock           start with a sack full of food
 	//   --outfit 23101211 what he wears: one digit per row (hat, glasses, face,
 	//                     earrings, shirt, on top, legs, feet), 0 the first choice
 	//   --detail 4        pixel size: 1 chunkiest ... 6 finest (default 4)
+	//   --agent FILE      played by a program, a step at a time: commands are read
+	//                     from FILE as lines are added to it (- for standard
+	//                     input), answers are printed; see agent.odin and tools/play.sh
 	opts: game.Options
+	agent_path: string
 	args := os.args
 	for i := 1; i < len(args); i += 1 {
 		switch args[i] {
@@ -80,8 +95,17 @@ main :: proc() {
 			}
 		case "--crowd":
 			opts.crowd = true
+		case "--seed":
+			// Builds a different meadow.
+			if i + 1 < len(args) {
+				seed, _ := strconv.parse_uint(args[i + 1])
+				opts.seed = u32(seed)
+				i += 1
+			}
 		case "--bodies":
 			opts.bodies = true
+		case "--swimmers":
+			opts.swimmers = true
 		case "--stock":
 			opts.stock = true
 		case "--traits":
@@ -120,6 +144,44 @@ main :: proc() {
 			}
 		case "--menu":
 			opts.menu = true
+		case "--far":
+			opts.far = true
+		case "--pebbles":
+			opts.pebbles = true
+		case "--built":
+			opts.built = true
+		case "--choose":
+			if i + 1 < len(args) {
+				opts.choose, opts.has_choose = reflect.enum_from_name(game.Item, args[i + 1])
+				i += 1
+			}
+		case "--bruises":
+			if i + 1 < len(args) {
+				opts.bruises, _ = strconv.parse_f32(args[i + 1])
+				i += 1
+			}
+		case "--near":
+			if i + 1 < len(args) {
+				switch args[i + 1] {
+				case "turkey":
+					opts.near = .Turkey
+				case "goat":
+					opts.near = .Goat
+				case "billy":
+					opts.near = .Billy
+				case "fox":
+					opts.near = .Fox
+				}
+				opts.has_near = true
+				i += 1
+			}
+		case "--agent":
+			if i + 1 < len(args) {
+				agent_path = args[i + 1]
+				opts.agent = true
+				opts.no_save = true // a program playing never touches the saved game
+				i += 1
+			}
 		case "--tap":
 			if i + 1 < len(args) {
 				opts.tap = buttons(args[i + 1])
@@ -134,10 +196,46 @@ main :: proc() {
 	}
 
 	game.init(opts)
+	if opts.agent {
+		agent_run(agent_path)
+		game.shutdown()
+		return
+	}
 	for game.running() {
 		game.frame()
 	}
+	if opts.shot_path != nil {
+		print_state()
+	}
 	game.shutdown()
+}
+
+// A scripted run ends by printing how Prosio is when the picture is taken,
+// so that a test can read numbers and not only look at pixels.
+print_state :: proc() {
+	g := &game.g
+	p := &g.prosio
+	fmt.printf("frame %d, time %.2f s, at (%.2f, %.2f), height %.2f, game over: %v\n", g.frame, g.time, p.pos.x, p.pos.y, p.height, p.fail)
+	fmt.printf("weighs %.2f kg:", p.kg)
+	for part in game.Part {
+		fmt.printf(" %v %.2f", part, game.part_kg(part))
+	}
+	fmt.print("\nlevels:")
+	for n in game.Need {
+		fmt.printf(" %v %.0f (%v)", n, p.need[n], game.need_state(n))
+	}
+	fmt.print("\ntraits:")
+	for t in game.Trait {
+		fmt.printf(" %v %.2f", t, p.trait[t])
+	}
+	fmt.printf("\nstamina %.0f, carrying %v, says: %s\n", p.stamina, p.carry, p.bubble_t > 0 ? string(p.bubble) : "(nothing)")
+	fmt.print("sack:")
+	for n, item in p.sack {
+		if n > 0 {
+			fmt.printf(" %v %d", item, n)
+		}
+	}
+	fmt.println()
 }
 
 buttons :: proc(letters: string) -> (set: bit_set[game.Button]) {
@@ -173,6 +271,10 @@ buttons :: proc(letters: string) -> (set: bit_set[game.Button]) {
 			set += {.Bag}
 		case 'w':
 			set += {.Gas}
+		case 'p':
+			set += {.Menu}
+		case 'x':
+			set += {.Restart}
 		}
 	}
 	return

@@ -174,8 +174,24 @@ draw_world :: proc() {
 			draw_hive(r, i)
 		case .Salt_Rock:
 			draw_salt_rock(r, i)
-		case .Oven, .Mill, .Fire, .Churn, .Block:
-		// Drawn by draw_oven, draw_mill, draw_fire and draw_churn.
+		case .Pebbles:
+			// As many little stones as there are to take, on a bare patch.
+			set_surface(.Stone)
+			for k in 0 ..< r.fruit {
+				a := f32(k) * 2.4 + f32(i)
+				d := r.r * (0.25 + 0.6 * f32(k % 3) / 2)
+				size := 0.07 + 0.02 * f32((k + i) % 3)
+				ball(translate({r.pos.x + math.cos(a) * d, size * 0.6, r.pos.y + math.sin(a) * d}), {}, {size * 1.2, size * 0.8, size}, k % 2 == 0 ? COLOR_ROCK : COLOR_ROCK_LIGHT)
+			}
+			set_surface(.Solid)
+		case .Scarecrow:
+			draw_scarecrow(translate({r.pos.x, 0, r.pos.y}) * rot_y(0.3 * math.sin(f32(i) * 1.7)))
+		case .Larder:
+			if r.r > 0 {
+				draw_larder(translate({r.pos.x, 0, r.pos.y}))
+			}
+		case .Oven, .Mill, .Fire, .Churn, .Block, .Bench:
+		// Drawn by draw_oven, draw_mill, draw_fire, draw_churn and draw_bench.
 		}
 	}
 
@@ -241,6 +257,8 @@ foliage :: proc(t: Tree_Shape) -> (low, high: f32) {
 	return t.canopy_y - t.canopy * 1.15, t.canopy_y + t.canopy * 1.45
 }
 
+FOREST_REVEAL :: f32(0.9) // in the forest, how much further round him the trees turn see-through (in crowns)
+
 // A tree standing between the camera and Prosio fades to a see-through
 // pattern where it covers him, so he never disappears behind it.
 tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
@@ -257,7 +275,10 @@ tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
 	tall := abs(world_to_screen({pos.x, high, pos.y}).y - crown.y)
 	him := world_to_screen({p.pos.x, p.height + 1, p.pos.y})
 	apart := length2((crown - him) / Vec2{max(wide, 1), max(tall, 1)})
-	cover := 1 - smooth((apart - 0.8) / 0.5)
+	// In the forest it clears a wider space round him, so that he sees the
+	// ground he is walking on, and what lies there, through the trees.
+	reveal: f32 = inside_region(p.pos, .Forest) > 0 ? FOREST_REVEAL : 0
+	cover := 1 - smooth((apart - 0.8 - reveal) / 0.5)
 	// The leftover leaves show as single pixels, so it fades a long way.
 	strength: f32 = 0.86
 	return strength * cover * smooth((pos.y - p.pos.y + 0.5) / 1.0)
@@ -451,6 +472,25 @@ draw_food :: proc(f: Food, index: int) {
 			ball(nut, {}, {0.055, 0.05, 0.065}, k % 2 == 0 ? Color{168, 118, 74, 255} : Color{142, 98, 62, 255})
 			box(nut, {0, 0.045, 0}, {0.012, 0.012, 0.09}, {112, 76, 50, 255})
 		}
+	case .Wood:
+		// A fallen branch, broken in three: pale where it snapped, so that
+		// it shows on the dark forest floor, with a sprig of leaves still on.
+		for k in 0 ..< 3 {
+			a := f32(k) * 1.1 - 0.5
+			from := Vec3{math.cos(a) * -0.42, 0.07 + 0.05 * f32(k % 2), math.sin(a) * -0.42 + 0.1 * f32(k - 1)}
+			to := Vec3{math.cos(a) * 0.42, 0.08 + 0.05 * f32(k % 2), math.sin(a) * 0.42 + 0.1 * f32(k - 1)}
+			limb(m, from, to, 0.065, k == 1 ? PLANK_DARK : shade(PLANK_DARK, 0.88))
+			ball(m, from, {0.06, 0.06, 0.06}, COLOR_PLANK)
+			ball(m, to, {0.06, 0.06, 0.06}, COLOR_PLANK)
+		}
+		limb(m, {0.1, 0.12, 0.05}, {0.3, 0.34, 0.24}, 0.02, PLANK_DARK)
+		ball(m, {0.32, 0.36, 0.26}, {0.09, 0.04, 0.07}, COLOR_LEAF_LIGHT)
+		ball(m, {0.22, 0.3, 0.3}, {0.07, 0.03, 0.06}, COLOR_LEAF)
+	case .Spear:
+		// Stuck in the ground where it came down, leaning.
+		lean := Vec3{0.3, 0.95, 0.1} * SPEAR_LEN
+		at := Vec3{f.pos.x, 0, f.pos.y}
+		draw_spear(at + lean, at - lean * 0.05)
 	}
 }
 
@@ -504,11 +544,24 @@ draw_enemy :: proc(e: Enemy) {
 		body := m * translate({0.75, 0.5, 0}) * rot_z(-1.42)
 		pose.rear, pose.front = body, body * rot_y(0.25)
 		pose.legs = {{{0.5, 0.1}, {-0.4, 0.15}}, {{0.15, 0.5}, {-0.1, 0.6}}}
+	} else if e.state == .Swimming && e.ko {
+		// Bottoms up: on its back in the water, feet in the air.
+		pose.dead = true
+		bob := 0.03 * math.sin(g.time * 2.5 + e.pos.x)
+		m := translate({e.pos.x, 0.12 + bob, e.pos.y}) * rot_y(e.facing + g.time * 0.3) * scale({r, r, r}) * rot_z(math.PI) * translate({0, -0.55, 0})
+		pose.rear, pose.front = m, m
 	} else {
 		pace := e.state == .Chase ? min(length2(e.vel) / ENEMY_SPEED[e.kind], 1) : f32(0)
+		if e.state == .Swimming {
+			pace = 1 // paddling for all it is worth
+		}
 		stride := math.sin(e.hop) * pace
 		bob := abs(stride) * 0.07
-		m := translate({e.pos.x, e.y, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
+		lift := e.y
+		if e.state == .Swimming {
+			lift = -SWIM_SINK[e.kind] + 0.04 * math.sin(g.time * 5 + e.pos.y) // low in the water, bobbing
+		}
+		m := translate({e.pos.x, lift, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
 		#partial switch e.state {
 		case .Flying:
 			m = m * translate({0, 0.9, 0}) * rot_x(e.spin) * translate({0, -0.9, 0})
@@ -537,7 +590,18 @@ draw_enemy :: proc(e: Enemy) {
 		head := pose.front * [4]f32{0, 2.3, 0.6, 1}
 		draw_stars(head.xyz, r * 0.75, e.home.x * 1.7 + e.home.y)
 	}
+	// A hurt animal shows how much health it has left, in a little bar over it.
+	if !e.ko && e.health < ENEMY_HEALTH - 0.5 && !drawing_shadows() {
+		at := e.state == .Held ? e.chain[1] : Vec3{e.pos.x, e.y, e.pos.y}
+		m := translate(at + {0, r * 2.2 + 0.75, 0})
+		share := e.health / ENEMY_HEALTH
+		box(m, {}, {HEALTH_BAR + 0.06, 0.14, 0.03}, UI_DARK)
+		box(m, {-HEALTH_BAR * (1 - share) / 2, 0, 0.02}, {HEALTH_BAR * share, 0.08, 0.03}, share > 0.5 ? HEALTH_GOOD : (share > 0.25 ? UI_ORANGE : UI_RED))
+	}
 }
+
+HEALTH_BAR :: f32(0.9) // metres wide
+HEALTH_GOOD :: Color{120, 210, 90, 255}
 
 // The frame that carries one half of a held animal's body: the model point a
 // goes to the world point wa, the model direction from a to b points from wa
@@ -730,6 +794,15 @@ GOAT_PINK :: Color{240, 182, 172, 255}
 // ears, a little beard and horns. The billy goat is bigger and brown, with a
 // long beard and great curling horns. Held, one hind leg runs to Prosio's
 // hand.
+UDDER_PINK :: Color{246, 176, 180, 255}
+
+// How far to his own side each of his two hooves is from the middle of his
+// hold, when he holds something with both: a little apart.
+hold_apart :: proc(side: f32) -> Vec3 {
+	f := g.prosio.facing
+	return Vec3{math.cos(f), 0, -math.sin(f)} * side * 0.09
+}
+
 draw_goat :: proc(pose: Animal_Pose, e: Enemy) {
 	billy := e.kind == .Billy
 	r := ENEMY_RADIUS[e.kind]
@@ -740,11 +813,12 @@ draw_goat :: proc(pose: Animal_Pose, e: Enemy) {
 		side := f32(si * 2 - 1)
 		for ei in 0 ..< 2 {
 			end := f32(ei * 2 - 1)
-			if pose.held && si == 1 && ei == 0 {
-				// The leg in Prosio's hand.
-				hip := pose.rear * [4]f32{GRIP_ROOT[e.kind].x, GRIP_ROOT[e.kind].y, GRIP_ROOT[e.kind].z, 1}
-				limb(IDENTITY, hip.xyz, pose.hand, 0.1 * r, coat)
-				ball(IDENTITY, pose.hand, {0.08, 0.08, 0.08} * r, GOAT_HOOF)
+			if pose.held && ei == 0 {
+				// Both hind legs run to Prosio's hooves, one in each.
+				hip := pose.rear * [4]f32{side * GRIP_ROOT[e.kind].x, GRIP_ROOT[e.kind].y, GRIP_ROOT[e.kind].z, 1}
+				grip := pose.hand + hold_apart(side)
+				limb(IDENTITY, hip.xyz, grip, 0.1 * r, coat)
+				ball(IDENTITY, grip, {0.08, 0.08, 0.08} * r, GOAT_HOOF)
 				continue
 			}
 			turn := pose.legs[si][ei]
@@ -769,6 +843,14 @@ draw_goat :: proc(pose: Animal_Pose, e: Enemy) {
 		ball(pose.front, {0, 1.32, 0.38}, {0.5, 0.42, 0.42}, dark) // a shaggy mane
 	}
 	cone(pose.rear * translate({0, 1.38, -0.86}) * rot_x(-0.7), {}, 0.08, 0.26, coat)
+	if !billy && !pose.dead {
+		// The udder: full and round when she has milk, small when she has not.
+		full: f32 = e.milk_t <= 0 ? 1 : 0.45
+		ball(pose.rear, {0, 0.7, -0.4}, Vec3{0.3, 0.26, 0.3} * full, UDDER_PINK)
+		for side in ([2]f32{-1, 1}) {
+			ball(pose.rear, {side * 0.1 * full, 0.7 - 0.2 * full, -0.38}, Vec3{0.06, 0.09, 0.06} * full, UDDER_PINK)
+		}
+	}
 
 	// The neck and head. Charging, the head goes down, horns first.
 	limb(pose.front, {0, 1.3, 0.5}, {0, 1.72, 0.84}, 0.22, coat)
@@ -895,7 +977,7 @@ draw_prosio :: proc() {
 		brow_tilt = 0.4
 	}
 	switch {
-	case p.fail == .Fainted || p.fail == .Diet:
+	case p.fail == .Fainted || p.fail == .Diet || p.fail == .Beaten:
 		// Topples over onto his side.
 		a := smooth(p.fail_t / 0.5)
 		m = base * translate({a * 1.0, a * chest, 0}) * rot_z(a * 1.5)
@@ -995,10 +1077,14 @@ draw_prosio :: proc() {
 		elbow := Vec3{rest_x, 1.09, 0.04 - side * swing * 0.18}
 		hand := Vec3{rest_x, 0.86 + 0.075 * abs(swing), 0.16 - side * swing * 0.35}
 		switch {
-		case p.carry == .Enemy && side == HOLD_SIDE:
-			// One hoof on the tail, wherever it is: the hold point is turned
-			// into his own frame and kept within arm's reach.
+		case p.carry == .Enemy && (side == HOLD_SIDE || two_handed(g.enemies[p.carry_index].kind)):
+			// A hoof on the leg or the tail, wherever it is (or both hooves,
+			// one on each hind leg of a goat): the hold point is turned into
+			// his own frame and kept within arm's reach.
 			local := direction_to_prosio(p.hand - {p.pos.x, p.height, p.pos.y})
+			if two_handed(g.enemies[p.carry_index].kind) {
+				local.x += side * 0.09
+			}
 			local.y = (local.y - HIP * LEG_SCALE) / TORSO_SCALE + HIP // into the compacted body's measurements
 			from_shoulder := local - shoulder
 			reach := linalg.length(from_shoulder)
@@ -1115,7 +1201,14 @@ draw_prosio :: proc() {
 	if p.dazed_t > 0 {
 		draw_stars(head_top, 0.45, 3.3)
 	}
-	if (p.fail == .Fainted || p.fail == .Diet) && p.fail_t > 0.4 {
+	if p.winding && p.wind_t >= WIND_TAP && !drawing_shadows() {
+		// Winding up a throw: a bar at his feet fills as it gets stronger.
+		bar := translate({p.pos.x, p.height + 0.12, p.pos.y + prosio_radius(p.kg) + 0.55}) // on the ground in front of him, clear of what he says
+		power := wind_power()
+		box(bar, {}, {1.06, 0.16, 0.03}, UI_DARK)
+		box(bar, {-(1 - power) / 2, 0, 0.02}, {power, 0.1, 0.03}, power >= 1 ? UI_RED : UI_YELLOW)
+	}
+	if (p.fail == .Fainted || p.fail == .Diet || p.fail == .Beaten) && p.fail_t > 0.4 {
 		draw_stars({p.pos.x, p.height + 1.3, p.pos.y}, 0.6, 5.1)
 	}
 	if p.fail == .Heart_Attack && p.fail_t > 0.4 {
@@ -1145,7 +1238,7 @@ FOX_FEET :: Color{84, 60, 52, 255}
 
 // A fox: a slim rust-red body, dark feet, a bushy white-tipped tail and a
 // big head with pointed ears. With something stolen, it carries it in its
-// mouth. Held, one hind leg runs to Prosio's hand.
+// mouth. Held, it hangs by its tail from Prosio's hand.
 draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
 	coat, feet, cream, ink := FOX_COAT, FOX_FEET, ANIMAL_CREAM, ANIMAL_INK
 	r := ENEMY_RADIUS[e.kind]
@@ -1153,12 +1246,6 @@ draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
 		side := f32(si * 2 - 1)
 		for ei in 0 ..< 2 {
 			end := f32(ei * 2 - 1)
-			if pose.held && si == 1 && ei == 0 {
-				hip := pose.rear * [4]f32{GRIP_ROOT[e.kind].x, GRIP_ROOT[e.kind].y, GRIP_ROOT[e.kind].z, 1}
-				limb(IDENTITY, hip.xyz, pose.hand, 0.12 * r, coat)
-				ball(IDENTITY, pose.hand, {0.1, 0.1, 0.1} * r, feet)
-				continue
-			}
 			turn := pose.legs[si][ei]
 			frame := end < 0 ? pose.rear : pose.front
 			leg := frame * translate({side * 0.34, 0.77, end * 0.59}) * rot_z(turn.y) * rot_x(turn.x)
@@ -1174,10 +1261,18 @@ draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
 	ball(pose.rear, {0, 0.98, -0.07}, {0.5, 0.52, 0.45}, coat)
 	ball(pose.front, {0, 0.99, 0.27}, {0.5, 0.52, 0.56}, coat)
 	limb(pose.front, {0, 1.07, 0.36}, {0, 1.47, 0.64}, 0.40, cream)
-	wag: f32 = pose.dead ? 0 : 0.39 + 0.20 * math.sin(e.hop * 0.52)
-	tail := pose.rear * translate({0, 1.04, -0.75}) * rot_y(wag)
-	limb(tail, {0, 0, 0.07}, {0, 0.30, -1.12}, 0.305, coat)
-	limb(tail, {0, 0.26, -0.87}, {0, 0.53, -1.43}, 0.20, cream)
+	if pose.held {
+		// Held by the tail: it runs taut from its rump to his hoof.
+		root := (pose.rear * [4]f32{GRIP_ROOT[e.kind].x, GRIP_ROOT[e.kind].y, GRIP_ROOT[e.kind].z, 1}).xyz
+		white := root + (pose.hand - root) * 0.72
+		limb(IDENTITY, root, white, 0.26 * r, coat)
+		limb(IDENTITY, white, pose.hand, 0.17 * r, cream)
+	} else {
+		wag: f32 = pose.dead ? 0 : 0.39 + 0.20 * math.sin(e.hop * 0.52)
+		tail := pose.rear * translate({0, 1.04, -0.75}) * rot_y(wag)
+		limb(tail, {0, 0, 0.07}, {0, 0.30, -1.12}, 0.305, coat)
+		limb(tail, {0, 0.26, -0.87}, {0, 0.53, -1.43}, 0.20, cream)
+	}
 
 	h := pose.front * translate({0, 1.51, 0.65}) * scale({1.12, 1.12, 1.12}) // a big head is a cute head
 	if pose.held && !pose.dizzy {

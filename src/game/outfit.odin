@@ -272,7 +272,7 @@ bag_tab: Bag_Tab
 bag_row: Outfit_Row
 bag_item: Item
 bag_facing: f32 // which way Prosio faced; he turns round to show his outfit
-SACK_COLUMNS :: 8
+SACK_COLUMNS :: 9
 
 open_bag :: proc() {
 	scene = .Bag
@@ -308,7 +308,11 @@ update_bag :: proc(dt: f32) {
 		if button_pressed(.Confirm) || button_pressed(.Action) || button_pressed(.Eat) {
 			if g.prosio.sack[bag_item] > 0 {
 				g.prosio.sack_sel = bag_item
-				eat_from_sack()
+				if is_food(bag_item) {
+					eat_from_sack()
+				} else {
+					close_bag() // a thing to use: it is chosen, and he is back in the meadow to use it
+				}
 			}
 		}
 	case .Outfit:
@@ -348,7 +352,7 @@ draw_bag :: proc() {
 	switch bag_tab {
 	case .Sack:
 		draw_bag_sack(x + 20 * s, top, w - 40 * s, s)
-		label_centred("ARROWS: choose    E: eat    Z / C: other panel    M: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred("ARROWS: choose   E: eat, or choose to use   Z / C: other panel   M: close", x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
 	case .Outfit:
 		draw_bag_outfit(x + 20 * s, top, w - 40 * s, s)
 		label_centred("UP/DOWN: row    LEFT/RIGHT: change    Z/C: panel    M: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
@@ -394,10 +398,8 @@ draw_bag_map :: proc(x, y, w, s: f32) {
 						color = MAP_HILLS
 					}
 				}
-				for kind in Region_Kind {
-					if kind != .Home && near_segment(centre, HOME, PATH_ENDS[kind], 1.4) {
-						color = MAP_PATH
-					}
+				if on_a_path(centre, 1.4) {
+					color = MAP_PATH
 				}
 				if length2(centre - HOME) < 4.5 {
 					color = MAP_PATH
@@ -441,10 +443,34 @@ draw_bag_map :: proc(x, y, w, s: f32) {
 			ui_rect(at.x - 4 * s, at.y - 4 * s, 8 * s, 8 * s, COLOR_PLANK)
 		case .Hive:
 			ui_circle(at.x, at.y, 3 * s, HONEY_GOLD)
+		case .Pebbles:
+			ui_circle(at.x, at.y, 2 * s, {150, 152, 150, 255})
 		case .Salt_Rock:
 			ui_circle(at.x, at.y, 3.5 * s, {160, 164, 158, 255})
 			ui_rect(at.x - 2 * s, at.y - 2 * s, 4 * s, 4 * s, SALT_PINK)
+		case .Bench:
+			ui_rect(at.x - 4 * s, at.y - 3 * s, 8 * s, 6 * s, PLANK_DARK)
+		case .Larder:
+			ui_rect(at.x - 3 * s, at.y - 3 * s, 6 * s, 6 * s, COLOR_PLANK)
+		case .Scarecrow:
+			ui_rect(at.x - 3 * s, at.y - 1 * s, 6 * s, 2 * s, TSHIRT)
+			ui_circle(at.x, at.y - 2 * s, 1.6 * s, STRAW)
 		case .Block:
+		}
+	}
+	// His fences.
+	if g.fence_count > 0 {
+		for way in Fence_Way {
+			for there, i in g.fences[way] {
+				if !there {
+					continue
+				}
+				a, b := fence_ends({i % (FENCE_W + 1), i / (FENCE_W + 1), way})
+				if explored((a + b) / 2) {
+					from, to := to_map(a, x, y, cell), to_map(b, x, y, cell)
+					ui_rect(from.x - s, from.y - s, to.x - from.x + 2 * s, to.y - from.y + 2 * s, COLOR_PLANK)
+				}
+			}
 		}
 	}
 	for &f in g.foods[:g.food_count] {
@@ -480,7 +506,7 @@ draw_bag_map :: proc(x, y, w, s: f32) {
 // Everything that can be in the sack, gathered or baked, and how many.
 draw_bag_sack :: proc(x, y, w, s: f32) {
 	p := &g.prosio
-	size := 50 * s
+	size := 46 * s
 	gap := (w - size * SACK_COLUMNS) / (SACK_COLUMNS - 1)
 	for it in Item {
 		i := int(it)
@@ -502,9 +528,21 @@ draw_bag_sack :: proc(x, y, w, s: f32) {
 	info := y + f32(rows) * (size + 28 * s) + 10 * s
 	defer draw_content(bag_item, x, info + 100 * s, w, s)
 	label(ITEM_NAME[bag_item], x, info, 28 * s)
-	kcal := sack_piece_kcal(bag_item)
-	label(ui_format("%d kcal", i32(kcal)), x, info + 36 * s, 22 * s, UI_YELLOW)
+	if is_food(bag_item) {
+		label(ui_format("%d kcal", i32(sack_piece_kcal(bag_item))), x, info + 36 * s, 22 * s, UI_YELLOW)
+		// How fresh what he has of it is (or that it keeps).
+		if p.sack[bag_item] > 0 {
+			word := fresh_word(bag_item, p.sack_fresh[bag_item])
+			if word == nil {
+				word = "keeps"
+			}
+			label(word, x + w - ui_text_width(word, 18 * s), info + 6 * s, 18 * s, word == "going off!" ? UI_ORANGE : Color{200, 220, 200, 255})
+		}
+	}
 	switch {
+	case !is_food(bag_item):
+		// Not food: what it is for.
+		label(THING_ABOUT[bag_item], x, info + 40 * s, 18 * s, {220, 200, 180, 255})
 	case !edible(bag_item):
 		how: cstring = "Not to eat raw: the fire by the pond cooks it"
 		if bag_item == .Wheat {
@@ -518,65 +556,63 @@ draw_bag_sack :: proc(x, y, w, s: f32) {
 		// (Each part rounded as it is shown below, so that they add up.)
 		meal := piece_meal(bag_item)
 		grams: i32
-		for kg in ([5]f32{meal.carbs, meal.fat, meal.protein, meal.fibre, meal.water}) {
+		for kg in ([4]f32{meal.carbs, meal.fat, meal.protein, meal.fibre}) {
 			grams += i32(math.round(kg * 100))
 		}
-		label(ui_format2(grams < 0 ? "-%d.%02d kg" : "+%d.%02d kg", abs(grams) / 100, abs(grams) % 100), x + 170 * s, info + 36 * s, 22 * s, grams < 0 ? UI_RED : UI_GREEN)
-		if bag_item >= FIRST_DISH && STATION_BONUS[recipe_for(bag_item).at] > 1 {
-			label("Cooked: +40% kcal", x, info + 66 * s, 18 * s, {220, 200, 180, 255})
+		label(ui_format2("+%d.%02d kg", grams / 100, grams % 100), x + 170 * s, info + 36 * s, 22 * s, UI_GREEN)
+		if is_dish(bag_item) && COOK_RANGE[recipe_for(bag_item).at][1] > 1 {
+			label("Cooked: richer than what went in", x, info + 66 * s, 18 * s, {220, 200, 180, 255})
 		}
 	}
 }
 
-// What one piece of this puts into him: the kilograms of each part, which
-// add up to what it weighs going in, and the two things that weigh nothing.
+// What a food is made of, as shares of its calories, in a bar and in
+// figures; and beside each share what one piece of it puts into him: the
+// kilograms of each part (they add up to what it weighs going in), and
+// points of the two things that weigh nothing.
 draw_content :: proc(item: Item, x, y, w, s: f32) {
-	if !edible(item) {
+	if !is_food(item) {
 		return
 	}
+	c := composition(item)
 	m := piece_meal(item)
-	label("IN ONE OF THESE:", x, y, 16 * s, UI_ORANGE)
-	Line :: struct {
-		name:  cstring,
-		kg:    f32,
-		color: Color,
+	label("MADE OF, IN SHARES OF ITS KCAL:", x, y, 15 * s, UI_ORANGE)
+	label("IN ONE PIECE", x + w - ui_text_width("IN ONE PIECE", 13 * s) - 10 * s, y + 2 * s, 13 * s, {200, 200, 200, 255})
+	bar_w := w - 10 * s
+	left := x
+	for share, i in c {
+		part := bar_w * share / 100
+		ui_rect(left, y + 22 * s, part, 10 * s, NUTRIENT_COLOR[Nutrient(i)])
+		left += part
 	}
-	lines := [?]Line {
-		{"CARBS", m.carbs, PART_COLOR[.Carbs]},
-		{"FAT", m.fat, PART_COLOR[.Fat]},
-		{"PROTEIN", m.protein, PART_COLOR[.Protein]},
-		{"FIBRE", m.fibre, PART_COLOR[.Fibre]},
-		{"WATER", m.water, PART_COLOR[.Water]},
+	amounts := [Nutrient]f32 {
+		.Carbs        = m.carbs,
+		.Fat          = m.fat,
+		.Protein      = m.protein,
+		.Fibre        = m.fibre,
+		.Vitamins     = m.vitamins,
+		.Electrolytes = m.salts,
 	}
-	shown := 0
-	place :: proc(shown: int, x, y, w, s: f32) -> (cx, cy: f32) {
-		return x + f32(shown % 2) * w / 2, y + 26 * s + f32(shown / 2) * 24 * s
-	}
-	for line in lines {
-		hundredths := i32(math.round(line.kg * 100))
-		if hundredths == 0 {
+	GREY :: Color{150, 150, 150, 255}
+	size := 15 * s
+	for share, i in c {
+		n := Nutrient(i)
+		cx := x + f32(i % 2) * w / 2
+		cy := y + 42 * s + f32(i / 2) * 22 * s
+		none := share < 0.5
+		ui_rect(cx, cy + 3 * s, 9 * s, 9 * s, NUTRIENT_COLOR[n])
+		label(NUTRIENT_NAME[n], cx + 14 * s, cy, size, none ? GREY : UI_WHITE)
+		per := ui_format("%d%%", i32(math.round(share)))
+		label(per, cx + 160 * s - ui_text_width(per, size), cy, size, none ? GREY : UI_YELLOW)
+		if none {
 			continue
 		}
-		cx, cy := place(shown, x, y, w, s)
-		ui_rect(cx, cy + 4 * s, 10 * s, 10 * s, line.color)
-		label(line.name, cx + 16 * s, cy, 18 * s)
-		sign: cstring = hundredths < 0 ? "-%d.%02d kg" : "+%d.%02d kg"
-		label(ui_format2(sign, abs(hundredths) / 100, abs(hundredths) % 100), cx + 122 * s, cy, 18 * s, hundredths > 0 ? UI_GREEN : UI_RED)
-		shown += 1
-	}
-	points := [2]f32{m.vitamins, m.salts}
-	names := [2]cstring{"VITAMINS", "ELECTROLYTES"}
-	for amount, i in points {
-		if i32(math.round(amount)) == 0 {
-			continue
+		if n == .Vitamins || n == .Electrolytes {
+			label(ui_format("+%d", i32(math.round(amounts[n]))), cx + 168 * s, cy, size, UI_GREEN)
+		} else {
+			hundredths := i32(math.round(amounts[n] * 100))
+			label(ui_format2("+%d.%02d kg", hundredths / 100, hundredths % 100), cx + 168 * s, cy, size, UI_GREEN)
 		}
-		cx, cy := place(shown, x, y, w, s)
-		label(names[i], cx, cy, 18 * s)
-		label(ui_format("%+d", i32(math.round(amount))), cx + 172 * s, cy, 18 * s, UI_GREEN)
-		shown += 1
-	}
-	if shown == 0 {
-		label("nothing much", x, y + 26 * s, 18 * s, {200, 200, 200, 255})
 	}
 }
 
@@ -618,13 +654,32 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 	for t in Trait {
 		if t == .Arms {
 			label("MUSCLE", x, ry, 15 * s, UI_ORANGE)
-			ry += 21 * s
+			ry += 19 * s
 		}
 		if t == .Lungs {
 			label("SKILLS", x, ry, 15 * s, UI_ORANGE)
-			ry += 21 * s
+			ry += 19 * s
 		}
 		level := p.trait[t]
+		if is_mental(t) {
+			// The kitchen's skills, a line each: never forgotten, so there is
+			// no trend to show, only what he is called and what it is worth.
+			if t == .Baking {
+				label("IN THE KITCHEN (never forgotten)", x, ry, 15 * s, UI_ORANGE)
+				ry += 19 * s
+			}
+			at := t == .Baking ? Station_Kind.Oven : (t == .Grilling ? Station_Kind.Fire : Station_Kind.Churn)
+			short := bar_w * 0.55
+			label(TRAIT_NAME[t], x, ry, 18 * s)
+			ui_rect(bar_x - 2 * s, ry + 2 * s, short + 4 * s, 13 * s, UI_DARK)
+			ui_rect(bar_x, ry + 4 * s, short, 9 * s, {96, 110, 120, 255})
+			ui_rect(bar_x, ry + 4 * s, short * level, 9 * s, NEED_POWER)
+			bonus := i32(math.round((cook_bonus(at) - 1) * 100))
+			most := i32(math.round((COOK_RANGE[at][1] - 1) * 100))
+			label(ui_format_title("%s: +%d%% (of +%d%%)", cook_title(at), bonus, most), bar_x + short + 12 * s, ry + 1 * s, 15 * s, UI_YELLOW)
+			ry += 22 * s
+			continue
+		}
 		label(TRAIT_NAME[t], x, ry, 18 * s)
 		ui_rect(bar_x - 2 * s, ry + 2 * s, bar_w + 4 * s, 13 * s, UI_DARK)
 		if is_muscle(t) {
@@ -644,9 +699,9 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			ui_rect(bar_x, ry + 4 * s, bar_w * level, 9 * s, NEED_POWER)
 		}
 		trend_word(p.trend[t], x + w - 66 * s, ry + 1 * s, 15 * s)
-		label(TRAIT_GROWS[t], x + 10 * s, ry + 21 * s, 13 * s, GREY)
-		label(TRAIT_GIVES[t], x + 10 * s, ry + 36 * s, 13 * s, UI_YELLOW)
-		ry += 54 * s
+		label(TRAIT_GROWS[t], x + 10 * s, ry + 19 * s, 12 * s, GREY)
+		label(TRAIT_GIVES[t], x + 10 * s, ry + 32 * s, 12 * s, UI_YELLOW)
+		ry += 46 * s
 	}
 }
 

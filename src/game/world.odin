@@ -29,9 +29,25 @@ APPLE_GROW :: f32(200) // seconds for apples to ripen on the tree
 APPLE_LIFE :: f32(90) // seconds a fallen apple lies there before it rots away
 EGG_LIFE :: f32(240) // seconds a laid egg lies there before it is gone
 MAX_EGGS :: 10 // eggs lying about at once, all over the meadow: well under the budget
-SALT_ROCKS :: 4 // big rocks in the goat hills with rock salt growing on them (salt has no calories, so no budget)
+SALT_ROCKS :: 4 // big rocks in the goat hills with rock salt growing on them (salt is no energy, so it has no budget)
 MAX_SALT :: 2 // lumps on one of them
 SALT_REGROW :: Vec2{300, 600} // seconds until another lump has grown
+// Patches of pebbles for throwing: some in the goat hills, by the pond, and
+// one each near home, the turkeys and the fields.
+PEBBLE_PATCHES := [Region_Kind]int {
+	.Home    = 1,
+	.Forest  = 1,
+	.Fields  = 1,
+	.Garden  = 0,
+	.Turkeys = 1,
+	.Hills   = 3,
+	.Pond    = 2,
+	.Bees    = 0,
+}
+MAX_PEBBLES :: 6 // in one patch
+PEBBLE_HANDFUL :: 3 // taken at one stoop
+PEBBLE_REGROW :: Vec2{30, 70} // seconds until another has worked its way up
+PEBBLE_PATCH_RADIUS :: f32(0.45)
 SALT_ROCK_RADIUS :: f32(1.0)
 
 // The pond: the only water to drink. It is round, and too deep to walk into.
@@ -62,6 +78,10 @@ Round_Kind :: enum {
 	Block, // the chopping block by the fire, the stool by the churn
 	Hive,
 	Salt_Rock, // a big rock in the goat hills with rock salt growing on it
+	Pebbles, // a patch of pebbles to fill the sack from; it lies flat, and nothing bumps into it
+	Bench, // the workbench at home
+	Scarecrow, // one he built and stood up (see workshop.odin)
+	Larder, // one he built and stood up (see larder.odin)
 }
 
 Tree_Species :: enum {
@@ -202,6 +222,9 @@ Food_Kind :: enum {
 	Egg,
 	Cabbage,
 	Nuts, // a little heap under the forest trees; more drop on it with time
+	// Not food, but lying on the ground to be picked up all the same:
+	Wood, // a fallen branch under a forest tree; another falls after a while
+	Spear, // a spear he threw, where it came down
 }
 
 Food :: struct {
@@ -226,6 +249,8 @@ FOOD_ITEM := [Food_Kind]Item {
 	.Egg      = .Egg,
 	.Cabbage  = .Cabbage,
 	.Nuts     = .Nuts,
+	.Wood     = .Wood,
+	.Spear    = .Spear,
 }
 // Seconds until a new one sprouts where one was picked (somewhere in this
 // range), and then to grow to full size.
@@ -237,6 +262,8 @@ FOOD_REGROW := [Food_Kind]Vec2 {
 	.Egg      = {}, // the turkeys lay new ones
 	.Cabbage  = {200, 480},
 	.Nuts     = {150, 400},
+	.Wood     = {120, 300},
+	.Spear    = {}, // only he puts spears there
 }
 FOOD_GROW := [Food_Kind]f32 {
 	.Apple    = 0,
@@ -246,6 +273,8 @@ FOOD_GROW := [Food_Kind]f32 {
 	.Egg      = 0,
 	.Cabbage  = 240,
 	.Nuts     = 180,
+	.Wood     = 0, // a branch falls whole
+	.Spear    = 0,
 }
 // How big each is on the ground. Only a pumpkin is big enough to bump into.
 FOOD_SIZE := [Food_Kind]f32 {
@@ -256,6 +285,8 @@ FOOD_SIZE := [Food_Kind]f32 {
 	.Egg      = 0.1,
 	.Cabbage  = 0.26,
 	.Nuts     = 0.16,
+	.Wood     = 0.3,
+	.Spear    = 0.3,
 }
 
 // Food lying on the ground, there to pick up (ripe or not).
@@ -283,6 +314,9 @@ bush_kcal :: proc(b: ^Round) -> f32 {
 		return RAW_KCAL[.Honey]
 	}
 	if b.kind == .Salt_Rock {
+		return RAW_KCAL[.Salt]
+	}
+	if b.kind == .Pebbles {
 		return 0
 	}
 	return math.round(RAW_KCAL[.Berries] * ripeness(b.ripe))
@@ -412,8 +446,11 @@ build_world :: proc() {
 	g.stations[.Oven].pos = HOME + {-4, -2.5}
 	g.stations[.Fire].pos = POND + {10.5, 4.5}
 	g.stations[.Churn].pos = {55, -33}
+	g.stations[.Bench].pos = HOME + BENCH_PLACE
 	for st, kind in g.stations {
-		add_round(st.pos, STATION_RADIUS[kind], STATION_ROUND[kind])
+		if kind != .Bench { // the workbench came later: it is put in last (below)
+			add_round(st.pos, STATION_RADIUS[kind], STATION_ROUND[kind])
+		}
 	}
 	add_round(g.stations[.Fire].pos + FIRE_BLOCK.xz, BLOCK_RADIUS, .Block)
 	add_round(g.stations[.Churn].pos + CHURN_STOOL.xz, 0.3, .Block)
@@ -432,48 +469,33 @@ build_world :: proc() {
 		add_hive(i, pos)
 	}
 
-	// The forest is groves and glades. The trees stand in tight groves,
-	// longer from north to south than they are wide, so that they hide as
-	// little ground as they can; between them are open glades. The wild
-	// apple trees stand alone in the glades, the berry bushes grow where no
-	// tree is in front of them, and mushrooms and nuts lie at the foot of
-	// the groves on the side the camera is on.
-	groves: [GROVES]Vec2
-	grove_count := 0
-	for tries := 0; grove_count < GROVES && tries < 3000; tries += 1 {
-		centre := spot_in(.Forest, 0.88)
-		apart := true
-		for other in groves[:grove_count] {
-			gap := (centre - other) / GROVE_GAP
-			if gap.x * gap.x + gap.y * gap.y < 1 {
-				apart = false
-			}
+	// The forest is trees all through, each a little way from the next,
+	// thinning out towards its edge, with a trail from the path from home to
+	// three clearings. The wild apple trees and most of the berry bushes are
+	// in the clearings; mushrooms, nuts and fallen branches lie at the foot
+	// of the trees, on the side the camera is on. (Where a tree stands in
+	// front of him, it turns see-through: see tree_fade in draw.odin.)
+	for placed, tries := 0, 0; placed < FOREST_TREES && tries < 30000; tries += 1 {
+		pos := spot_in(.Forest, 1)
+		if random() > clamp(FOREST_EDGE + inside_region(pos, .Forest) * 2.5, 0, 1) || in_clearing(pos, 1) {
+			continue
 		}
-		if apart {
-			groves[grove_count] = centre
-			grove_count += 1
+		if species := forest_species(); tree_spot(pos, 0.75, species) {
+			add_tree(pos, species)
+			placed += 1
 		}
 	}
-	for centre in groves[:grove_count] {
-		for placed, tries := 0, 0; placed < GROVE_TREES && tries < 300; tries += 1 {
-			a := random_range(0, math.TAU)
-			k := math.sqrt(random())
-			pos := centre + Vec2{math.cos(a), math.sin(a)} * GROVE_SIZE * k
-			if species := forest_species(); tree_spot(pos, 0.75, species) {
-				add_tree(pos, species)
-				placed += 1
-			}
-		}
-	}
-	for placed, tries := 0, 0; placed < budget_count(.Apple) / MAX_APPLES && tries < 4000; tries += 1 {
-		pos := spot_in(.Forest, 0.95)
+	for placed, tries := 0, 0; placed < budget_count(.Apple) / MAX_APPLES && tries < 6000; tries += 1 {
+		// In a clearing, or failing that anywhere in the forest.
+		pos := tries < 4000 ? CLEARINGS[tries % len(CLEARINGS)] + random_in_circle(CLEARING_RADIUS - 1.5) : spot_in(.Forest, 0.95)
 		if tree_spot(pos, 3, .Apple) && !hidden_by_tree(pos) {
 			add_tree(pos, .Apple)
 			placed += 1
 		}
 	}
-	for placed, tries := 0, 0; placed < budget_count(.Berries) / MAX_BERRIES && tries < 6000; tries += 1 {
-		pos := spot_in(.Forest, 1.02)
+	for placed, tries := 0, 0; placed < budget_count(.Berries) / MAX_BERRIES && tries < 8000; tries += 1 {
+		// Two in three round the clearings, the rest wherever there is light.
+		pos := placed % 3 != 2 ? CLEARINGS[tries % len(CLEARINGS)] + random_in_circle(CLEARING_RADIUS + 2) : spot_in(.Forest, 1.02)
 		if clear_spot(pos, 1.1) && !hidden_by_tree(pos) {
 			add_bush(pos)
 			placed += 1
@@ -568,6 +590,29 @@ build_world :: proc() {
 	spawn_fish()
 	spawn_pests()
 
+	// Patches of pebbles, last of all, so that they change nothing else about
+	// the meadow.
+	for count, kind in PEBBLE_PATCHES {
+		for placed, tries := 0, 0; placed < count && tries < 400; tries += 1 {
+			pos := kind == .Home ? HOME + facing_dir(random_range(0, math.TAU)) * random_range(13.5, 17) : spot_in(kind, 0.85)
+			if kind == .Pond {
+				pos = POND + facing_dir(random_range(0, math.TAU)) * (POND_RADIUS + random_range(1.5, 3))
+			}
+			if (kind == .Home || clear_spot(pos, PEBBLE_PATCH_RADIUS + 0.8)) && !hidden_by_tree(pos) && !in_field(pos, 1) {
+				if i := add_round(pos, PEBBLE_PATCH_RADIUS, .Pebbles); i >= 0 {
+					g.rounds[i].fruit = MAX_PEBBLES
+					g.rounds[i].ripe = 1
+				}
+				placed += 1
+			}
+		}
+	}
+
+	// Fallen branches under the forest trees, and the workbench at home:
+	// they too came after everything else, and leave it as it was.
+	scatter_under_trees(.Wood, WOOD_LYING)
+	add_round(g.stations[.Bench].pos, STATION_RADIUS[.Bench], .Bench)
+
 	// Scatter tufts and flowers where nothing else stands.
 	w := WORLD_HALF
 	for tries := 0; g.decor_count < MAX_DECOR && tries < MAX_DECOR * 3; tries += 1 {
@@ -594,6 +639,9 @@ scatter_under_trees :: proc(kind: Food_Kind, count: int) {
 			continue
 		}
 		pos := t.pos + Vec2{random_range(-1.4, 1.4), random_range(0.7, 1.9)}
+		if region, ok := region_at(pos); !ok || region != .Forest {
+			continue // (a tree at the forest's edge: its foot is out in the meadow)
+		}
 		if clear_spot(pos, 0.3) && !hidden_by_tree(pos) && food_in_reach(pos, 0.4) == nil {
 			if f := add_food(kind, pos); f != nil {
 				f.grow = random_range(0.15, 1)
@@ -616,10 +664,43 @@ scatter_under_trees :: proc(kind: Food_Kind, count: int) {
 //   and what is put down after the trees (bushes, mushrooms, nuts, salt)
 //   goes only where no tree stands in front of it (see hidden_by_tree).
 VIEW_SLOPE :: f32(1.25)
-GROVES :: 12 // groves in the forest,
-GROVE_TREES :: 10 // each of about this many trees,
-GROVE_SIZE :: Vec2{2.8, 4.5} // this far across and from north to south (as radii),
-GROVE_GAP :: Vec2{12, 19} // and at least this far from the next, so there are glades between
+FOREST_TREES :: 175 // trees in the forest (besides the apple trees),
+FOREST_SPACING :: f32(4.6) // each at least this far from the next,
+FOREST_EDGE :: f32(0.25) // thinning to this share of the trees at its edge
+// The forest's clearings, and the trail that joins them to the path from
+// home (PATH_ENDS[.Forest]).
+CLEARINGS := [3]Vec2{{-50, -14}, {-71, 8}, {-73, -36}}
+CLEARING_RADIUS :: f32(7)
+TRAILS := [3][2]Vec2{{{-30, -8}, {-50, -14}}, {{-50, -14}, {-71, 8}}, {{-50, -14}, {-73, -36}}}
+
+in_clearing :: proc(pos: Vec2, margin: f32) -> bool {
+	for c in CLEARINGS {
+		if length2(pos - c) < CLEARING_RADIUS + margin {
+			return true
+		}
+	}
+	return false
+}
+
+// On a path from home, or on a forest trail, with this much to spare.
+on_a_path :: proc(pos: Vec2, reach: f32) -> bool {
+	for kind in Region_Kind {
+		if kind != .Home && near_segment(pos, HOME, PATH_ENDS[kind], reach) {
+			return true
+		}
+	}
+	for t in TRAILS {
+		if near_segment(pos, t[0], t[1], reach - 0.6) {
+			return true
+		}
+	}
+	return false
+}
+
+random_in_circle :: proc(r: f32) -> Vec2 {
+	a := random_range(0, math.TAU)
+	return Vec2{math.cos(a), math.sin(a)} * r * math.sqrt(random())
+}
 
 // The strip a tree hides: from near to far north of its trunk, and this far
 // to either side.
@@ -641,6 +722,8 @@ hides_something :: proc(pos: Vec2, species: Tree_Species) -> bool {
 			return true
 		}
 		for kind in Region_Kind {
+			// (A forest trail may run under the trees: they turn see-through
+			// round him as he walks it.)
 			if kind != .Home && near_segment(behind, HOME, PATH_ENDS[kind], half) {
 				return true
 			}
@@ -675,6 +758,14 @@ hidden_by_tree :: proc(pos: Vec2) -> bool {
 
 // A free spot where a tree would be in nobody's way.
 tree_spot :: proc(pos: Vec2, r: f32, species: Tree_Species) -> bool {
+	if inside_region(pos, .Forest) > 0 {
+		// In the forest no tree crowds the next.
+		for rd in g.rounds[:g.round_count] {
+			if rd.kind == .Tree && length2(rd.pos - pos) < FOREST_SPACING {
+				return false
+			}
+		}
+	}
 	return clear_spot(pos, r) && !hides_something(pos, species)
 }
 
@@ -689,10 +780,8 @@ clear_spot :: proc(pos: Vec2, r: f32) -> bool {
 	if length2(pos - HOME) < 12 + r || in_field(pos, r + 0.5) {
 		return false
 	}
-	for kind in Region_Kind {
-		if kind != .Home && near_segment(pos, HOME, PATH_ENDS[kind], 2.2 + r) {
-			return false
-		}
+	if on_a_path(pos, 2.2 + r) {
+		return false
 	}
 	for e in g.enemies[:g.enemy_count] {
 		if length2(pos - e.home) < r + 1.5 {
@@ -715,9 +804,18 @@ near_segment :: proc(p, a, b: Vec2, reach: f32) -> bool {
 //
 // feet is how high off the ground the circle is: things fly or jump over
 // obstacles lower than that.
-collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: bool, normal: Vec2) {
+//
+// The fences he has put up stop animals, and whatever else is not Prosio
+// (enemy is true for all of those), unless it is in the air above them or
+// is being carried over (over_fences). He himself steps over them.
+collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false, over_fences := false, wet := false) -> (hit: bool, normal: Vec2) {
 	// Two passes, so a push out of one thing cannot leave the circle inside another.
 	for _ in 0 ..< 2 {
+		if !over_fences && g.fence_count > 0 && feet < FENCE_TOP {
+			if h, n := push_out_fences(pos, r); h {
+				hit, normal = true, n
+			}
+		}
 		for i in 0 ..< g.round_count {
 			rd := &g.rounds[i]
 			if rd.r <= 0 || abs(rd.pos.x - pos.x) > rd.r + r || abs(rd.pos.y - pos.y) > rd.r + r {
@@ -735,8 +833,14 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: b
 				top = 2.2
 			case .Mill:
 				top = 4
-			case .Fire, .Hive, .Salt_Rock:
+			case .Pebbles:
+				continue // flat on the ground
+			case .Fire, .Hive, .Salt_Rock, .Bench:
 				top = 1.1
+			case .Scarecrow:
+				top = 1.9
+			case .Larder:
+				top = 1.4
 			case .Churn:
 				top = 1.3
 			case .Block:
@@ -757,8 +861,9 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false) -> (hit: b
 				hit, normal = true, n
 			}
 		}
-		if feet < 0.6 {
-			// The water's edge: his toes get wet, no more.
+		if feet < 0.6 && !wet {
+			// The water's edge: his toes get wet, no more. (Something thrown
+			// can land in it: see Swimming in enemies.odin.)
 			if h, n := push_out_circle(pos, r, POND, POND_RADIUS - 0.5); h {
 				hit, normal = true, n
 			}
@@ -801,6 +906,11 @@ food_in_reach :: proc(pos: Vec2, reach: f32) -> ^Food {
 }
 
 // At the water's edge, near enough to drink.
+// In the water itself.
+in_pond :: proc(pos: Vec2) -> bool {
+	return length2(pos - POND) < POND_RADIUS - 0.4
+}
+
 pond_in_reach :: proc(pos: Vec2, r: f32) -> bool {
 	return length2(POND - pos) < POND_RADIUS + r + 0.4
 }
@@ -811,7 +921,7 @@ bush_in_reach :: proc(pos: Vec2, reach: f32) -> ^Round {
 	best: ^Round
 	best_dist := reach
 	for &b in g.rounds[:g.round_count] {
-		if (b.kind != .Bush && b.kind != .Hive && b.kind != .Salt_Rock) || b.fruit <= 0 {
+		if (b.kind != .Bush && b.kind != .Hive && b.kind != .Salt_Rock && b.kind != .Pebbles) || b.fruit <= 0 {
 			continue
 		}
 		d := length2(b.pos - pos) - b.r
@@ -830,6 +940,8 @@ plant_max :: proc(kind: Round_Kind) -> int {
 		return MAX_HONEY
 	case .Salt_Rock:
 		return MAX_SALT
+	case .Pebbles:
+		return MAX_PEBBLES
 	}
 	return MAX_BERRIES
 }
@@ -840,6 +952,8 @@ plant_regrow :: proc(kind: Round_Kind) -> Vec2 {
 		return HONEY_REGROW
 	case .Salt_Rock:
 		return SALT_REGROW
+	case .Pebbles:
+		return PEBBLE_REGROW
 	}
 	return BERRY_REGROW
 }
@@ -981,7 +1095,7 @@ update_world :: proc(dt: f32) {
 				}
 			}
 		}
-		if (t.kind == .Hive || t.kind == .Salt_Rock) && t.fruit < plant_max(t.kind) {
+		if (t.kind == .Hive || t.kind == .Salt_Rock || t.kind == .Pebbles) && t.fruit < plant_max(t.kind) {
 			// The bees fill another comb; another lump of salt grows.
 			t.fruit_t -= dt
 			if t.fruit_t <= 0 {

@@ -22,10 +22,11 @@ PICK_TIME :: f32(0.5) // stooping to pick something up and putting it in the sac
 // weight: these are for an 80 kg Prosio.
 WALK_BURN :: f32(0.02) // kg per second of walking
 SPRINT_BURN :: f32(0.06) // kg per second of sprinting
-GATHER_BURN :: f32(0.08) // kg per thing picked up
+LOAD_TRAIN :: f32(3) // with a load of a fifth of his weight, his legs train 1.6 times as fast
+LOAD_HEAVY :: f32(0.25) // a load this share of his weight, and he says so
+GATHER_BURN :: f32(0.03) // kg per thing picked up
 JUMP_BURN :: f32(0.06) // kg per jump
 FIGHT_BURN :: f32(0.2) // kg per bump, grab, bash or throw
-HURT_BURN :: f32(0.35) // kg per shove or peck taken
 
 // Ordinary legs put the same energy into every jump, so height = energy /
 // weight: a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3. Strong
@@ -37,6 +38,7 @@ Fail :: enum {
 	Fainted,
 	Heart_Attack,
 	Diet, // a nutrient, or water, stayed at an extreme too long (see diet.odin)
+	Beaten, // bruised all over: the animals have knocked him out
 }
 
 Prosio :: struct {
@@ -45,6 +47,8 @@ Prosio :: struct {
 	vy:           f32, // vertical speed while in the air
 	airborne:     bool,
 	peak:         f32, // the highest his feet have been since he left the ground
+	jump_h:       f32, // how high the jump he is in will take him (0 when he only fell)
+	heavy_said:   bool, // he has said his sack is heavy (and has not lightened it since)
 	facing:       f32,
 	kg:           f32, // what he weighs: the sum of his parts (see body_kg in diet.odin)
 	fat:          f32, // kg of fat on him
@@ -89,10 +93,20 @@ Prosio :: struct {
 	strain:       f32, // 0 to 1: how hard he strains against a heavy animal
 	heave_t:      f32, // time left in a heave at an animal too heavy to swing
 	lunge_t:      f32, // a held animal is lunging while this is positive
-	throw_queued: bool, // F was pressed while still lifting a rock
+	grab_spent:   bool, // F is still down from the press that took hold: it does not count as letting go
+	winding:      bool, // F is down with something in his hands: he is winding up a throw
+	wind_stone:   bool, // ...of a pebble or a spear out of the sack, his hands being free
+	wind_item:    Item, // which of the two
+	casting:      bool, // the stoop he is in is a cast of his fishing rod,
+	cast_at:      Vec2, // to here
+	aim:          Aim, // what the throw is aimed at (see update_aim)
+	wind_t:       f32, // for this long
+	throw_power:  f32, // the share of a full throw the last wind-up came to
 	hand:         Vec3, // where the hand that holds an animal by the leg is
 	fail:         Fail,
 	fail_t:       f32,
+	bruises:      f32, // how much of the top of his stamina knocks have taken (see bruise)
+	knock_t:      f32, // seconds since the last knock
 	fail_need:    Need, // which level ended the game,
 	hiccup_t:     f32, // time until his next hiccup, with too much sugar in him
 	need:         [Need]f32, // his levels of each nutrient and of water, 0 to 100
@@ -107,7 +121,10 @@ Prosio :: struct {
 	drinking:     bool, // the thing he is stooping for is a drink
 	sack:         [Item]int, // what he has gathered or baked
 	sack_kcal:    [Item]f32, // and the calories in all of each kind
+	sack_fresh:   [Item]f32, // and how fresh each kind is, from 1 down (see larder.odin)
+	spoil_t:      f32,
 	sack_sel:     Item, // what he would eat next
+	knows:        [Item]bool, // the recipes and plans he knows, by what they make (all of them, for now)
 	bubble:       cstring, // speech bubble text
 	bubble_t:     f32,
 	hint_cd:      f32,
@@ -180,7 +197,14 @@ say :: proc(text: cstring, seconds: f32 = 1.6) {
 	g.prosio.bubble_t = seconds
 }
 
-// A speech bubble that does not repeat too often.
+// What he says in answer to a button that could not do what was asked ("No
+// room in my sack!"). It always shows: a press must never go unanswered.
+answer :: proc(text: cstring) {
+	say(text, 2)
+}
+
+// A speech bubble for things he says of his own accord, again and again
+// while something lasts ("So hungry..."): it does not repeat too often.
 hint :: proc(text: cstring) {
 	if g.prosio.hint_cd <= 0 {
 		say(text, 2)
@@ -199,6 +223,43 @@ reset_prosio :: proc() {
 	}
 	g.prosio.fat_was = FAT_START
 	g.prosio.kg = body_kg()
+	for r in RECIPES {
+		g.prosio.knows[r.dish] = true
+	}
+}
+
+// A knock from an animal, or a sting, leaves a bruise: no weight is lost,
+// but the top of his stamina comes down by that much until it mends, so a
+// battered Prosio cannot sprint or fight for long and has to get away. The
+// bruises never take more than BRUISE_MOST, which leaves him BRUISE_FLOOR of
+// his stamina to run with; bruised that far, the next thing is that he is
+// knocked out, and wakes up at home.
+BRUISE_FLOOR :: f32(0.25)
+BRUISE_MOST :: STAMINA_MAX * (1 - BRUISE_FLOOR)
+BRUISE := [Enemy_Kind]f32 {
+	.Turkey = 3,
+	.Goat   = 6,
+	.Billy  = 9,
+	.Fox    = 0,
+}
+BRUISE_STING :: f32(0.8)
+BRUISE_MEND :: f32(0.2) // points a second, times 0.5 (lacking protein and vitamins) to 2 (plenty of both)
+BRUISE_REST :: f32(5) // seconds after a knock before they start to mend
+BRUISE_WARN :: f32(0.7) // from this share of the most, he says so
+
+bruise :: proc(points: f32) {
+	p := &g.prosio
+	p.bruises = min(p.bruises + points, BRUISE_MOST)
+	p.knock_t = 0
+	p.stamina = min(p.stamina, stamina_top())
+	if p.bruises > BRUISE_MOST * BRUISE_WARN {
+		hint("Ow... I'm black and blue! I must get away!")
+	}
+}
+
+// The most stamina he can have just now: less when thirsty, less when bruised.
+stamina_top :: proc() -> f32 {
+	return min(lacks(.Water) ? THIRSTY_STAMINA : STAMINA_MAX, STAMINA_MAX - g.prosio.bruises)
 }
 
 update_prosio :: proc(dt: f32) {
@@ -211,12 +272,18 @@ update_prosio :: proc(dt: f32) {
 	p.safe_t -= dt
 	p.eat_t -= dt
 	p.pick_t -= dt
+	if p.pick_t <= 0 {
+		p.casting = false
+	}
 	p.wobble_vel += (-180 * p.wobble - 9 * p.wobble_vel) * dt
 	p.wobble += p.wobble_vel * dt
 	p.stretch_vel += (-260 * p.stretch - 16 * p.stretch_vel) * dt
 	p.stretch += p.stretch_vel * dt
 
 	if p.fail != .None {
+		if p.fail_t == 0 {
+			save_fallen()
+		}
 		// Lying down he takes up more room, so he is kept that much further from walls.
 		p.fail_t += dt
 		p.vel = approach2(p.vel, {}, 25 * dt)
@@ -235,6 +302,9 @@ update_prosio :: proc(dt: f32) {
 	if button_down(.Right) {move.x += 1}
 	if button_down(.Up) {move.y -= 1}
 	if button_down(.Down) {move.y += 1}
+	if p.winding {
+		move = {} // winding up a throw he plants his feet: the direction buttons choose what to aim at
+	}
 	move = normalize2(move)
 	moving := move != {}
 
@@ -253,16 +323,23 @@ update_prosio :: proc(dt: f32) {
 
 	// With an animal in his hand, the action button milks a goat, or chops
 	// a dead one into meat at the fire.
-	if grounded && can_act && p.carry == .Enemy && p.lift_t <= 0 && !p.swinging && pressed(.Action) {
+	gate, at_gate := gate_in_reach()
+	if grounded && can_act && at_gate && p.lift_t <= 0 && !p.swinging && pressed(.Action) {
+		use_gate(gate)
+	} else if grounded && can_act && p.carry == .Enemy && p.lift_t <= 0 && !p.swinging && pressed(.Action) {
 		use_held_animal()
 		carrying = p.carry != .Nothing
 	}
 	// The action button next to food puts it in the sack; at the oven, the
 	// fire or the churn it makes things, at the mill it grinds, and at the
 	// pond he drinks.
-	if grounded && can_act && !carrying && pressed(.Action) {
-		if food != nil || bush != nil {
+	if grounded && can_act && !carrying && !at_gate && pressed(.Action) {
+		if goat := licking_goat(); goat != nil && (goat.milk_t <= 0 || (food == nil && bush == nil && !at_station && !mill && !pond)) {
+			milk_goat(goat, {goat.pos.x, 0.5, goat.pos.y})
+		} else if food != nil || bush != nil {
 			gather(food, bush)
+		} else if l := larder_first(); l >= 0 {
+			open_larder(l)
 		} else if at_station {
 			use_station(station)
 		} else if mill {
@@ -284,24 +361,25 @@ update_prosio :: proc(dt: f32) {
 
 	// Jump. A lighter Prosio goes higher, and a load weighs him down.
 	if grounded && can_act && p.lift_t <= 0 && p.carry != .Enemy && pressed(.Jump) {
-		cost := jump_cost()
+		cost := jump_cost() * (1 + load_share())
 		if p.stamina >= cost {
 			p.stamina -= cost
 			p.regen_delay = 0.4
-			burn(JUMP_BURN, true)
+			burn(JUMP_BURN, .Jumping, true)
 			train(.Legs, JUMP_WORK)
 			height := jump_height(total_kg())
 			if lacks(.Electrolytes) {
 				height *= CRAMP_JUMP // cramped legs
 			}
 			p.vy = math.sqrt(2 * GRAVITY * height)
+			p.jump_h = height
 			p.airborne = true
 			p.peak = p.height
 			p.stretch_vel += 4
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
 			grounded = false
 		} else {
-			hint("Too tired to jump!")
+			answer("Too tired to jump!")
 		}
 	}
 
@@ -316,12 +394,20 @@ update_prosio :: proc(dt: f32) {
 			// A bump out of a sprint keeps the extra speed.
 			p.vel = dir * max(dash_speed(), length2(p.vel) + 2)
 			p.facing = math.atan2(dir.x, dir.y)
-			burn(FIGHT_BURN, true)
+			burn(FIGHT_BURN, .Fighting, true)
 			p.wobble_vel -= 2
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2, COLOR_DUST, 0.12)
 		} else {
-			hint("Too tired!")
+			answer("Too tired!")
 		}
+	}
+
+	// A heavy sack: he says so, once.
+	if load_share() > LOAD_HEAVY && !p.heavy_said {
+		p.heavy_said = true
+		say("Oof! This sack is heavy...", 1.4)
+	} else if load_share() < LOAD_HEAVY * 0.8 {
+		p.heavy_said = false
 	}
 
 	// Sprint: hold the button while moving.
@@ -331,11 +417,11 @@ update_prosio :: proc(dt: f32) {
 	}
 	p.sprinting = button_down(.Sprint) && moving && grounded && p.dazed_t <= 0 && !busy && !carrying && !p.winded && p.crash_t <= 0
 	if p.sprinting {
-		p.stamina -= sprint_drain() * (p.rush ? RUSH_DRAIN : 1) * dt
+		p.stamina -= sprint_drain() * (p.rush ? RUSH_DRAIN : 1) * (1 + load_share()) * dt
 		p.regen_delay = lerp(0.3, 1.0, t)
-		burn(SPRINT_BURN * p.kg / KG_START * dt, true)
-		train(.Legs, SPRINT_WORK * dt)
-		train(.Lungs, SPRINT_WORK * dt)
+		burn(SPRINT_BURN * total_kg() / KG_START * dt, .Sprinting, true)
+		train(.Legs, SPRINT_WORK * load_training() * dt)
+		train(.Lungs, SPRINT_WORK * load_training() * dt)
 		p.dust_t -= dt
 		if p.dust_t <= 0 {
 			p.dust_t = 0.1
@@ -383,12 +469,12 @@ update_prosio :: proc(dt: f32) {
 			p.facing = approach_angle(p.facing, math.atan2(move.x, move.y), 12 * dt)
 		}
 		if moving && target != {} && grounded && !p.sprinting {
-			burn(WALK_BURN * p.kg / KG_START * dt)
-			train(.Legs, WALK_WORK * dt)
+			burn(WALK_BURN * total_kg() / KG_START * dt, .Walking)
+			train(.Legs, WALK_WORK * load_training() * dt)
 		}
 	}
 	p.pos += p.vel * dt
-	if hit, n := collide_static(&p.pos, r, p.height); hit {
+	if hit, n := collide_static(&p.pos, r, p.height, false, clears_fences()); hit {
 		into := dot2(p.vel, n)
 		if p.dash_t > 0 && into < -2 {
 			// Bumping a tree shakes it, and down come the apples.
@@ -409,11 +495,19 @@ update_prosio :: proc(dt: f32) {
 		}
 	}
 
+	// Bruises mend when he is left alone, faster with protein and vitamins
+	// to spare.
+	p.knock_t += dt
+	if p.knock_t > BRUISE_REST && p.bruises > 0 {
+		vitamins := clamp((p.need[.Vitamins] - NEED_LOW) / 30, 0, 1)
+		p.bruises = max(p.bruises - BRUISE_MEND * (0.5 + 0.75 * protein_to_spare() + 0.75 * vitamins) * dt, 0)
+	}
+
 	// Stamina comes back much faster when he is lean; slowly with no carbs
 	// in him, and only part of the way when he is thirsty.
 	if p.dash_t <= 0 && !p.sprinting && p.carry == .Nothing {
 		p.regen_delay -= dt
-		top := lacks(.Water) ? THIRSTY_STAMINA : STAMINA_MAX
+		top := stamina_top()
 		if p.regen_delay <= 0 && p.stamina < top {
 			regen := stamina_regen() * (lacks(.Carbs) ? NO_FUEL : 1)
 			p.stamina = min(p.stamina + regen * dt, top)
@@ -422,6 +516,7 @@ update_prosio :: proc(dt: f32) {
 
 	// What he has eaten and drunk, and what it does to him.
 	update_diet(dt)
+	update_spoil(dt)
 
 	// His muscles and skills follow what he has been doing, and his weight
 	// follows them and his fat.
@@ -434,6 +529,8 @@ update_prosio :: proc(dt: f32) {
 		p.fail = .Fainted // nothing left to burn: no fat, no carbs
 	} else if p.fat >= FAT_MAX {
 		p.fail = .Heart_Attack
+	} else if p.bruises >= BRUISE_MOST {
+		p.fail = .Beaten
 	} else if starving() {
 		hint(sack_has_food() ? "So hungry... Q: eat from my sack!" : "So hungry... I must find food!")
 	} else if p.fat > FAT_MAX - FAT_DANGER {
@@ -469,6 +566,7 @@ prosio_vertical :: proc(dt: f32) {
 		p.height = 0
 		p.vy = 0
 		p.airborne = false
+		p.jump_h = 0
 		prosio_lands(speed)
 	}
 }

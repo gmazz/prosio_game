@@ -93,14 +93,26 @@ nearest_fish :: proc() -> (best: ^Fish, dist: f32) {
 	return
 }
 
-fish_in_reach :: proc() -> bool {
-	_, dist := nearest_fish()
-	return dist < prosio_radius(g.prosio.kg) + FISH_REACH * deft_reach()
+// With his rod chosen in the sack, F at the pond casts it.
+rod_chosen :: proc() -> bool {
+	return g.prosio.sack_sel == .Rod && g.prosio.sack[.Rod] > 0
 }
 
-// F at the pond: a grab into the water.
+// How far beyond himself he can get a fish: by hoof, or with the rod.
+fish_reach :: proc() -> f32 {
+	return rod_chosen() ? ROD_REACH : FISH_REACH * deft_reach()
+}
+
+fish_in_reach :: proc() -> bool {
+	_, dist := nearest_fish()
+	return dist < prosio_radius(g.prosio.kg) + fish_reach()
+}
+
+// F at the pond: a grab into the water, or a cast of the rod. The rod
+// reaches much further, and the other fish take no fright at it.
 grab_fish :: proc() {
 	p := &g.prosio
+	rod := rod_chosen()
 	to := POND - p.pos
 	p.facing = math.atan2(to.x, to.y)
 	p.pick_t = pick_time()
@@ -108,28 +120,32 @@ grab_fish :: proc() {
 	train(.Hooves, FISH_WORK)
 	p.drinking = true // his hoof comes up empty, unless he gets one
 	p.vel = {}
-	burn(GATHER_BURN)
+	burn(GATHER_BURN, .Gathering)
 	fish, dist := nearest_fish()
 	at := p.pos + normalize2(to) * (prosio_radius(p.kg) + 0.6)
-	if fish != nil && dist < prosio_radius(p.kg) + FISH_REACH * deft_reach() {
+	if rod {
+		at = p.pos + normalize2(to) * (prosio_radius(p.kg) + ROD_REACH * 0.7)
+	}
+	if fish != nil && dist < prosio_radius(p.kg) + fish_reach() {
 		at = fish.pos
-		if p.sack[.Fish] >= SACK_MAX {
-			hint("No room in my sack for more fish!")
+		if sack_room(.Fish) < 1 {
+			answer("No room in my sack for more fish!")
 		} else {
 			sack_add(.Fish, math.round(RAW_KCAL[.Fish] * fish.size))
-			sack_step(0)
 			fish.away_t = random_range(FISH_BACK.x, FISH_BACK.y)
 			p.pick_item = .Fish
 			p.drinking = false
-			say("Got one! A slippery fish!", 1.4)
+			say(rod ? "A bite! Got one on the line!" : "Got one! A slippery fish!", 1.4)
 		}
 	} else {
-		say("Splash! Missed... they come close if I stand still.", 2)
+		say(rod ? "No bite... they are too far out. I'll wait." : "Splash! Missed... they come close if I stand still.", 2)
 	}
-	burst({at.x, 0.2, at.y}, 12, 2.5, POND_SPLASH, 0.08)
-	// The others have had a fright.
+	p.casting = rod
+	p.cast_at = at
+	burst({at.x, 0.2, at.y}, rod ? 4 : 12, rod ? 1.5 : 2.5, POND_SPLASH, 0.08)
+	// The others have had a fright (a float on a line frightens nobody).
 	for &f in g.fish {
-		if length2(f.pos - p.pos) < 8 {
+		if !rod && length2(f.pos - p.pos) < 8 {
 			f.dart_t = 1.5
 			f.shy_t = random_range(FISH_FRIGHT.x, FISH_FRIGHT.y)
 		}
@@ -159,7 +175,9 @@ draw_fish :: proc() {
 // Rabbits (in the garden) and crows (over the wheat) eat what is left
 // standing. Now and then one comes out for a crop that is nearly ripe and
 // eats it down: not away altogether, but back to a smaller size. They run
-// from Prosio, and from his wind.
+// from Prosio, from his wind and from a stone. A crow will not come to wheat
+// with a scarecrow near it, nor a rabbit to anything fenced in (see
+// crop_guarded in workshop.odin).
 Pest_Kind :: enum {
 	Rabbit,
 	Crow,
@@ -182,6 +200,7 @@ Pest :: struct {
 	t:      f32, // until it comes out, or done eating
 	food:   int, // which crop it is after
 	hop:    f32,
+	stoned: bool, // driven off with a stone: it stays away longer
 }
 
 MAX_PESTS :: 4
@@ -213,7 +232,7 @@ pest_target :: proc(c: ^Pest) -> int {
 	best := -1
 	best_dist := f32(1e9)
 	for &f, i in g.foods[:g.food_count] {
-		if f.kind != PEST_CROP[c.kind] || !food_ready(&f) || f.grow < RIPE_ENOUGH || length2(f.pos - g.prosio.pos) < 9 {
+		if f.kind != PEST_CROP[c.kind] || !food_ready(&f) || f.grow < RIPE_ENOUGH || length2(f.pos - g.prosio.pos) < 9 || crop_guarded(c.kind, f.pos) {
 			continue
 		}
 		taken := false
@@ -227,6 +246,23 @@ pest_target :: proc(c: ^Pest) -> int {
 		}
 	}
 	return best
+}
+
+// A stone passing or landing this near sends a rabbit or a crow off, and it
+// stays away STONED_AWAY times as long as it would have.
+STONE_SCARE :: f32(2.5)
+STONED_AWAY :: f32(2.5)
+PEST_HEARD :: f32(50) // from this far off he hears one start on his crops
+
+scare_pests_near :: proc(pos: Vec2, y: f32) {
+	for &c in g.pests {
+		if (c.state != .Coming && c.state != .Eating) || length2(c.pos - pos) > STONE_SCARE || abs(c.y - y) > 3 {
+			continue
+		}
+		c.state = .Fleeing
+		c.stoned = true
+		say(c.kind == .Crow ? "Shoo, crow! And stay away!" : "Shoo, rabbit! And stay away!", 1.4)
+	}
 }
 
 scare_pest :: proc(c: ^Pest) {
@@ -277,6 +313,9 @@ update_pests :: proc(dt: f32) {
 			if dist < 0.35 {
 				c.state = .Eating
 				c.t = NIBBLE_TIME
+				if length2(p.pos - c.pos) < PEST_HEARD {
+					hint(c.kind == .Crow ? "Caw, caw! A crow is at my wheat!" : "Rustle, rustle... a rabbit is at my cabbages!")
+				}
 			}
 		case .Eating:
 			food := &g.foods[c.food]
@@ -302,7 +341,8 @@ update_pests :: proc(dt: f32) {
 			}
 			if dist < 0.3 {
 				c.state = .Away
-				c.t = random_range(PEST_AWAY.x, PEST_AWAY.y)
+				c.t = random_range(PEST_AWAY.x, PEST_AWAY.y) * (c.stoned ? STONED_AWAY : 1)
+				c.stoned = false
 			}
 		}
 	}
@@ -377,7 +417,6 @@ BEE_SPEED :: f32(6.2) // faster than he walks, slower than a lean sprint
 BEE_ANGRY :: f32(5) // seconds they stay after him once he is clear
 BEE_LEASH :: f32(32) // they give up this far from the hive
 STING_EVERY :: f32(0.7)
-STING_BURN :: f32(0.1) // kg a sting costs
 GAS_CALM :: f32(14) // seconds his wind keeps a hive quiet
 
 Hive :: struct {
@@ -420,7 +459,7 @@ update_bees :: proc(dt: f32) {
 			if h.sting_t <= 0 {
 				h.sting_t = STING_EVERY
 				felt := knock()
-				burn(STING_BURN * felt)
+				bruise(BRUISE_STING * felt)
 				train(.Hide, STING_WORK)
 				p.stamina = max(p.stamina - 4 * felt, 0)
 				p.regen_delay = 0.4

@@ -19,14 +19,17 @@ import "core:math"
 // it, and the weight bar is the same parts laid end to end. Two more things
 // he needs weigh nothing: vitamins and electrolytes.
 //
-// Food is made of the same stuff. A piece's calories are its carbs, fat and
-// protein (KCAL_PER_KG to the kilogram); it may hold fibre and water too.
-// Eating puts each into the part of him that is the same thing:
+// Food is made of the same stuff: each food's calories are shared between
+// carbs, fat, protein, fibre, vitamins and electrolytes, in the proportions
+// of its row in COMPOSITION below. Eating puts each into the part of him
+// that is the same thing:
 //
 //   carbs    into his carbs; what will not fit turns to fat
 //   fat      straight onto his fat
-//   protein  into his protein; what will not fit turns to carbs
-//   fibre and water into his; what will not fit passes through
+//   protein  into his protein; what will not fit passes through
+//   fibre    into his; what will not fit passes through
+//
+// (Protein never turns into carbs. Water he drinks at the pond.)
 //
 // What he burns comes out of his carbs and his fat. His muscle burns all
 // the time, in proportion to how much of it there is, and that, with
@@ -138,80 +141,121 @@ GLOW_NOTICE :: f32(1.5) // glowing: how much further off the turkeys spot him
 PARCHED_THIRST :: f32(5) // parched: how much faster his water goes
 STIFF :: f32(1.6) // stiff: how much longer a swing or a stoop takes
 
-// What each raw food is made of. Its calories (RAW_KCAL in kitchen.odin)
-// are shared between carbs, fat and protein as the first three say (they
-// add up to 1); then the fibre and water in one full-grown piece, in kg, and
-// its vitamins and electrolytes, in points of those levels.
-Stuff :: struct {
-	carbs, fat, protein: f32,
-	fibre, water:        f32,
-	vitamins, salts:     f32,
+// What each food is made of: the share of its calories that is carbs, fat,
+// protein, fibre, vitamins and electrolytes, in per cent (they add up to
+// 100). A piece puts into him those shares of its calories and nothing else:
+// a piece twice as rich puts in twice as much of each. (So a food's calories
+// count all of it, not only what can make him fatter: only the carbs, fat
+// and protein in it are energy. Water comes only from the pond.)
+//
+// Into him each share goes at a fixed rate: carbs, fat and protein at
+// KCAL_PER_KG to the kilogram, fibre at FIBRE_KCAL to the kilogram, and
+// vitamins and electrolytes at a point of their level for every calorie.
+Nutrient :: enum {
+	Carbs,
+	Fat,
+	Protein,
+	Fibre,
+	Vitamins,
+	Electrolytes,
 }
-STUFF := #partial [Item]Stuff {
-	.Apple    = {1, 0, 0, 0.08, 0.2, 6, 1},
-	.Berries  = {1, 0, 0, 0.04, 0.15, 9, 0},
-	.Mushroom = {0.35, 0, 0.65, 0.06, 0.05, 2, 4},
-	.Pumpkin  = {0.9, 0, 0.1, 0.2, 0.3, 12, 6},
-	.Cabbage  = {0.8, 0, 0.2, 0.7, 0.25, 12, 4},
-	.Nuts     = {0.05, 0.75, 0.2, 0.06, 0, 0, 1},
-	.Wheat    = {0.85, 0.03, 0.12, 0.08, 0, 0, 0},
-	.Egg      = {0, 0.55, 0.45, 0, 0, 3, 1},
-	.Flour    = {0.85, 0.03, 0.12, 0.08, 0, 0, 0},
-	.Salt     = {0, 0, 0, 0, -0.75, 0, 30}, // salt makes him thirsty
-	.Fish     = {0, 0.3, 0.7, 0, 0, 3, 3},
-	.Meat     = {0, 0.4, 0.6, 0, 0, 1, 2},
-	.Milk     = {0.25, 0.45, 0.3, 0, 0.5, 2, 3},
-	.Honey    = {1, 0, 0, 0, 0, 1, 1},
-	// The churn changes what milk is, so these two are given outright:
-	.Butter   = {0, 1, 0, 0, 0, 2, 1},
-	.Cheese   = {0, 0.55, 0.45, 0, 0, 2, 9},
+
+NUTRIENT_NAME := [Nutrient]cstring {
+	.Carbs        = "CARBS",
+	.Fat          = "FAT",
+	.Protein      = "PROTEIN",
+	.Fibre        = "FIBRE",
+	.Vitamins     = "VITAMINS",
+	.Electrolytes = "ELECTROLYTES",
+}
+
+// The colour of each in the bar of what a food is made of, as in the panel
+// of what he is made of.
+NUTRIENT_COLOR := [Nutrient]Color {
+	.Carbs        = {244, 150, 60, 255},
+	.Fat          = {246, 206, 70, 255},
+	.Protein      = {236, 150, 190, 255},
+	.Fibre        = {120, 196, 96, 255},
+	.Vitamins     = VITAMIN_COLOR,
+	.Electrolytes = SALT_COLOR,
+}
+VITAMIN_COLOR :: Color{250, 230, 110, 255}
+SALT_COLOR :: Color{236, 236, 240, 255}
+
+FIBRE_KCAL :: f32(60) // calories of fibre to a kilogram of his fibre store
+VITAMIN_KCAL :: f32(1) // calories of vitamins to a point of his vitamins level
+SALT_KCAL :: f32(1) // and of electrolytes to a point of that level
+
+// Shares in per cent, in the order of Nutrient (index it with int(n)).
+Composition :: [len(Nutrient)]f32
+
+// Raw foods, and the two the churn makes (it changes what milk is: the
+// butter is the cream, the cheese the curds, and salt). Every other dish is
+// what went into it, mixed by calories: see composition.
+COMPOSITION := #partial [Item]Composition {
+	//              carbs  fat  protein  fibre  vitamins  electrolytes
+	.Apple    = {86, 1, 1, 5, 6, 1},
+	.Berries  = {76, 3, 3, 4, 14, 0},
+	.Mushroom = {30, 5, 40, 10, 5, 10},
+	.Pumpkin  = {82, 2, 7, 4, 3, 2},
+	.Cabbage  = {55, 3, 15, 20, 5, 2},
+	.Nuts     = {12, 70, 12, 5, 0, 1},
+	.Wheat    = {82, 4, 12, 2, 0, 0},
+	.Flour    = {82, 4, 12, 2, 0, 0},
+	.Egg      = {2, 60, 34, 0, 3, 1},
+	.Salt     = {0, 0, 0, 0, 0, 100},
+	.Fish     = {0, 25, 70, 0, 3, 2},
+	.Meat     = {0, 45, 53, 0, 1, 1},
+	.Milk     = {8, 48, 40, 0, 2, 2},
+	.Honey    = {99, 0, 0, 0, 1, 0},
+	.Butter   = {0, 98, 1, 0, 1, 0},
+	.Cheese   = {2, 52, 37, 0, 1, 8},
+}
+
+// What a food is made of, in per cent of its calories. A dish without a
+// row of its own is the mix of what went into it, each part counted by its
+// calories (so wood, with none, changes nothing). Cooking makes a dish
+// richer, but not different: more of everything in it.
+composition :: proc(item: Item) -> (c: Composition) {
+	if COMPOSITION[item] != {} || !is_dish(item) {
+		return COMPOSITION[item]
+	}
+	total: f32
+	for part in recipe_for(item).needs {
+		kcal := RAW_KCAL[part.item] * f32(part.count)
+		if part.count == 0 || kcal <= 0 {
+			continue
+		}
+		total += kcal
+		c += composition(part.item) * kcal
+	}
+	return total > 0 ? c / total : {}
 }
 
 // What a piece of food puts into him: kg of each part, and points of the
 // two weightless needs.
 Meal :: struct {
-	carbs, fat, protein, fibre, water: f32,
-	vitamins, salts:                   f32,
+	carbs, fat, protein, fibre: f32,
+	vitamins, salts:            f32,
 }
 
-// What it weighs going in (less than nothing, for salt: it takes water out
-// of him).
+// What it weighs going in.
 meal_kg :: proc(m: Meal) -> f32 {
-	return m.carbs + m.fat + m.protein + m.fibre + m.water
+	return m.carbs + m.fat + m.protein + m.fibre
 }
 
-// A piece of this holding this many calories. A raw thing's calories are
-// shared out as STUFF says; a dish is the sum of what went into it, with the
-// calories cooking added shared out the same way.
-item_meal :: proc(item: Item, kcal: f32) -> (m: Meal) {
-	full := item_kcal(item)
-	size := full > 0 ? kcal / full : 1 // picked small, it has less of everything
-	if item < FIRST_DISH || STUFF[item] != {} {
-		s := STUFF[item]
-		energy := kcal / KCAL_PER_KG
-		return {energy * s.carbs, energy * s.fat, energy * s.protein, s.fibre * size, s.water * size, s.vitamins * size, s.salts * size}
+// A piece of this holding this many calories: those calories shared out as
+// its composition says.
+item_meal :: proc(item: Item, kcal: f32) -> Meal {
+	c := composition(item) * (kcal / 100)
+	return {
+		carbs = c[Nutrient.Carbs] / KCAL_PER_KG,
+		fat = c[Nutrient.Fat] / KCAL_PER_KG,
+		protein = c[Nutrient.Protein] / KCAL_PER_KG,
+		fibre = c[Nutrient.Fibre] / FIBRE_KCAL,
+		vitamins = c[Nutrient.Vitamins] / VITAMIN_KCAL,
+		salts = c[Nutrient.Electrolytes] / SALT_KCAL,
 	}
-	raw: f32
-	for part in recipe_for(item).needs {
-		if part.count == 0 {
-			continue
-		}
-		piece := item_meal(part.item, RAW_KCAL[part.item])
-		n := f32(part.count)
-		raw += RAW_KCAL[part.item] * n
-		m.carbs += piece.carbs * n
-		m.fat += piece.fat * n
-		m.protein += piece.protein * n
-		m.fibre += piece.fibre * n * size
-		m.water += piece.water * n * size
-		m.vitamins += piece.vitamins * n * size
-		m.salts += piece.salts * n * size
-	}
-	richer := raw > 0 ? kcal / raw : 1
-	m.carbs *= richer
-	m.fat *= richer
-	m.protein *= richer
-	return
 }
 
 // One piece of this out of the sack.
@@ -239,10 +283,8 @@ eat :: proc(m: Meal) {
 	p := &g.prosio
 	p.fat += m.fat
 	p.fat += store_add(.Carbs, m.carbs) // what his carbs cannot hold turns to fat
-	spare := store_add(.Protein, m.protein) // and spare protein to carbs
-	p.fat += store_add(.Carbs, spare)
+	store_add(.Protein, m.protein) // spare protein passes through him, as spare fibre does
 	store_add(.Fibre, m.fibre)
-	store_add(.Water, m.water)
 	for points, n in ([Need]f32{.Carbs = 0, .Protein = 0, .Fibre = 0, .Water = 0, .Vitamins = m.vitamins, .Electrolytes = m.salts}) {
 		gain := points
 		if gain > 0 && p.need[n] > NEED_START {
@@ -262,9 +304,11 @@ eat :: proc(m: Meal) {
 // he faints: see update_prosio). Fights and knocks are the dearest; see the
 // *_BURN numbers in prosio.odin. Full of protein, his body is busy building
 // and burns more of everything.
-burn :: proc(kg: f32, carbs_first := false) {
+burn :: proc(kg: f32, why: Burn_For, carbs_first := false) {
 	p := &g.prosio
 	cost := kg * (full_of(.Protein) ? BULK_BURN : 1)
+	had := energy_kg()
+	defer g.burned[why] += had - energy_kg()
 	share := carbs_first ? 1 : p.need[.Carbs] / 100
 	from_carbs := min(cost * share, store_kg(.Carbs))
 	store_add(.Carbs, -from_carbs)
@@ -273,6 +317,18 @@ burn :: proc(kg: f32, carbs_first := false) {
 	p.fat -= from_fat
 	cost -= from_fat
 	store_add(.Carbs, -min(cost, store_kg(.Carbs)))
+}
+
+// What the burning was for. The kilograms that went on each are added up
+// in g.burned as the game goes on, for the testing tools: they report where
+// his weight went.
+Burn_For :: enum {
+	Muscle, // keeping his muscle, whatever he does
+	Walking,
+	Sprinting,
+	Jumping,
+	Gathering,
+	Fighting, // bumps, grabs, bashes and throws
 }
 
 // What he has left to burn: his fat and his carbs.
@@ -429,8 +485,8 @@ salty :: proc() -> bool {
 update_diet :: proc(dt: f32) {
 	p := &g.prosio
 	// At rest everything is slowly used up; too much of anything moves on
-	// faster. Protein turns to carbs; fibre, vitamins and electrolytes pass
-	// out of him. Carbs are not used up here: his muscles burn them (see
+	// faster. Protein goes on mending him (it is burned, for his muscle);
+	// fibre, vitamins and electrolytes pass out of him. Carbs are not used up here: his muscles burn them (see
 	// update_body), unless there are too many, when the surplus turns to fat.
 	for n in Need {
 		if n == .Water || (n == .Carbs && !too_much(n)) {
@@ -446,7 +502,7 @@ update_diet :: proc(dt: f32) {
 				p.fat += kg
 			}
 		case .Protein:
-			p.fat += store_add(.Carbs, kg)
+			g.burned[.Muscle] += kg
 		}
 	}
 	thirst := THIRST
@@ -524,7 +580,7 @@ update_diet :: proc(dt: f32) {
 			pass_gas()
 		}
 	} else if pressed(.Gas) && !full_of(.Fibre) {
-		hint("Nothing in there... I need more fibre!")
+		answer("Nothing in there... I need more fibre!")
 	}
 	if lacks(.Fibre) {
 		p.ache_cd -= dt
@@ -606,7 +662,7 @@ drink :: proc() {
 		}
 	}
 	if p.need[.Water] > 95 && !washed {
-		hint("I'm not thirsty!")
+		answer("I'm not thirsty!")
 		return
 	}
 	p.need[.Water] = 100
@@ -843,9 +899,9 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 		case .Fibre:
 			color = PART_COLOR[.Fibre]
 		case .Vitamins:
-			color = {250, 230, 110, 255}
+			color = VITAMIN_COLOR
 		case .Electrolytes:
-			color = {236, 236, 240, 255}
+			color = SALT_COLOR
 		}
 		draw_part_row(x, ry, s, color, NEED_NAME[n], p.need[n] / 100, n == .Water ? water_ticks[:] : need_ticks[:], weighs ? kg_text(store_kg(n)) : nil, note, note_color, blink)
 		ry += row
@@ -858,6 +914,14 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	ui_rect(bar_x - 2 * s, ry + 1 * s, bar_w + 4 * s, 10 * s + 4 * s, UI_DARK)
 	ui_rect(bar_x, ry + 3 * s, bar_w * p.stamina / STAMINA_MAX, 10 * s, (p.winded || p.stamina < 25) ? UI_RED : UI_BLUE)
 	ui_rect(bar_x + bar_w * dash_cost() / STAMINA_MAX - 1 * s, ry + 3 * s, 2 * s, 10 * s, UI_DARK)
+	if p.bruises > 0.5 {
+		// Bruises: the top of the bar is out of reach until they mend.
+		bw := bar_w * p.bruises / STAMINA_MAX
+		ui_rect(bar_x + bar_w - bw, ry + 3 * s, bw, 10 * s, UI_BRUISE)
+		if ui_text_width("BRUISED", 10 * s) + 6 * s < bw {
+			label("BRUISED", bar_x + bar_w - bw + 3 * s, ry + 3 * s, 10 * s, UI_WHITE)
+		}
+	}
 	ry += 22 * s
 
 	// What to do about it: what to eat for the thing he lacks most.

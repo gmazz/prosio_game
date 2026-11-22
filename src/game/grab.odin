@@ -46,7 +46,186 @@ import "core:math/linalg"
 // seesaws and when he lands. A dragged animal stands on its own feet, so it
 // does not.
 
-THROW_GAIN :: f32(2.6) // for rocks
+// Rocks and stones: his arms put the same energy into every throw,
+// THROW_ENERGY joules for each kilogram of him (times the strength of his
+// arms), so the speed is the square root of twice that over the stone's
+// weight. A heavy rock is a short, slow lob; a light stone would fly faster
+// than an arm can move, and leaves at ARM_SPEED (times the root of his
+// strength) at the most.
+THROW_ENERGY :: f32(8)
+ARM_SPEED :: f32(22)
+PEBBLE_KG :: f32(0.3)
+PEBBLE_RADIUS :: f32(0.07)
+PEBBLE_COST :: f32(3) // stamina to throw one
+// What a thrown stone does to an animal it hits is the blow of an animal of
+// that kind landing with the stone's energy, counted STONE_HARD times over
+// (a stone does not give). A stone under LIGHT_STONE kg knocks nothing over:
+// it stings, startles (the animal runs for PEBBLE_FRIGHT seconds) and makes
+// a fox drop what it stole.
+STONE_HARD :: f32(2)
+LIGHT_STONE :: f32(2)
+PEBBLE_FRIGHT :: Vec2{3, 6}
+AIM_RANGE :: f32(16) // how far off he can pick something out to throw at
+
+stone_speed :: proc(kg: f32) -> f32 {
+	return min(math.sqrt(2 * THROW_ENERGY * strength() * g.prosio.kg / kg), ARM_SPEED * math.sqrt(strength()))
+}
+
+stone_damage :: proc(kg, speed: f32, kind: Enemy_Kind) -> f32 {
+	return STONE_HARD * blow_damage(kind, speed * math.sqrt(kg / ENEMY_KG[kind]))
+}
+
+// What he is aiming a throw at, chosen while he winds up.
+Aim_Kind :: enum {
+	None,
+	Enemy,
+	Pest,
+}
+Aim :: struct {
+	kind:  Aim_Kind,
+	index: int,
+}
+
+// Where the thing he aims at is, how high its middle is and how it is
+// moving; ok is false if it can no longer be aimed at.
+aim_at :: proc(a: Aim) -> (pos: Vec2, height: f32, vel: Vec2, ok: bool) {
+	p := &g.prosio
+	switch a.kind {
+	case .Enemy:
+		e := &g.enemies[a.index]
+		if (e.state != .Chase && e.state != .Dizzy) || (p.carry == .Enemy && p.carry_index == a.index) {
+			return
+		}
+		pos, height, vel, ok = e.pos, ENEMY_RADIUS[e.kind], e.state == .Chase ? e.vel : Vec2{}, true
+	case .Pest:
+		c := &g.pests[a.index]
+		if c.state == .Away {
+			return
+		}
+		pos, height, ok = c.pos, c.y + 0.2, true
+	case .None:
+	}
+	if ok && length2(pos - p.pos) > AIM_RANGE {
+		ok = false
+	}
+	return
+}
+
+// The best thing to aim at in this direction from him: as nearly that way
+// as possible (at least `least`, as a cosine), and nearer rather than
+// further. Not `skip`.
+aim_towards :: proc(dir: Vec2, least: f32, skip: Aim) -> (best: Aim) {
+	try :: proc(a: Aim, dir: Vec2, least: f32, skip: Aim, best: ^Aim, best_score: ^f32) {
+		if a == skip {
+			return
+		}
+		pos, _, _, ok := aim_at(a)
+		to := pos - g.prosio.pos
+		dist := length2(to)
+		if !ok || dist < 0.01 {
+			return
+		}
+		along := dot2(to / dist, dir)
+		if along < least {
+			return
+		}
+		if score := along - 0.6 * dist / AIM_RANGE; score > best_score^ {
+			best^, best_score^ = a, score
+		}
+	}
+	best_score := f32(-1e9)
+	for i in 0 ..< g.enemy_count {
+		try({.Enemy, i}, dir, least, skip, &best, &best_score)
+	}
+	for i in 0 ..< len(g.pests) {
+		try({.Pest, i}, dir, least, skip, &best, &best_score)
+	}
+	return
+}
+
+// While he winds up he stands and aims. At first it is the nearest thing in
+// front of him; a direction button moves the aim to the next thing that way,
+// or, with nothing there, just turns him that way to throw at nothing.
+update_aim :: proc() {
+	p := &g.prosio
+	if _, _, _, ok := aim_at(p.aim); !ok {
+		p.aim = {}
+	}
+	key: Vec2
+	if pressed(.Left) {key.x -= 1}
+	if pressed(.Right) {key.x += 1}
+	if pressed(.Up) {key.y -= 1}
+	if pressed(.Down) {key.y += 1}
+	if key != {} {
+		key = normalize2(key)
+		if next := aim_towards(key, 0.4, p.aim); next.kind != .None {
+			p.aim = next
+		} else {
+			p.aim = {}
+			p.facing = math.atan2(key.x, key.y)
+		}
+	}
+	if pos, _, _, ok := aim_at(p.aim); ok {
+		to := pos - p.pos
+		p.facing = math.atan2(to.x, to.y)
+	}
+}
+
+// The way to throw, and how fast upwards, for a stone leaving `from` at
+// this height and speed to come down on what he aims at (leading it if it
+// moves). ok is false with nothing aimed at.
+aimed_throw :: proc(from: Vec2, height, speed: f32) -> (dir: Vec2, rise: f32, ok: bool) {
+	pos, h, vel, has := aim_at(g.prosio.aim)
+	if !has || speed < 0.5 {
+		return
+	}
+	t := length2(pos - from) / speed
+	to := pos + vel * t - from
+	dist := length2(to)
+	if dist < 0.3 {
+		return
+	}
+	t = dist / speed
+	return to / dist, clamp((h - height) / t + GRAVITY * t / 2, -speed, speed * 0.9), true
+}
+
+// A pebble or a spear out of the sack, thrown.
+throw_stone :: proc() {
+	p := &g.prosio
+	item := p.wind_item
+	spear := item == .Spear
+	cost := spear ? SPEAR_COST : PEBBLE_COST
+	kg := spear ? SPEAR_KG : PEBBLE_KG
+	if p.sack[item] <= 0 {
+		return
+	}
+	if p.stamina < cost {
+		answer("Too tired to throw!")
+		return
+	}
+	for &t in g.thrown {
+		if t.active {
+			continue
+		}
+		sack_take(item, 1)
+		sack_step(0)
+		p.stamina -= cost
+		p.regen_delay = 0.3
+		speed := stone_speed(kg) * p.throw_power
+		dir := facing_dir(p.facing)
+		height := p.height + 1.1
+		rise := speed * 0.08
+		if d, r, ok := aimed_throw(p.pos, height, speed); ok {
+			dir, rise = d, r
+		}
+		t = Thrown_Rock{active = true, round = -1, spear = spear, r = spear ? SPEAR_RADIUS : PEBBLE_RADIUS, kg = kg, pos = p.pos + dir * 0.45, vel = dir * speed, y = height, vy = rise}
+		train(.Arms, SWING_WORK * (spear ? 0.3 : 0.1))
+		p.stretch_vel -= 2
+		say(spear ? "Hyah!" : "Fwip!", 0.4)
+		return
+	}
+	answer("Wait... too many in the air!")
+}
 ANIMAL_THROW_GAIN :: f32(3.2) // for animals, which he can wind up
 MAX_THROW :: f32(22)
 MAX_THROWN :: 4
@@ -68,7 +247,12 @@ SKIP_SPIN :: f32(0.18) // share of falling speed the spin turns into forward spe
 ARM_LEN :: f32(0.55) // from his shoulder to his hoof, arm outstretched
 HOLD_SIDE :: f32(1) // which hand holds an animal by the leg: +1 is the side his model's +x points to
 FOLLOW_THROUGH :: f32(0.12) // seconds his arm stays down after a swing lands
-KO_LIMP :: f32(7) // bashed until this limp, an animal is knocked out: a handful of good whacks
+// What a slam takes from a held animal's health: so much, plus so much for
+// each m/s it hit at, and never more than SLAM_MOST. (His arm sets the speed,
+// whatever he holds, so this does not go by how sturdy the animal is.)
+SLAM_BLOW :: Vec2{4, 1.2}
+SLAM_MOST :: f32(30)
+LIMP_MOST :: f32(8) // seconds an animal bashed about hangs limp, at most
 
 Carry :: enum {
 	Nothing,
@@ -79,20 +263,13 @@ Carry :: enum {
 // A rock in flight.
 Thrown_Rock :: struct {
 	active: bool,
-	round:  int, // which rock of the world this is
+	round:  int, // which rock of the world this is (-1: a pebble or a spear out of the sack)
+	spear:  bool, // a spear: it goes in where a stone would bounce off, and lies where it lands
 	r, kg:  f32,
 	pos:    Vec2,
 	vel:    Vec2,
 	y, vy:  f32,
 	spin:   f32,
-}
-
-// A thrown enemy that leaves his hands at least this fast is knocked out.
-ENEMY_THROW_KO := [Enemy_Kind]f32 {
-	.Turkey = 14,
-	.Goat   = 5.5,
-	.Billy  = 3.5,
-	.Fox    = 12,
 }
 
 // The points of a held animal's body, in its own model (units of its
@@ -103,14 +280,14 @@ CHAIN_MODEL := [Enemy_Kind][3]Vec3 {
 	.Turkey = {{0, 0.02, -0.08}, {0, 1.2, -0.08}, {0, 1.6, 0.5}},
 	.Goat   = {{0, 0.05, -0.78}, {0, 1.05, -0.12}, {0, 1.2, 0.58}},
 	.Billy  = {{0, 0.05, -0.78}, {0, 1.05, -0.12}, {0, 1.2, 0.58}},
-	.Fox    = {{0, 0.05, -0.72}, {0, 0.97, -0.1}, {0, 1.1, 0.5}},
+	.Fox    = {{0, 1.3, -1.7}, {0, 0.97, -0.1}, {0, 1.1, 0.5}}, // a fox is held by the tip of its tail
 }
-// Where the held leg leaves the body, in the same units.
+// Where the held leg (or the fox's tail) leaves the body, in the same units.
 GRIP_ROOT := [Enemy_Kind]Vec3 {
 	.Turkey = {0, 0.85, -0.08},
 	.Goat   = {0.3, 0.88, -0.55},
 	.Billy  = {0.3, 0.88, -0.55},
-	.Fox    = {0.3, 0.8, -0.5},
+	.Fox    = {0, 1.04, -0.75},
 }
 
 // A turkey is lifted off its feet by them and dangles head down; anything
@@ -119,15 +296,32 @@ held_up :: proc(kind: Enemy_Kind) -> bool {
 	return kind == .Turkey
 }
 
+// Goats he holds by both hind legs, a hoof on each.
+two_handed :: proc(kind: Enemy_Kind) -> bool {
+	return kind == .Goat || kind == .Billy
+}
+
 rock_kg :: proc(r: f32) -> f32 {
 	return ROCK_DENSITY * r * r * r
 }
 
-// Prosio's weight together with a rock he is carrying. A dragged animal
-// stands on its own feet, so it does not count.
+// Prosio's weight together with his sack and a rock he is carrying. A
+// dragged animal stands on its own feet, so it does not count.
 total_kg :: proc() -> f32 {
 	p := &g.prosio
-	return p.kg + (p.carry == .Rock ? p.carry_kg : 0)
+	return p.kg + sack_kg() + (p.carry == .Rock ? p.carry_kg : 0)
+}
+
+// What he carries, against what he weighs: 0.2 for a 16 kg load on an 80 kg
+// pig. It makes walking and sprinting cost that much more, and trains his
+// legs (and, sprinting, his lungs) LOAD_TRAIN times that much faster.
+load_share :: proc() -> f32 {
+	p := &g.prosio
+	return (total_kg() - p.kg) / p.kg
+}
+
+load_training :: proc() -> f32 {
+	return 1 + LOAD_TRAIN * load_share()
 }
 
 // An enemy with its feet on the ground, free to be bumped, grabbed or shoved.
@@ -156,6 +350,9 @@ grab_target :: proc() -> (target: Grab_Target, found: bool) {
 			target = {.Enemy, i, ENEMY_KG[e.kind]}
 			found = true
 		}
+	}
+	if found {
+		return // an animal within reach comes before any rock
 	}
 	for rd, i in g.rounds[:g.round_count] {
 		if rd.kind != .Rock || rd.r <= 0 {
@@ -198,39 +395,63 @@ update_grab :: proc(dt: f32, can_act: bool) {
 	p := &g.prosio
 
 	if p.carry == .Nothing {
+		if p.wind_stone {
+			// Winding up a pebble or a spear out of the sack. A tap is a
+			// quick flick.
+			switch wind_up(dt) {
+			case .Put_Down:
+				p.throw_power = WIND_LEAST
+				throw_stone()
+			case .Throw:
+				throw_stone()
+			case .Nothing:
+			}
+			p.wind_stone = p.winding
+			return
+		}
 		if p.airborne || !can_act || !pressed(.Grab) {
 			return
 		}
 		target, found := grab_target()
 		if !found {
-			// At the pond there may be a fish.
+			// At the pond there may be a fish; with a pebble or a spear
+			// chosen in the sack, he winds up to throw it; and failing all
+			// that, he takes down what he has built, if he is standing at it.
 			if pond_in_reach(p.pos, prosio_radius(p.kg)) {
 				grab_fish()
-			} else {
-				hint("Nothing to grab here.")
+			} else if throwable_chosen() {
+				p.wind_stone = true
+				p.wind_item = p.sack_sel
+				p.winding = true
+				p.wind_t = 0
+				p.aim = aim_towards(facing_dir(p.facing), 0.3, {})
+			} else if !take_down() {
+				answer("Nothing to grab here.")
 			}
 			return
 		}
 		ratio := target.kg / p.kg
 		if target.kind == .Rock && ratio > ROCK_LIMIT * strength() {
-			hint("Way too heavy to lift!")
+			answer("Way too heavy to lift!")
 			return
 		}
 		cost := 6 + 25 * min(ratio, 1)
 		if p.stamina < cost {
-			hint("Too tired to grab that!")
+			answer("Too tired to grab that!")
 			return
 		}
 		p.stamina -= cost
 		p.regen_delay = 0.5
-		burn(FIGHT_BURN, true)
+		burn(FIGHT_BURN, .Fighting, true)
 		p.carry = target.kind
 		p.carry_index = target.index
+		g.grabs += 1
 		p.carry_kg = target.kg
 		p.held_t = 0
 		p.swinging = false
 		p.bash_queued = false
-		p.throw_queued = false
+		p.winding = false
+		p.grab_spent = true
 		p.lunge_t = 0
 
 		towards: Vec2
@@ -243,10 +464,12 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			switch {
 			case held_up(e.kind):
 				say("Got you by the legs!", 1)
+			case e.kind == .Fox:
+				say("Got you by the tail!", 1)
 			case ratio > LIFT_LIMIT * strength():
-				say("Got your leg! Uh-oh...", 1)
+				say("Got your hind legs! Uh-oh...", 1)
 			case:
-				say("Got your leg!", 1)
+				say("Got your hind legs!", 1)
 			}
 		case .Rock:
 			p.lift_total = clamp(LIFT_TIME * ratio, 0.08, 1.2)
@@ -269,6 +492,9 @@ update_grab :: proc(dt: f32, can_act: bool) {
 	ratio := p.carry_kg / p.kg
 	p.lift_t -= dt
 	p.regen_delay = 0.5
+	if !button_down(.Grab) {
+		p.grab_spent = false // the press that took hold is over: the next one lets go
+	}
 
 	switch p.carry {
 	case .Enemy:
@@ -302,14 +528,37 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			return
 		}
 		too_heavy := ratio > LIFT_LIMIT * strength()
-		if pressed(.Grab) {
-			if too_heavy {
+		// F always lets go: tapped, he puts it down; held, he winds up and
+		// throws it when the button is let go (if he can: otherwise down it
+		// goes all the same). While a throw is under way F changes nothing.
+		let_go := Let_Go.Nothing
+		if !(p.swinging && p.swing_throw) {
+			let_go = wind_up(dt)
+		}
+		switch let_go {
+		case .Put_Down:
+			if hoist_over() {
+				return
+			}
+			drop_carry()
+			say("Down you go.", 0.9)
+			return
+		case .Throw:
+			switch {
+			case too_heavy:
 				drop_carry()
 				say("Way too heavy to throw!", 1.2)
 				return
+			case p.stamina < throw_cost():
+				drop_carry()
+				say("Too tired to throw it... down it goes.", 1.4)
+				return
+			case:
+				begin_swing(true)
 			}
-			begin_swing(true)
-		} else if pressed(.Bump) {
+		case .Nothing:
+		}
+		if let_go == .Nothing && !p.winding && pressed(.Bump) {
 			switch {
 			case too_heavy:
 				heave(dt)
@@ -329,15 +578,71 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			say("Too heavy! I can't hold on!", 1.4)
 			return
 		}
-		if pressed(.Grab) {
-			p.throw_queued = true
+		if p.lift_t > 0 {
+			return
 		}
-		if p.throw_queued && p.lift_t <= 0 {
+		switch wind_up(dt) {
+		case .Put_Down:
+			drop_carry()
+		case .Throw:
 			throw_rock()
+		case .Nothing:
 		}
 
 	case .Nothing:
 	}
+}
+
+// What F does with something in his hands. A tap (let go within WIND_TAP
+// seconds) puts it down. Held longer, he winds up: the throw has WIND_LEAST
+// of its full speed at first and all of it after WIND_FULL seconds.
+WIND_TAP :: f32(0.2)
+WIND_FULL :: f32(1.0)
+WIND_LEAST :: f32(0.35)
+
+Let_Go :: enum {
+	Nothing,
+	Put_Down,
+	Throw,
+}
+
+// Something to throw is chosen in the sack: a pebble or a spear.
+throwable_chosen :: proc() -> bool {
+	p := &g.prosio
+	return (p.sack_sel == .Pebble || p.sack_sel == .Spear) && p.sack[p.sack_sel] > 0
+}
+
+// Follows the F button while he holds something, and says what he does
+// with it when the button comes up. A throw's strength is left in
+// p.throw_power.
+wind_up :: proc(dt: f32) -> Let_Go {
+	p := &g.prosio
+	if !p.winding {
+		// F down again after the press that took hold (even if it went down
+		// while he was still lifting): the wind-up starts.
+		if button_down(.Grab) && !p.grab_spent {
+			p.winding = true
+			p.wind_t = 0
+			p.aim = aim_towards(facing_dir(p.facing), 0.3, {})
+		}
+		return .Nothing
+	}
+	update_aim()
+	if button_down(.Grab) {
+		p.wind_t += dt
+		return .Nothing
+	}
+	p.winding = false
+	if p.wind_t < WIND_TAP {
+		return .Put_Down
+	}
+	p.throw_power = wind_power()
+	return .Throw
+}
+
+// How much of a full throw he has wound up so far.
+wind_power :: proc() -> f32 {
+	return clamp(g.prosio.wind_t / WIND_FULL, WIND_LEAST, 1)
 }
 
 // The chain of a freshly grabbed animal: its points as it stands now.
@@ -382,17 +687,26 @@ holding_shoulder :: proc() -> Vec3 {
 // SPACE (bash = false) or F (bash = true... a throw): a swing of the held
 // animal. His hand sweeps from where it is, round through a waypoint, to
 // where the swing ends; the animal follows on the end of its leg.
+// The stamina a throw, or a bash, of what he holds would cost.
+throw_cost :: proc() -> f32 {
+	return 4 + 12 * g.prosio.carry_kg / g.prosio.kg
+}
+
+bash_cost :: proc() -> f32 {
+	return 3 + 10 * g.prosio.carry_kg / g.prosio.kg
+}
+
 begin_swing :: proc(throw: bool) {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
 	ratio := p.carry_kg / p.kg
-	cost := throw ? 4 + 12 * ratio : 3 + 10 * ratio
+	cost := throw ? throw_cost() : bash_cost()
 	if p.stamina < cost {
-		hint("Too tired to swing it!")
+		answer("Too tired to swing it!")
 		return
 	}
 	p.stamina -= cost
-	burn(FIGHT_BURN, true)
+	burn(FIGHT_BURN, .Fighting, true)
 	train(.Arms, SWING_WORK * min(ratio, 1.5))
 
 	from := direction_to_prosio(p.hand - prosio_to_world(holding_shoulder()))
@@ -447,7 +761,7 @@ heave :: proc(dt: f32) {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
 	if p.stamina < 10 {
-		hint("Too tired!")
+		answer("Too tired!")
 		return
 	}
 	p.stamina -= 10
@@ -606,7 +920,7 @@ update_drag :: proc(dt: f32) {
 		}
 	}
 	if moved_him > 0 {
-		collide_static(&p.pos, prosio_radius(p.kg), p.height)
+		collide_static(&p.pos, prosio_radius(p.kg), p.height, false, clears_fences())
 	}
 
 	// On the ground: it scrabbles along on its feet, or slides limply. A fast
@@ -626,7 +940,8 @@ update_drag :: proc(dt: f32) {
 			flat := approach2(vel.xz, standing ? run : {}, (standing ? 40 : 14) * dt)
 			old^ = point^ - Vec3{flat.x, bounce, flat.y} * dt
 		}
-		// It cannot go through trees and walls, or through Prosio.
+		// It cannot go through trees and walls, through Prosio, or through a
+		// fence: over one he lifts it, with F (see hoist_over).
 		xz := point.xz
 		if hit, _ := collide_static(&xz, r * 0.55, point.y - r * 0.5, true); hit {
 			speed := linalg.length(vel)
@@ -716,7 +1031,7 @@ chain_lengths :: proc(kind: Enemy_Kind) -> (leg, body: f32) {
 }
 
 // The held animal is slammed into the ground or into something solid at
-// this speed. Enough of these knock it out.
+// this speed: a blow like any other (see ENEMY_HEALTH in enemies.odin).
 slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 	if e.hit_t > 0 {
 		return // one bounce of the same whack does not count again
@@ -726,10 +1041,8 @@ slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 	g.shake = max(g.shake, min(speed * kg / 1200, 0.4))
 	burst({at.x, at.y + 0.1, at.z}, 3 + int(speed * 0.4), 1.5 + speed * 0.15, COLOR_DUST, 0.11)
 	pain_stars({at.x, at.y + ENEMY_RADIUS[e.kind], at.z}, speed)
-	e.limp = min(max(e.limp, 0) + 0.8 + speed * 0.12, KO_LIMP + 1)
-	if e.limp >= KO_LIMP || speed >= ENEMY_THROW_KO[e.kind] * 1.5 {
-		e.ko = true
-	}
+	e.limp = min(max(e.limp, 0) + 0.8 + speed * 0.12, LIMP_MOST)
+	hurt_enemy(e, min(SLAM_BLOW.x + SLAM_BLOW.y * speed, SLAM_MOST))
 	if speed > 6 {
 		WORDS := [?]cstring{"WHACK!", "THUD!", "SPLAT!", "BONK!", "WHUMP!"}
 		say(WORDS[int(random() * len(WORDS)) % len(WORDS)], 0.5)
@@ -782,7 +1095,7 @@ bash_hits :: proc(e: ^Enemy, dt: f32) {
 				o.timer = 0.6
 				o.vel = dir * passed
 			} else {
-				launch_enemy(&o, dir, passed, ENEMY_THROW_KO[o.kind])
+				launch_enemy(&o, dir, passed)
 				o.vy = passed * 0.3 // knocked sideways more than up
 				o.skip = true
 			}
@@ -824,13 +1137,11 @@ throw_animal :: proc() {
 	r := ENEMY_RADIUS[e.kind]
 	kg := ENEMY_KG[e.kind]
 	dir := facing_dir(p.facing)
-	speed := min(ANIMAL_THROW_GAIN * strength() * p.kg / kg, MAX_THROW)
+	speed := min(ANIMAL_THROW_GAIN * strength() * p.kg / kg, MAX_THROW) * p.throw_power
 	rise := random_range(0.15, 0.4)
-	knocked := e.ko
 	e.pos = p.pos + dir * (prosio_radius(p.kg) + r * 0.9)
 	collide_static(&e.pos, r, 0.5, true)
-	launch_enemy(e, dir, speed, ENEMY_THROW_KO[e.kind])
-	e.ko = e.ko || knocked
+	launch_enemy(e, dir, speed)
 	e.vel = dir * speed * math.cos(rise)
 	e.vy = speed * math.sin(rise)
 	e.y = 0.6
@@ -841,11 +1152,12 @@ throw_animal :: proc() {
 
 	p.vel -= dir * min(speed * kg / p.kg, 6)
 	p.carry = .Nothing
+	p.winding = false
 	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.swinging = false
 	p.stretch_vel -= 3
-	burn(FIGHT_BURN, true)
+	burn(FIGHT_BURN, .Fighting, true)
 	g.shake = max(g.shake, min(speed * kg / 600, 0.6))
 	say(speed > 11 ? "HAI-YA!" : "Hup!", 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
@@ -866,9 +1178,13 @@ pain_stars :: proc(pos: Vec3, strength: f32) {
 throw_rock :: proc() {
 	p := &g.prosio
 	dir := facing_dir(p.facing)
-	speed := min(THROW_GAIN * strength() * p.kg / p.carry_kg, MAX_THROW)
+	speed := stone_speed(p.carry_kg) * p.throw_power
 	train(.Arms, SWING_WORK * min(p.carry_kg / p.kg, 1.5))
 	_, height := carry_place()
+	rise := -speed * 0.3 // thrown down, not up
+	if d, r, ok := aimed_throw(p.pos, height, speed); ok {
+		dir, rise = d, r
+	}
 	for &t in g.thrown {
 		if t.active {
 			continue
@@ -881,17 +1197,18 @@ throw_rock :: proc() {
 			pos    = p.pos + dir * 0.3,
 			vel    = dir * speed,
 			y      = height,
-			vy     = -speed * 0.3, // thrown down, not up
+			vy     = rise,
 		}
 		break
 	}
 	// Every push pushes back.
 	p.vel -= dir * min(speed * p.carry_kg / p.kg, 4)
 	p.carry = .Nothing
+	p.winding = false
 	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.stretch_vel -= 3
-	burn(FIGHT_BURN, true)
+	burn(FIGHT_BURN, .Fighting, true)
 	say(speed > 9 ? "HAI-YA!" : "Oof!", 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 }
@@ -923,6 +1240,7 @@ drop_carry :: proc() {
 	case .Nothing:
 	}
 	p.carry = .Nothing
+	p.winding = false
 	p.lift_t = 0 // whatever happens, he is not lifting any more
 	p.carry_kg = 0
 	p.swinging = false
@@ -939,29 +1257,60 @@ update_thrown :: proc(dt: f32) {
 		speed := length2(t.vel)
 		t.spin += speed * dt
 
-		if hit, n := collide_static(&t.pos, t.r, t.y, true); hit {
+		if hit, n := collide_static(&t.pos, t.r, t.y, true, true); hit { // between the rails of a fence it goes
 			into := dot2(t.vel, n)
 			if into < 0 {
 				t.vel -= n * into * 1.4 // a dull bounce
+				if into < -4 {
+					shake_trees_near(t.pos, t.r + 0.6, -into) // apples come down
+				}
 				burst({t.pos.x, t.y + t.r, t.pos.y}, 5, 2, COLOR_DUST, 0.1)
 			}
 		}
+		// Rabbits and crows are off at a stone coming anywhere near.
+		scare_pests_near(t.pos, t.y)
 
 		// A flying rock knocks enemies over: a heavier rock passes on more of its speed.
 		if speed > 2 {
 			for &e in g.enemies[:g.enemy_count] {
 				reach := t.r + ENEMY_RADIUS[e.kind]
-				if !on_ground(&e) || t.y > ENEMY_RADIUS[e.kind] * 2 || length2(e.pos - t.pos) >= reach {
+				if !on_ground(&e) || e.state == .Dead || e.hit_t > 0 || t.y > ENEMY_RADIUS[e.kind] * 2 || length2(e.pos - t.pos) >= reach {
+					continue
+				}
+				e.hit_t = 0.3
+				if t.spear {
+					spear_hits(&t, &e, speed)
+					break
+				}
+				damage := stone_damage(t.kg, speed, e.kind)
+				if t.kg < LIGHT_STONE {
+					// A pebble: it stings and startles, and a fox lets go.
+					drop_loot(&e)
+					if hurt_enemy(&e, damage) {
+						e.state, e.timer = .Dizzy, 0.7
+					} else if e.state == .Chase {
+						e.scared_t = max(e.scared_t, random_range(PEBBLE_FRIGHT.x, PEBBLE_FRIGHT.y))
+					}
+					pain_stars({e.pos.x, ENEMY_RADIUS[e.kind] * 1.6, e.pos.y}, 3)
+					t.vel *= 0.15
 					continue
 				}
 				passed := 1.6 * t.kg / (t.kg + ENEMY_KG[e.kind]) * speed
-				launch_enemy(&e, normalize2(t.vel), passed, ENEMY_THROW_KO[e.kind])
+				launch_enemy(&e, normalize2(t.vel), passed, false)
+				hurt_enemy(&e, damage)
 				t.vel *= 0.5
 				g.shake = max(g.shake, 0.3)
 				burst({e.pos.x, 0.7, e.pos.y}, 10, 4, COLOR_STAR, 0.12)
 			}
 		}
 
+		if !t.active {
+			continue // a spear that found its mark
+		}
+		if t.spear && t.y <= 0 && t.vy < 0 {
+			spear_lands(&t, t.pos)
+			continue
+		}
 		if t.y <= 0 && t.vy < 0 {
 			// Down.
 			g.shake = max(g.shake, min(t.kg * -t.vy * 0.0015, 0.5))
@@ -971,6 +1320,10 @@ update_thrown :: proc(dt: f32) {
 				t.y = 0
 				t.vy = -t.vy * 0.45
 				t.vel *= 0.8
+				continue
+			}
+			if t.round < 0 {
+				t.active = false // a pebble is lost in the grass
 				continue
 			}
 			// It becomes an ordinary rock again, clear of everything else.
@@ -999,8 +1352,28 @@ draw_grab :: proc() {
 		draw_rock(translate({pos.x, height + p.carry_r * 0.75, pos.y}) * rot_y(p.facing), p.carry_r)
 	}
 	for t in g.thrown {
-		if t.active {
+		if t.active && t.spear {
+			// Point first, along the way it is going.
+			at := Vec3{t.pos.x, t.y, t.pos.y}
+			along := linalg.normalize0(Vec3{t.vel.x, t.vy, t.vel.y}) * SPEAR_LEN / 2
+			draw_spear(at - along, at + along)
+		} else if t.active {
 			draw_rock(translate({t.pos.x, t.y + t.r * 0.75, t.pos.y}) * rot_x(t.spin), t.r)
+		}
+	}
+	if p.winding && !drawing_shadows() {
+		// What he is aiming at: a yellow arrowhead bobbing over it.
+		if pos, height, _, ok := aim_at(p.aim); ok {
+			top := height * 2 + 0.9 + 0.12 * math.sin(g.time * 9)
+			draw_shape(.Cone, translate({pos.x, top, pos.y}) * rot_x(math.PI) * scale({0.22, 0.42, 0.22}), UI_YELLOW)
+		}
+		if p.wind_stone && p.wind_item == .Spear {
+			// The spear, drawn back over his shoulder.
+			draw_spear(prosio_to_world({HOLD_SIDE * 0.5, 1.2, -0.95}), prosio_to_world({HOLD_SIDE * 0.5, 1.42, 0.5}))
+		} else if p.wind_stone {
+			// The pebble, drawn back in his hoof.
+			at := prosio_to_world({HOLD_SIDE * 0.5, 1.25, -0.25})
+			draw_rock(translate(at), PEBBLE_RADIUS)
 		}
 	}
 }

@@ -10,6 +10,7 @@ UI_GREEN :: Color{110, 200, 90, 255}
 UI_YELLOW :: Color{246, 206, 70, 255}
 UI_ORANGE :: Color{244, 150, 60, 255}
 UI_BLUE :: Color{80, 170, 240, 255}
+UI_BRUISE :: Color{132, 84, 160, 255}
 
 CONTROLS :: "Move: WASD   Bump: SPACE   Jump: J   Sprint: SHIFT   Grab / throw: F   Pick up / use / drink: E   Sack: Z C   Eat: Q   Sack, outfit, map: M   Menu: ESC"
 
@@ -29,6 +30,155 @@ world_label :: proc(text: cstring, pos: Vec3, size: f32, color: Color = UI_WHITE
 	s := world_to_screen(pos)
 	label_centred(text, s.x, s.y, size, color)
 }
+
+// What the action buttons would do right now, as the line at the bottom of
+// the screen says it; nil when there is nothing to say.
+prompt_text :: proc() -> cstring {
+	p := &g.prosio
+	if p.fail != .None {
+		return nil
+	}
+	action: cstring = nil
+	if gate, at_gate := gate_in_reach(); at_gate && p.lift_t <= 0 {
+		open := gate_state(gate) == GATE_OPEN
+		switch {
+		case p.carry == .Enemy:
+			action = open ? "E: shut the gate     drag it through first!" : "E: open the gate, to bring it through"
+		case open:
+			action = "E: shut the gate     F: take it down"
+		case:
+			action = "E: open the gate     F: take it down"
+		}
+	} else if p.carry != .Nothing {
+		// What F will do with an animal: throw it, or, too heavy or too
+		// tired for that, put it down.
+		too_heavy := p.carry_kg > p.kg * LIFT_LIMIT * strength()
+		let_go: cstring = too_heavy ? "F: let go" : (p.stamina < throw_cost() ? "F: put it down (too tired to throw)" : "F: put it down     hold F, let go: throw")
+		at_fence := false
+		if p.carry == .Enemy && p.lift_t <= 0 {
+			what, _, _ := built_in_reach()
+			at_fence = what == .Fence
+		}
+		switch {
+		case at_fence && ENEMY_KG[g.enemies[p.carry_index].kind] <= hoist_most():
+			action = "F: lift it over the fence"
+		case at_fence:
+			action = "Too heavy to lift over the fence: it needs a gate     F: let go" 
+		case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_FROM[g.enemies[p.carry_index].kind] > 0:
+			// A body: it wants chopping up, at the block by the fire.
+			if station_in_reach(.Fire, p.pos, prosio_radius(p.kg) + 1.2) {
+				action = ui_format_name("E: chop it into meat     %s", let_go)
+			} else {
+				action = ui_format_name(too_heavy ? "Drag it to the fire by the pond     %s" : "Drag it to the fire by the pond     SPACE: bash with it     %s", let_go)
+			}
+		case p.carry == .Enemy && too_heavy:
+			action = "Too heavy to swing!   SPACE: heave     F: let go"
+		case p.carry == .Enemy && g.enemies[p.carry_index].kind == .Goat:
+			action = ui_format_name("E: milk it     SPACE: bash with it     %s", let_go)
+		case p.carry == .Enemy:
+			action = ui_format_name("SPACE: bash with it!     %s", let_go)
+		case p.lift_t > 0:
+			action = "Lifting..."
+		case:
+			action = "F: put it down     hold F, let go: throw"
+		}
+	} else if goat := licking_goat(); goat != nil && goat.milk_t <= 0 {
+		action = goat.licking ? "E: milk the goat while it licks" : "E: milk the goat"
+	} else if food := food_in_reach(p.pos, prosio_radius(p.kg) + 0.75); food != nil && food.kind == .Wood {
+		action = "E: pick up the branch (wood for fires and for building)"
+	} else if food != nil && food.kind == .Spear {
+		action = "E: pick up the spear"
+	} else if food != nil {
+		// What it is worth now: less if it has not finished growing.
+		action = ui_format(food.grow < 0.95 && !food.fallen ? "E: pick it now (%d kcal, still growing)" : "E: pick it (%d kcal)", i32(food_kcal(food)))
+	} else if bush := bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6); bush != nil {
+		if bush.kind == .Hive {
+			action = "E: take the honey (300 kcal)"
+		} else if bush.kind == .Salt_Rock {
+			action = "E: break off a lump of rock salt"
+		} else if bush.kind == .Pebbles {
+			action = "E: pick up pebbles (for throwing)"
+		} else {
+			action = ui_format(bush.ripe < 0.95 ? "E: pick berries now (%d kcal, still ripening)" : "E: pick berries (%d kcal)", i32(bush_kcal(bush)))
+		}
+	} else if l := larder_first(); l >= 0 {
+		action = larder_empty(&g.larders[l]) ? "E: open the larder     F: take it down" : "E: open the larder"
+	} else if at, near := station_near(p.pos, prosio_radius(p.kg)); near {
+		o := g.stations[at]
+		switch at {
+		case .Oven:
+			action = o.ready ? "E: take it out of the oven" : (o.baking ? "Baking... wait for the ding!" : "E: bake something")
+		case .Fire:
+			action = o.ready ? "E: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "E: cook something")
+		case .Churn:
+			action = o.ready ? "E: take it from the stool" : (o.baking ? "Churning... nearly there!" : "E: churn some milk")
+		case .Bench:
+			action = o.ready ? "E: take it off the workbench" : (o.baking ? "Building... nearly done!" : "E: build something of wood")
+		}
+	} else if mill_in_reach(p.pos, prosio_radius(p.kg)) {
+		switch {
+		case g.mill.ready > 0:
+			action = "E: take the flour"
+		case g.mill.grinding > 0:
+			action = "Grinding... wait for the flour"
+		case p.sack[.Wheat] > 0:
+			action = "E: grind the wheat"
+		case:
+			action = "The mill grinds wheat into flour"
+		}
+	} else if pond_in_reach(p.pos, prosio_radius(p.kg)) {
+		if rod_chosen() {
+			action = fish_in_reach() ? "E: drink     F: cast the rod, a fish is near enough!" : "E: drink     F: cast the rod (no fish near enough yet)"
+		} else {
+			action = fish_in_reach() ? "E: drink     F: grab that fish!" : "E: drink     F: grab for a fish (stand still and they come)"
+		}
+	} else if _, in_reach := grab_target(); !in_reach && throwable_chosen() {
+		action = p.winding ? "Let go of F: throw     arrows: aim at something else" : (p.sack_sel == .Spear ? "Hold F, let go: throw the spear" : "Hold F, let go: throw a pebble")
+	} else if target, found := grab_target(); found {
+		if target.kind == .Rock {
+			action = "F: lift the rock"
+		} else if e := &g.enemies[target.index]; e.state == .Dead {
+			action = "F: take it by the leg"
+		} else {
+			GRAB := [Enemy_Kind]cstring{.Turkey = "F: grab the turkey", .Goat = "F: grab the goat", .Billy = "F: grab the billy goat", .Fox = "F: grab the fox"}
+			action = GRAB[e.kind]
+		}
+	} else if (p.sack_sel == .Fence || p.sack_sel == .Gate) && p.sack[p.sack_sel] > 0 {
+		// Q puts a piece up where the mark on the ground is; F takes one down.
+		ok, _ := fence_fits(fence_ahead())
+		what, _, _ := built_in_reach()
+		put: cstring = p.sack_sel == .Gate ? "Q: put the gate up here" : "Q: put a piece of fence up here"
+		switch {
+		case ok && what == .Fence:
+			action = ui_format_name("%s     F: take this piece down", put)
+		case ok:
+			action = put
+		case what == .Fence:
+			action = "F: take this piece of fence down"
+		case what == .Scarecrow:
+			action = "F: take the scarecrow down"
+		}
+	} else if p.sack_sel == .Scarecrow && p.sack[.Scarecrow] > 0 {
+		action = "Q: stand the scarecrow up here"
+	} else if p.sack_sel == .Larder && p.sack[.Larder] > 0 && larder_in_reach() < 0 {
+		action = "Q: stand the larder up here"
+	} else if what, _, which := built_in_reach(); what != .Nothing {
+		switch {
+		case what == .Larder:
+			action = larder_empty(&g.larders[which]) ? "E: open the larder     F: take it down" : "E: open the larder"
+		case what == .Scarecrow:
+			action = "F: take the scarecrow down"
+		case can_clear_fence():
+			action = "J: jump over the fence     F: take this piece down"
+		case g.prosio.carry == .Enemy:
+			action = "Throw it over the fence: hold F, let go"
+		case:
+			action = "Too heavy to jump the fence!     F: take this piece down"
+		}
+	}
+	return action
+}
+
 
 draw_ui :: proc() {
 	sw, sh := screen_size()
@@ -96,68 +246,8 @@ draw_ui :: proc() {
 	}
 
 	// What the action buttons do right now.
-	if p.fail == .None {
-		action: cstring = nil
-		if p.carry != .Nothing {
-			switch {
-			case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_FROM[g.enemies[p.carry_index].kind] > 0:
-				// A body: it wants chopping up, at the block by the fire.
-				if station_in_reach(.Fire, p.pos, prosio_radius(p.kg) + 1.2) {
-					action = "E: chop it into meat"
-				} else {
-					action = "Drag it to the fire by the pond     SPACE: bash with it     F: throw it"
-				}
-			case p.carry == .Enemy && p.carry_kg > p.kg * LIFT_LIMIT * strength():
-				action = "Too heavy to swing!   SPACE: heave     F: let go"
-			case p.carry == .Enemy && g.enemies[p.carry_index].kind == .Goat:
-				action = "E: milk it     SPACE: bash with it     F: throw it"
-			case p.carry == .Enemy:
-				action = "SPACE: bash with it!     F: throw it"
-			case p.lift_t > 0:
-				action = "Lifting..."
-			case:
-				action = "F: throw it down"
-			}
-		} else if food := food_in_reach(p.pos, prosio_radius(p.kg) + 0.75); food != nil {
-			// What it is worth now: less if it has not finished growing.
-			action = ui_format(food.grow < 0.95 && !food.fallen ? "E: pick it now (%d kcal, still growing)" : "E: pick it (%d kcal)", i32(food_kcal(food)))
-		} else if bush := bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6); bush != nil {
-			if bush.kind == .Hive {
-				action = "E: take the honey (300 kcal)"
-			} else if bush.kind == .Salt_Rock {
-				action = "E: break off a lump of rock salt"
-			} else {
-				action = ui_format(bush.ripe < 0.95 ? "E: pick berries now (%d kcal, still ripening)" : "E: pick berries (%d kcal)", i32(bush_kcal(bush)))
-			}
-		} else if at, near := station_near(p.pos, prosio_radius(p.kg)); near {
-			o := g.stations[at]
-			switch at {
-			case .Oven:
-				action = o.ready ? "E: take it out of the oven" : (o.baking ? "Baking... wait for the ding!" : "E: bake something")
-			case .Fire:
-				action = o.ready ? "E: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "E: cook something")
-			case .Churn:
-				action = o.ready ? "E: take it from the stool" : (o.baking ? "Churning... nearly there!" : "E: churn some milk")
-			}
-		} else if mill_in_reach(p.pos, prosio_radius(p.kg)) {
-			switch {
-			case g.mill.ready > 0:
-				action = "E: take the flour"
-			case g.mill.grinding > 0:
-				action = "Grinding... wait for the flour"
-			case p.sack[.Wheat] > 0:
-				action = "E: grind the wheat"
-			case:
-				action = "The mill grinds wheat into flour"
-			}
-		} else if pond_in_reach(p.pos, prosio_radius(p.kg)) {
-			action = fish_in_reach() ? "E: drink     F: grab that fish!" : "E: drink     F: grab for a fish (stand still and they come)"
-		} else if target, found := grab_target(); found {
-			action = target.kind == .Enemy && g.enemies[target.index].state == .Dead ? "F: take it by the leg" : "F: grab"
-		}
-		if action != nil {
-			label_centred(action, sw / 2, sh - 64 * s, 20 * s, UI_YELLOW)
-		}
+	if action := prompt_text(); action != nil {
+		label_centred(action, sw / 2, sh - 64 * s, 20 * s, UI_YELLOW)
 	}
 	label_centred(CONTROLS, sw / 2, sh - 34 * s, 16 * s)
 
@@ -171,6 +261,10 @@ draw_ui :: proc() {
 		}
 		if p.fail == .Diet {
 			title, line = ending().title, ending().line
+		}
+		if p.fail == .Beaten {
+			title = "KNOCKED OUT!"
+			line = "Bruised all over... the animals got the better of him."
 		}
 		label_centred(title, sw / 2, sh * 0.56, 64 * s, UI_RED)
 		label_centred(line, sw / 2, sh * 0.56 + 76 * s, 28 * s)
