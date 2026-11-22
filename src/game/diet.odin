@@ -883,7 +883,7 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 		case .High:
 			note, note_color = HIGH_NAME[n], NEED_POWER
 			if n == .Fibre && p.trait[.Gut] >= GUT_CONTROL {
-				note = "GASSY (G)"
+				note = "GASSY ({Gas})"
 			}
 		case .Over:
 			note, note_color = TOO_MUCH_NAME[n], NEED_SILLY

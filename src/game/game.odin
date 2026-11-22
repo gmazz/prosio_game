@@ -105,6 +105,7 @@ init :: proc(opts: Options) {
 	platform_init("Prosio", 1280, 720)
 	g.opts = opts
 	keyboard_enabled = opts.shot_path == nil && !opts.agent
+	load_controls()
 	if opts.detail > 0 {
 		pixel_level = clamp(opts.detail - 1, 0, PIXEL_LEVELS - 1)
 	}
@@ -381,6 +382,7 @@ agent_frame :: proc(down, tap: bit_set[Button]) {
 
 // Everything that moves on in a frame: the menus or the game, and the camera.
 update_frame :: proc(dt: f32) {
+	poll_input()
 	// The pixel size can be changed at any time with the keys 1 to 6.
 	if level := level_key_pressed(); level > 0 {
 		pixel_level = level - 1

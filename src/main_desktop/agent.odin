@@ -238,8 +238,8 @@ agent_moment :: proc() -> Agent_Moment {
 		scene = game.scene,
 		fail = p.fail,
 		carry = p.carry,
-		bubble = p.bubble_t > 0 ? strings.clone(string(p.bubble), context.temp_allocator) : "",
-		prompt = prompt != nil ? strings.clone(string(prompt), context.temp_allocator) : "",
+		bubble = p.bubble_t > 0 ? strings.clone(string(game.expand_keys(p.bubble)), context.temp_allocator) : "",
+		prompt = prompt != nil ? strings.clone(string(game.expand_keys(prompt)), context.temp_allocator) : "",
 	}
 }
 
@@ -375,7 +375,7 @@ agent_line :: proc() {
 	}
 	fmt.println()
 	if prompt := game.prompt_text(); prompt != nil {
-		fmt.printfln("bottom line: %s", prompt)
+		fmt.printfln("bottom line: %s", game.expand_keys(prompt))
 	}
 }
 
@@ -472,6 +472,12 @@ agent_look :: proc(radius: f32) {
 			fmt.println()
 		case .Outfit:
 			fmt.printfln("  u and d choose a row, l and r change it. Row: %v", game.bag_row)
+		case .Controls:
+			fmt.println("  each action, its controller button and its two keys (the agent's own letters stay as they are):")
+			for b, i in game.REMAPPABLE {
+				fmt.printfln("  %s %s: %s, %s, %s", i == game.controls_row ? ">" : " ", game.CONTROL_NAME[b], game.PAD_NAME[game.bindings[b].pad], game.key_name(game.bindings[b].keys[0]), game.key_name(game.bindings[b].keys[1]))
+			}
+			fmt.printfln("  %s back to the defaults", game.controls_row == len(game.REMAPPABLE) ? ">" : " ")
 		case:
 			fmt.println("  (state gives the numbers of his body; map gives the meadow)")
 		}
@@ -481,7 +487,7 @@ agent_look :: proc(radius: f32) {
 
 	agent_line()
 	if p.bubble_t > 0 {
-		fmt.printfln("he is saying: \"%s\"", p.bubble)
+		fmt.printfln("he is saying: \"%s\"", game.expand_keys(p.bubble))
 	}
 	fmt.printf("facing %s; chosen in the sack: ", agent_facing())
 	if p.sack[p.sack_sel] > 0 {

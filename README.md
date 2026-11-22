@@ -31,41 +31,41 @@ Keep Prosio's energy in balance. Walking, picking things up and fighting all bur
 
 ### Controls
 
-| Action | Keys |
-|---|---|
-| Move | `W` `A` `S` `D` or the arrow keys |
-| Bump (belly charge) | `Space` |
-| Jump | `J` or `X` |
-| Sprint | hold `Shift` while moving |
-| Grab. Then: tap to put it down, or hold to wind up and let go to throw | `F` or `L` |
-| Bash with a held animal | `Space` |
-| Pick up food into the sack (next to food or a berry bush) | `E` or `K` |
-| Use the oven, the fire, the churn, the mill, the workbench or a larder, or drink at the pond (next to it) | `E` or `K` |
-| Open or shut a gate in front of him, with or without an animal in his hooves | `E` or `K` |
-| Grab a fish (on the bank of the pond, with one close); with the fishing rod chosen in the sack, cast it | `F` or `L` |
-| Throw a pebble or a spear (chosen in the sack, nothing in reach to grab): hold to wind up, let go | `F` or `L` |
-| Put up a piece of fence, a gate, a scarecrow or a larder (chosen in the sack), in front of him | `Q` |
-| Lift a held turkey or fox over the fence in front of him | `F` or `L` (tapped) |
-| Take a piece of fence, a gate, a scarecrow or an empty larder down (standing at it, with nothing to grab and nothing to throw chosen) | `F` or `L` |
-| Choose what a throw is aimed at, while winding up | the direction keys |
-| Milk a held goat, or one in a pen; chop a held body into meat (at the fire) | `E` or `K` |
-| Choose in the sack | `Z` (back) and `C` (on) |
-| Eat what is chosen in the sack | `Q` |
-| Sack, body, outfit and map menu | `M` |
-| Let his wind go (once his gut is trained) | `G` or `V` |
-| Pause menu | `Esc` or `P` |
-| Wake up at home after the game is over | `Enter` or `R` |
-| Pixel size | `1` (chunkiest) to `6` (finest), any time, or from the menus |
-| Menus | up / down to choose, `Enter` or `Space` to select |
+| Action | Keys | Xbox controller |
+|---|---|---|
+| Move | `W` `A` `S` `D` or the arrow keys | left stick (pushed half way, he walks at half speed) or D-pad |
+| Bump (belly charge) | `Space` | X |
+| Jump | `J` or `X` | RT |
+| Sprint | hold `Shift` while moving | click the left stick: he sprints until he stops or runs out of breath |
+| Grab. Then: tap to put it down, or hold to wind up and let go to throw | `F` or `L` | B |
+| Bash with a held animal | `Space` | X |
+| Pick up food into the sack (next to food or a berry bush) | `E` or `K` | A |
+| Use the oven, the fire, the churn, the mill, the workbench or a larder, or drink at the pond (next to it) | `E` or `K` | A |
+| Open or shut a gate in front of him, with or without an animal in his hooves | `E` or `K` | A |
+| Grab a fish (on the bank of the pond, with one close); with the fishing rod chosen in the sack, cast it | `F` or `L` | B |
+| Throw a pebble or a spear (chosen in the sack, nothing in reach to grab): hold to wind up, let go | `F` or `L` | B |
+| Put up a piece of fence, a gate, a scarecrow or a larder (chosen in the sack), in front of him | `Q` | Y |
+| Lift a held turkey or fox over the fence in front of him | `F` or `L` (tapped) | B (tapped) |
+| Take a piece of fence, a gate, a scarecrow or an empty larder down (standing at it, with nothing to grab and nothing to throw chosen) | `F` or `L` | B |
+| Choose what a throw is aimed at, while winding up | the direction keys | the stick or the D-pad |
+| Milk a held goat, or one in a pen; chop a held body into meat (at the fire) | `E` or `K` | A |
+| Choose in the sack | `Z` (back) and `C` (on) | LB and RB |
+| Eat what is chosen in the sack | `Q` | Y |
+| Sack, body, outfit, map and controls menu | `M` | View (the two-squares button) |
+| Let his wind go (once his gut is trained; it scares foxes off) | `G` or `V` | LT |
+| Pause menu | `Esc` or `P` | Menu (the three-lines button) |
+| Wake up at home after the game is over | `Enter` or `R` | A |
+| Pixel size | `1` (chunkiest) to `6` (finest), any time, or from the menus | from the menus |
+| Menus | up / down to choose, `Enter` or `Space` to select | stick or D-pad to choose, A to select; B closes a station's menu |
 
-There is no gamepad or touch support yet.
+Everything but moving, pausing, choosing in menus and waking up can be given other keys and other controller buttons in the Controls panel of the `M` menu. The screen names the buttons of whichever was used last: "E: pick it" at the keyboard, "A: pick it" once the controller is touched. On a Mac the controller is read through Apple's own GameController framework, since macOS shows raylib an Xbox controller without any of its buttons; elsewhere through raylib. In the browser the controller is noticed only once one of its buttons has been pressed. There is no touch support yet.
 
 ### The screen
 
 - **What he is made of** (top left): one panel. At the top, what he weighs and a bar of that weight made of its parts laid end to end, each in its own colour. Under it one row for each part, with a square of the same colour, a bar, **its kilograms**, and what it is doing to him: fat, muscle, carbs, protein, fibre and water. What he weighs is always exactly the sum of those rows and his bones (see [How weight works](#how-weight-works)). Then the two things he needs that weigh nothing, vitamins and electrolytes; his **stamina** (the notch shows what one bump costs right now; it turns red when he is out of breath); and, when he lacks something, a line saying what to eat. A yellow `+N` beside his weight is a rock he is carrying.
 - **Sack** (top, beside the weight): a box for each kind of thing in the sack, with its picture, and how many under the box. The chosen one is outlined in yellow, with its name and calories above. The panel is always wide enough for the longest name. It grows as new kinds go in, up to six boxes; with more than six, the boxes go round in a circle as `Z` and `C` choose (the chosen one always third, with `<` and `>` either side).
 - **Where he is** (top right): the part of the meadow he is in, and what is found there.
-- **Prompt** (bottom): what `E` and `F` would do at this spot.
+- **Prompt** (bottom): what `E` and `F` (A and B on the controller) would do at this spot.
 
 ### Menus
 
@@ -75,11 +75,12 @@ The game opens on a main menu (Play, the pixel size, and Quit on the desktop). `
 
  The menus of the oven, the fire and the churn, and the sack, outfit and map menu, also pause the game.
 
-**The sack, body, outfit and map menu** (`M`) has four panels; `Z` and `C` switch between them, `M` or `Esc` closes it.
+**The sack, body, outfit, map and controls menu** (`M`) has five panels; `Z` and `C` (LB and RB) switch between them, `M` or `Esc` closes it.
 
 - **Sack:** everything that can be in the sack, gathered or baked, in a grid: its picture, how many (greyed out when none), and for the chosen one its name, calories and how much weight it puts on. The arrows choose, `E` or `Enter` eats.
 - **Body:** what he weighs as the sum of his parts (the same bar, with each part's kilograms), then his arms, his legs and his four skills of the body, each with a bar, whether it is growing or fading, what makes it grow and what it is good for; and, a line each, his three kitchen skills with his title at each station and what it is worth (see [Body and skills](#body-and-skills)).
 - **Outfit:** what Prosio wears, one choice in each row; up and down choose a row, left and right change it. The camera comes in close, with Prosio to the right of the menu, slowly turning round so you can see it all. What he wears stays the same in a new game.
+- **Controls:** a row for each action that can be changed (jump, sprint, bump, pick up and use, grab and throw, eat and put up, the two sack buttons, this menu, letting his wind go), with its controller button and two keys, and a last row that puts them all back as they started. The arrows choose a cell, `Enter`, `Space` or A changes it: press the new button (`Backspace` leaves the second key empty; `Esc` or Menu, or six seconds of nothing, cancels). An action given a button another action has swaps with it, so every action keeps a key and a controller button and no two share one; an action's only key cannot be taken by another. The keys that move him, pause, set the pixel size, and the D-pad and Menu button, cannot be given away. With the sprint on a stick, a click starts a sprint that lasts until he stops; any other sprint button is held. The controls are kept in a file of their own, `prosio.controls` beside the program (in the browser, its own storage), so starting over with a new pig keeps them.
 
 Under his clothes Prosio is a whole bare pig, shoulders and all. Clothes go on in layers, each a little bigger than what is under it, so nothing underneath ever pokes through: skin, then what is on his legs and his shirt, then whatever he wears over the shirt. A closed coat covers him front and back down past his hips; an open jacket shows the shirt (or the pig) in the gap down its front.
 
@@ -681,6 +682,10 @@ src/
                      animal, rocks in flight
     draw.odin        everything drawn in the world
     ui.odin          bars, prompts, speech bubbles, menus
+    controls.odin    which keys and controller buttons do what, the
+                     button names in texts, and the Controls panel
+    pad_darwin.odin  the controller on a Mac, through Apple's framework
+    pad_other.odin   (elsewhere raylib reads it, in platform.odin)
     util.odin        small maths helpers and a random number generator
   main_desktop/      entry point for desktop, plus the testing options
   check/             the tests: the rules the game must keep, and a bot that
@@ -717,7 +722,7 @@ A few choices shape the rest:
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (129 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (136 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -841,6 +846,7 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | The trees from models: each kind's height, crown width and leaf colour, how much trees vary, which model each kind uses | `trees.odin` (`TREE_HEIGHT`, `TREE_CROWN`, `TREE_LEAVES`, `TREE_WIDTH`, `TREE_LEAN`, `TREE_SHADE`, `TREE_PICK`); the clearings' size in `world.odin` (`CLEARING_RADIUS`) |
 | The animals from the animal pack: how they are reshaped, their horns and beard, their size; when they run rather than walk, their closed-eye marks | `tools/pack_quadruped.py` (`RECIPES`, then `tools/pack_quadrupeds.sh`), `quadruped.odin` (`QUAD_WALK_FROM`, `QUAD_WALK_FULL`, `QUAD_GALLOP_FROM`, `QUAD_GALLOP_FULL`, `QUAD_GALLOP_SLOWEST`, `QUAD_SHORT_STEP`, `QUAD_LONG_STEP_AT`, `QUAD_HEAD_TURN`, `QUAD_HEAD_SPEED`, `QUAD_GOAT_ACCEL`, `QUAD_TURN`, `QUAD_BACKWARDS`, `QUAD_SLOWEST`, `QUAD_SET_OFF`, `QUAD_STOP`, `QUAD_TURN_STEP`, `QUAD_EYE_SIZE`, `quad_color`) |
 | Grounded drag pose for the goat, billy goat and fox | `quadruped_drag.odin` (`QUAD_DRAG_SETTLE`, `QUAD_DRAG_HIP_*`, `QUAD_DRAG_TAIL_LIFT`) |
+| The keys and controller buttons each action starts with; the stick's dead middle, how far it goes before it counts as a direction in menus, how far a trigger is pulled to count | `controls.odin` (`DEFAULT_BINDINGS`), `platform.odin` (`STICK_DEAD`, `STICK_PRESS`, `TRIGGER_PRESS`) |
 | How big Prosio is against the animals and the meadow | `prosio.odin` (`PROSIO_SIZE`) |
 | What each food is made of, how big each store is, where lacking, full and too much begin, how fast stores empty, and how strong every effect is | `diet.odin` (`COMPOSITION`, `FIBRE_KCAL`, `VITAMIN_KCAL`, `SALT_KCAL`, `STORE_KG`, `FRAME`, `NEED_*`, `THIRST`, `TOO_LONG`, `DEADLY`, and the numbers under "What full and lacking do") |
 | Where the pond is and how big | `world.odin` (`POND`, `POND_RADIUS`) |

@@ -266,8 +266,9 @@ Bag_Tab :: enum {
 	Body,
 	Outfit,
 	Map,
+	Controls,
 }
-BAG_TAB_NAME := [Bag_Tab]cstring{.Sack = "SACK", .Body = "BODY", .Outfit = "OUTFIT", .Map = "MAP"}
+BAG_TAB_NAME := [Bag_Tab]cstring{.Sack = "SACK", .Body = "BODY", .Outfit = "OUTFIT", .Map = "MAP", .Controls = "CONTROLS"}
 bag_tab: Bag_Tab
 bag_row: Outfit_Row
 bag_item: Item
@@ -286,6 +287,10 @@ close_bag :: proc() {
 }
 
 update_bag :: proc(dt: f32) {
+	if bag_tab == .Controls && controls_waiting {
+		update_controls_panel(dt) // waiting for a new button: every button goes to it
+		return
+	}
 	if button_pressed(.Bag) || button_pressed(.Menu) {
 		close_bag()
 		return
@@ -323,6 +328,8 @@ update_bag :: proc(dt: f32) {
 		if button_pressed(.Left) {change_outfit(bag_row, -1)}
 		// He turns slowly round, to show himself off.
 		g.prosio.facing += dt * 0.9
+	case .Controls:
+		update_controls_panel(dt)
 	case .Map, .Body:
 	}
 }
@@ -338,30 +345,33 @@ draw_bag :: proc() {
 	tx := x + 20 * s
 	for tab in Bag_Tab {
 		name := BAG_TAB_NAME[tab]
-		tw := ui_text_width(name, 24 * s) + 28 * s
+		tw := ui_text_width(name, 20 * s) + 20 * s
 		if tab == bag_tab {
 			ui_round_rect(tx, y + 16 * s, tw, 40 * s, {250, 172, 182, 235}, 0.4)
-			ui_text(name, tx + 14 * s, y + 25 * s, 24 * s, UI_DARK)
+			ui_text(name, tx + 10 * s, y + 27 * s, 20 * s, UI_DARK)
 		} else {
-			label(name, tx + 14 * s, y + 25 * s, 24 * s, {200, 200, 200, 255})
+			label(name, tx + 10 * s, y + 27 * s, 20 * s, {200, 200, 200, 255})
 		}
-		tx += tw + 8 * s
+		tx += tw + 6 * s
 	}
 
 	top := y + 80 * s
 	switch bag_tab {
 	case .Sack:
 		draw_bag_sack(x + 20 * s, top, w - 40 * s, s)
-		label_centred("ARROWS: choose   E: eat, or choose to use   Z / C: other panel   M: close", x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
+		label_centred("ARROWS: choose   {Action}: eat, or choose to use   {Sack}: other panel   {Bag}: close", x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
 	case .Outfit:
 		draw_bag_outfit(x + 20 * s, top, w - 40 * s, s)
-		label_centred("UP/DOWN: row    LEFT/RIGHT: change    Z/C: panel    M: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred("UP/DOWN: row    LEFT/RIGHT: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	case .Body:
 		draw_bag_body(x + 20 * s, top, w - 40 * s, s)
-		label_centred("Z / C: other panel    M: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred("{Sack}: other panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	case .Map:
 		draw_bag_map(x + 20 * s, top, w - 40 * s, s)
-		label_centred("Z / C: other panel    M: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred("{Sack}: other panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+	case .Controls:
+		draw_controls_panel(x + 20 * s, top, w - 40 * s, s)
+		label_centred("ARROWS: choose    {Confirm}: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	}
 }
 

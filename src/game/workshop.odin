@@ -36,24 +36,24 @@ BENCH_RADIUS :: f32(0.8)
 
 // What each thing built is for, as the workbench's menu says it.
 PLAN_ABOUT := #partial [Item]cstring {
-	.Fence     = "Q puts it up. Animals stay in... or out.",
-	.Scarecrow = "Q stands it up. Crows keep off the wheat.",
-	.Rod       = "F at the pond: fish from far, no fright.",
-	.Spear     = "Hold F: throw it. E picks it up again.",
-	.Gate      = "Q puts it up in a fence. E opens it.",
-	.Larder    = "Q stands it up. Food keeps 5 times longer.",
+	.Fence     = "{Eat} puts it up. Animals stay in... or out.",
+	.Scarecrow = "{Eat} stands it up. Crows keep off the wheat.",
+	.Rod       = "{Grab} at the pond: fish from far, no fright.",
+	.Spear     = "Hold {Grab}: throw it. {Action} picks it up again.",
+	.Gate      = "{Eat} puts it up in a fence. {Action} opens it.",
+	.Larder    = "{Eat} stands it up. Food keeps 5 times longer.",
 }
 
 // What the sack screen says of each thing in it that is not food.
 THING_ABOUT := #partial [Item]cstring {
-	.Pebble    = "For throwing: choose it, then hold F and let go",
+	.Pebble    = "For throwing: choose it, then hold {Grab} and let go",
 	.Wood      = "For the oven, the cooking fire and the workbench",
-	.Fence     = "Q puts it up in front of you. F takes it down again",
-	.Scarecrow = "Q stands it up. Crows keep off the wheat near it",
-	.Rod       = "Choose it, then F at the pond: fish from far off",
-	.Spear     = "Choose it, then hold F and let go. E picks it up again",
-	.Gate      = "Q puts it up like a fence. E opens and shuts it, even holding an animal",
-	.Larder    = "Q stands it up. E opens it: food keeps 5 times longer in it",
+	.Fence     = "{Eat} puts it up in front of you. {Grab} takes it down again",
+	.Scarecrow = "{Eat} stands it up. Crows keep off the wheat near it",
+	.Rod       = "Choose it, then {Grab} at the pond: fish from far off",
+	.Spear     = "Choose it, then hold {Grab} and let go. {Action} picks it up again",
+	.Gate      = "{Eat} puts it up like a fence. {Action} opens and shuts it, even holding an animal",
+	.Larder    = "{Eat} stands it up. {Action} opens it: food keeps 5 times longer in it",
 }
 
 // Fences stand on the lines of a grid of squares FENCE_LEN across, which
@@ -288,7 +288,7 @@ fence_fits :: proc(f: Fence_At) -> (ok: bool, why: cstring) {
 	case !fence_valid(f):
 		return false, "The meadow has its own fence there!"
 	case fence_there(f):
-		return false, "There is a piece of fence here already! F takes it down."
+		return false, "There is a piece of fence here already! {Grab} takes it down."
 	case g.fence_count >= MAX_FENCES:
 		return false, "That is all the fence the meadow can take!"
 	case !fence_clear(f):
@@ -312,7 +312,7 @@ put_up :: proc(item: Item) {
 		at = (a + b) / 2
 		if item == .Gate {
 			set_gate(f, GATE_SHUT)
-			say("Knock, knock! A gate. E opens it.", 1.4)
+			say("Knock, knock! A gate. {Action} opens it.", 1.4)
 		} else {
 			say(g.fence_count == 1 ? "Knock, knock! My first piece of fence!" : "Knock, knock! Another piece of fence!", 1.2)
 		}
@@ -327,7 +327,7 @@ put_up :: proc(item: Item) {
 			answer("That is all the larders the meadow can take!")
 			return
 		}
-		say("There! A larder. E opens it.", 1.4)
+		say("There! A larder. {Action} opens it.", 1.4)
 	} else {
 		at = p.pos + facing_dir(p.facing) * (prosio_radius(p.kg) + SCARECROW_RADIUS + 0.4)
 		probe := at

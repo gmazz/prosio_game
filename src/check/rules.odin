@@ -45,6 +45,7 @@ run_rules :: proc() -> int {
 	rules_saving()
 	rules_moving()
 	rules_packed_animals()
+	rules_controls()
 	fmt.printf("\n%d passed, %d failed\n", passed, failed)
 	return failed
 }
@@ -2166,4 +2167,128 @@ rules_fox_rig :: proc() {
 	mouth := game.fox_point(held[game.FOX_MOUTH], game.FOX_PIVOT[game.FOX_MOUTH])
 	expect := game.fox_point(pose.front, game.FOX_PIVOT[game.FOX_MOUTH]*game.FOX_MODEL_SCALE)
 	check("stolen food follows the front body frame", math.abs(mouth.x-expect.x)+math.abs(mouth.y-expect.y)+math.abs(mouth.z-expect.z)<0.0001)
+}
+
+// The keys and the Xbox controller: what the screen calls them, changing
+// them in the Controls panel, keeping them, and the stick.
+rules_controls :: proc() {
+	section("controls")
+	game.reset_controls()
+	game.pad_in_use = false
+	keys_text := string(game.expand_keys("{Action}: pick it     {Grab}: grab     {Sack}"))
+	game.pad_in_use = true
+	pad_text := string(game.expand_keys("{Action}: pick it     {Grab}: grab     {Sack}"))
+	sprint_text := string(game.expand_keys("{Sprint}"))
+	game.pad_in_use = false
+	check("the screen names the keys at the keyboard, and the Xbox buttons once the controller is used",
+		keys_text == "E: pick it     F: grab     Z / C" && pad_text == "A: pick it     B: grab     LB / RB" && sprint_text == "click L-STICK",
+		fmt.tprintf("\"%s\", \"%s\", \"%s\"", keys_text, pad_text, sprint_text))
+
+	ok, _ := game.assign_key(.Jump, 0, game.Key('E'))
+	pad_ok, _ := game.assign_pad(.Jump, .A)
+	jump_text := string(game.expand_keys("{Jump} {Action}"))
+	check("giving an action a button another has makes them swap, and the screen follows",
+		ok && pad_ok && game.bindings[.Jump].keys[0] == game.Key('E') && game.bindings[.Action].keys[0] == game.Key('J') &&
+		game.bindings[.Jump].pad == .A && game.bindings[.Action].pad == .RT && jump_text == "E J",
+		jump_text)
+
+	refused := 0
+	for k in ([?]game.Key{game.Key('W'), game.KEY_LEFT, game.KEY_ESCAPE, game.Key('P'), game.Key('3')}) {
+		if done, _ := game.assign_key(.Bump, 0, k); !done {
+			refused += 1
+		}
+	}
+	for pad in ([?]game.Pad{.D_Up, .Start, .Stick_Left, .None}) {
+		if done, _ := game.assign_pad(.Bump, pad); !done {
+			refused += 1
+		}
+	}
+	check("moving, pausing and the pixel size keys cannot be given away", refused == 9, fmt.tprintf("%d of 9 refused", refused))
+
+	// A long muddle of changes, as a child might make.
+	game.reset_controls()
+	rng := u32(12345)
+	pool := [?]game.Key{game.Key('E'), game.Key('F'), game.Key('Q'), game.Key('J'), game.Key('Z'), game.Key('C'), game.Key('M'), game.Key('G'), game.Key('U'), game.Key('I'), game.Key('O'), game.KEY_SPACE, game.KEY_LEFT_SHIFT, game.Key('W'), game.KEY_ENTER}
+	pads := [?]game.Pad{.A, .B, .X, .Y, .LB, .RB, .LT, .RT, .View, .L_Stick, .R_Stick, .D_Down}
+	keyless, shared := 0, 0
+	for _ in 0 ..< 2000 {
+		rng = rng * 1664525 + 1013904223
+		which := game.REMAPPABLE[(rng >> 8) % u32(len(game.REMAPPABLE))]
+		switch (rng >> 16) % 4 {
+		case 0, 1:
+			game.assign_key(which, int((rng >> 4) % 2), pool[(rng >> 20) % u32(len(pool))])
+		case 2:
+			game.assign_pad(which, pads[(rng >> 20) % u32(len(pads))])
+		case 3:
+			game.clear_second_key(which)
+		}
+		for b, i in game.REMAPPABLE {
+			if game.bindings[b].keys[0] == game.KEY_NONE || game.bindings[b].pad not_in game.PAD_ASSIGNABLE {
+				keyless += 1
+			}
+			for c in game.REMAPPABLE[i + 1:] {
+				if game.bindings[b].pad == game.bindings[c].pad {
+					shared += 1
+				}
+				for k in game.bindings[b].keys {
+					if k != game.KEY_NONE && (k == game.bindings[c].keys[0] || k == game.bindings[c].keys[1]) {
+						shared += 1
+					}
+				}
+			}
+		}
+	}
+	check("after any changes every action still has a key and a controller button, and no two share one", keyless == 0 && shared == 0, fmt.tprintf("2000 changes: %d without, %d shared", keyless, shared))
+
+	changed := game.bindings
+	data: [game.CONTROLS_TEXT_ROOM]u8
+	n := game.encode_controls(data[:])
+	game.reset_controls()
+	back_to_defaults := game.bindings == game.DEFAULT_BINDINGS
+	game.decode_controls(data[:n])
+	kept := game.bindings == changed
+	game.reset_controls()
+	game.decode_controls(transmute([]u8)string("Jump 87 0 D-PAD UP\nnonsense\nAction -4 2 A\nGrab 70"))
+	check("changed controls are kept and read back, a muddled file changes nothing, and reset brings back the defaults",
+		kept && back_to_defaults && game.bindings == game.DEFAULT_BINDINGS && changed != game.DEFAULT_BINDINGS,
+		fmt.tprintf("%d bytes kept", n))
+	game.reset_controls()
+
+	// The stick: pushed half way he walks at half speed, any way it points.
+	g := &game.g
+	p := &g.prosio
+	walk :: proc(stick: game.Vec2) -> game.Vec2 {
+		fresh()
+		game.g.enemy_count = 0
+		game.g.round_count = 0
+		game.g.prosio.pos = {-60, -10}
+		game.forced_stick = stick
+		step(90)
+		v := game.g.prosio.vel
+		game.forced_stick = {}
+		return v
+	}
+	full := walk({1, 0})
+	half := walk({0.5, 0})
+	slant := walk({0.6, 0.8})
+	ratio := length(half) / length(full)
+	angle := math.atan2(slant.y, slant.x) * 180 / math.PI
+	check("with the stick half way he walks at half speed, and he goes whichever way it points",
+		ratio > 0.45 && ratio < 0.55 && abs(angle - 53.1) < 2 && abs(length(slant) / length(full) - 1) < 0.05,
+		fmt.tprintf("full %.2f m/s, half %.2f m/s, pointed at 53 degrees he goes at %.0f", length(full), length(half), angle))
+
+	// Clicking the stick to sprint: he sprints until he stops.
+	fresh()
+	g.enemy_count = 0
+	g.round_count = 0
+	p.pos = {-60, -10}
+	game.sprint_latched = true
+	game.forced_stick = {1, 0}
+	step(30)
+	sprinting := p.sprinting
+	game.forced_stick = {}
+	step(5)
+	stopped := !game.sprint_latched && !p.sprinting
+	game.sprint_latched = false
+	check("a stick click sprints him until he stops", sprinting && stopped)
 }

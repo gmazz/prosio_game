@@ -336,7 +336,7 @@ draw_larder_menu :: proc() {
 		}
 		y += row
 	}
-	label_centred("UP / DOWN: choose     RIGHT: one in     LEFT: one out     E: all of it     ESC: close", sw / 2, py + ph - 40 * s, 15 * s, UI_YELLOW)
+	label_centred("UP / DOWN: choose     RIGHT: one in     LEFT: one out     {Action}: all of it     {Close}: close", sw / 2, py + ph - 40 * s, 15 * s, UI_YELLOW)
 }
 
 // A larder: a wooden cupboard on short legs under a little roof, with a

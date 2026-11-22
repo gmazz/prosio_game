@@ -309,11 +309,18 @@ update_prosio :: proc(dt: f32) {
 	if button_down(.Right) {move.x += 1}
 	if button_down(.Up) {move.y -= 1}
 	if button_down(.Down) {move.y += 1}
+	move = normalize2(move)
+	// The controller's stick goes any way, and as fast as it is pushed.
+	if stick := move_stick(); stick != {} {
+		move = stick
+	}
 	if p.winding {
 		move = {} // winding up a throw he plants his feet: the direction buttons choose what to aim at
 	}
-	move = normalize2(move)
 	moving := move != {}
+	if !moving {
+		sprint_latched = false // a sprint started with a stick click lasts until he stops
+	}
 
 	grounded := !p.airborne
 	busy := p.eat_t > 0 || p.pick_t > 0 || p.ache_t > 0
@@ -394,7 +401,7 @@ update_prosio :: proc(dt: f32) {
 	if grounded && can_act && !carrying && pressed(.Bump) {
 		cost := dash_cost()
 		if p.stamina >= cost {
-			dir := moving ? move : facing_dir(p.facing)
+			dir := moving ? normalize2(move) : facing_dir(p.facing)
 			p.stamina -= cost
 			p.regen_delay = 0.6
 			p.dash_t = DASH_TIME
@@ -438,6 +445,7 @@ update_prosio :: proc(dt: f32) {
 			p.stamina = 0
 			p.winded = true
 			p.sprinting = false
+			sprint_latched = false
 			say("Puff... puff...", 1.4)
 		}
 	}
@@ -539,7 +547,7 @@ update_prosio :: proc(dt: f32) {
 	} else if p.bruises >= BRUISE_MOST {
 		p.fail = .Beaten
 	} else if starving() {
-		hint(sack_has_food() ? "So hungry... Q: eat from my sack!" : "So hungry... I must find food!")
+		hint(sack_has_food() ? "So hungry... {Eat}: eat from my sack!" : "So hungry... I must find food!")
 	} else if p.fat > FAT_MAX - FAT_DANGER {
 		hint("So full... no more food for now!")
 	}

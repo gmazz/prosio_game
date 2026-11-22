@@ -19,20 +19,20 @@
 	odinMemory.setIntSize(4);
 	var odinImports = odin.setupDefaultImports(odinMemory);
 
-	// The saved game is kept in the browser's own storage, as text.
+	// The saved game and the controls are kept in the browser's own storage, as text.
 	var storeImports = {
 		prosio_store: {
-			store_save: (pointer, size) => {
+			store_save: (which, pointer, size) => {
 				try {
 					const bytes = new Uint8Array(odinMemory.memory.buffer, pointer, size);
 					let text = "";
 					for (let i = 0; i < size; i++) text += String.fromCharCode(bytes[i]);
-					localStorage.setItem("prosio-save", btoa(text));
+					localStorage.setItem(which ? "prosio-controls" : "prosio-save", btoa(text));
 				} catch (e) {}
 			},
-			store_load: (pointer, room) => {
+			store_load: (which, pointer, room) => {
 				try {
-					const saved = localStorage.getItem("prosio-save");
+					const saved = localStorage.getItem(which ? "prosio-controls" : "prosio-save");
 					if (!saved) return 0;
 					const text = atob(saved);
 					if (text.length > room) return 0;

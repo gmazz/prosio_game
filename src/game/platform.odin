@@ -48,28 +48,6 @@ Button :: enum {
 	Confirm,
 }
 
-// Up to three keys per button.
-@(private = "file")
-KEYS := [Button][3]rl.KeyboardKey {
-	.Left    = {.A, .LEFT, .KEY_NULL},
-	.Right   = {.D, .RIGHT, .KEY_NULL},
-	.Up      = {.W, .UP, .KEY_NULL},
-	.Down    = {.S, .DOWN, .KEY_NULL},
-	.Jump    = {.J, .X, .KEY_NULL},
-	.Sprint  = {.LEFT_SHIFT, .RIGHT_SHIFT, .KEY_NULL},
-	.Bump    = {.SPACE, .KEY_NULL, .KEY_NULL},
-	.Action  = {.E, .K, .KEY_NULL},
-	.Grab    = {.F, .L, .KEY_NULL},
-	.Eat     = {.Q, .KEY_NULL, .KEY_NULL},
-	.Sack_Prev = {.Z, .KEY_NULL, .KEY_NULL},
-	.Sack_Next = {.C, .KEY_NULL, .KEY_NULL},
-	.Bag     = {.M, .KEY_NULL, .KEY_NULL},
-	.Gas     = {.G, .V, .KEY_NULL},
-	.Restart = {.ENTER, .R, .KEY_NULL},
-	.Menu    = {.ESCAPE, .P, .KEY_NULL},
-	.Confirm = {.ENTER, .SPACE, .KP_ENTER},
-}
-
 // The world is drawn into a small image, which is then enlarged without
 // smoothing, so it comes out as crisp pixels.
 //
@@ -681,22 +659,161 @@ world_to_screen :: proc(pos: Vec3) -> Vec2 {
 // Buttons held by a test script instead of the keyboard.
 forced_down: bit_set[Button]
 forced_pressed: bit_set[Button]
-// Test runs switch the real keyboard off so stray key presses cannot disturb them.
+// Test runs switch the real keyboard (and controller) off so stray key presses cannot disturb them.
 keyboard_enabled := true
+
+// The controller as it was read this frame and the one before, how far its
+// left stick is pushed, and the first key and controller button that went
+// down this frame (for the Controls panel).
+@(private = "file")
+pad_now, pad_before: bit_set[Pad]
+@(private = "file")
+stick: Vec2
+@(private = "file")
+key_hit, key_hit_frame: Key
+@(private = "file")
+pad_hit: Pad
+
+STICK_DEAD :: f32(0.2) // the stick's middle, where it does nothing
+STICK_PRESS :: f32(0.5) // how far the stick goes before it counts as a direction in menus
+TRIGGER_PRESS :: f32(0.4)
+
+// Reads the keyboard queue and the controller, once at the start of a frame.
+poll_input :: proc() {
+	pad_before = pad_now
+	pad_now = {}
+	key_hit = KEY_NONE
+	pad_hit = .None
+	if !keyboard_enabled {
+		stick = forced_stick
+		return
+	}
+	for k := rl.GetKeyPressed(); k != .KEY_NULL; k = rl.GetKeyPressed() {
+		if key_hit == KEY_NONE {
+			key_hit = Key(k)
+		}
+		pad_in_use = false
+	}
+	stick = {}
+	raw: Vec2
+	if down, left, ok := system_pad_read(); ok {
+		// On a Mac, through Apple's own framework (see pad_darwin.odin).
+		pad_now = down
+		raw = left
+	} else {
+		pad := i32(-1)
+		for i in i32(0) ..< 4 {
+			if rl.IsGamepadAvailable(i) {
+				pad = i
+				break
+			}
+		}
+		if pad < 0 {
+			return
+		}
+		BUTTONS := [Pad]rl.GamepadButton {
+			.None        = .UNKNOWN,
+			.A           = .RIGHT_FACE_DOWN,
+			.B           = .RIGHT_FACE_RIGHT,
+			.X           = .RIGHT_FACE_LEFT,
+			.Y           = .RIGHT_FACE_UP,
+			.LB          = .LEFT_TRIGGER_1,
+			.RB          = .RIGHT_TRIGGER_1,
+			.LT          = .LEFT_TRIGGER_2,
+			.RT          = .RIGHT_TRIGGER_2,
+			.View        = .MIDDLE_LEFT,
+			.Start       = .MIDDLE_RIGHT,
+			.L_Stick     = .LEFT_THUMB,
+			.R_Stick     = .RIGHT_THUMB,
+			.D_Up        = .LEFT_FACE_UP,
+			.D_Down      = .LEFT_FACE_DOWN,
+			.D_Left      = .LEFT_FACE_LEFT,
+			.D_Right     = .LEFT_FACE_RIGHT,
+			.Stick_Up    = .UNKNOWN,
+			.Stick_Down  = .UNKNOWN,
+			.Stick_Left  = .UNKNOWN,
+			.Stick_Right = .UNKNOWN,
+		}
+		for button, p in BUTTONS {
+			if button != .UNKNOWN && rl.IsGamepadButtonDown(pad, button) {
+				pad_now += {p}
+			}
+		}
+		// The triggers are read as how far they are pulled as well, since not
+		// every system reports them as buttons (at rest they read 0 or -1).
+		if rl.GetGamepadAxisMovement(pad, .LEFT_TRIGGER) > TRIGGER_PRESS {pad_now += {.LT}}
+		if rl.GetGamepadAxisMovement(pad, .RIGHT_TRIGGER) > TRIGGER_PRESS {pad_now += {.RT}}
+
+		raw = {rl.GetGamepadAxisMovement(pad, .LEFT_X), rl.GetGamepadAxisMovement(pad, .LEFT_Y)}
+	}
+	if amount := length2(raw); amount > STICK_DEAD {
+		stick = raw / amount * min((amount - STICK_DEAD) / (1 - STICK_DEAD), 1)
+	}
+	if raw.x < -STICK_PRESS {pad_now += {.Stick_Left}}
+	if raw.x > STICK_PRESS {pad_now += {.Stick_Right}}
+	if raw.y < -STICK_PRESS {pad_now += {.Stick_Up}}
+	if raw.y > STICK_PRESS {pad_now += {.Stick_Down}}
+
+	went_down := pad_now - pad_before
+	if went_down != {} || stick != {} {
+		pad_in_use = true
+	}
+	for p in Pad {
+		if p in went_down && (p in PAD_ASSIGNABLE || p == .Start) {
+			pad_hit = p
+			break
+		}
+	}
+	// A stick click for sprinting starts a sprint (see sprint_latched).
+	sprint := bindings[.Sprint].pad
+	if (sprint == .L_Stick || sprint == .R_Stick) && sprint in went_down {
+		sprint_latched = !sprint_latched
+	}
+}
+
+// How far the left stick is pushed (0 to 1 each way), past its dead middle.
+move_stick :: proc() -> Vec2 {
+	return keyboard_enabled ? stick : forced_stick
+}
+
+// The first key, and the first controller button, that went down this frame.
+key_hit_now :: proc() -> Key {
+	return key_hit
+}
+
+pad_hit_now :: proc() -> Pad {
+	return pad_hit
+}
+
+// The stick pushed one way stands for that direction button.
+@(private = "file")
+STICK_DIRECTION := #partial [Button]Pad {
+	.Left = .Stick_Left,
+	.Right = .Stick_Right,
+	.Up = .Stick_Up,
+	.Down = .Stick_Down,
+}
 
 button_down :: proc(b: Button) -> bool {
 	if b in forced_down || b in forced_pressed { // a button that has just gone down is down
 		return true
 	}
+	if b == .Sprint && sprint_latched {
+		return true
+	}
 	if !keyboard_enabled {
 		return false
 	}
-	for key in KEYS[b] {
-		if key != .KEY_NULL && rl.IsKeyDown(key) {
+	for key in bindings[b].keys {
+		if key != KEY_NONE && rl.IsKeyDown(rl.KeyboardKey(key)) {
 			return true
 		}
 	}
-	return false
+	if b == .Confirm && rl.IsKeyDown(.KP_ENTER) {
+		return true
+	}
+	pad := bindings[b].pad
+	return (pad != .None && pad in pad_now) || (STICK_DIRECTION[b] != .None && STICK_DIRECTION[b] in pad_now)
 }
 
 button_pressed :: proc(b: Button) -> bool {
@@ -706,12 +823,17 @@ button_pressed :: proc(b: Button) -> bool {
 	if !keyboard_enabled {
 		return false
 	}
-	for key in KEYS[b] {
-		if key != .KEY_NULL && rl.IsKeyPressed(key) {
+	for key in bindings[b].keys {
+		if key != KEY_NONE && rl.IsKeyPressed(rl.KeyboardKey(key)) {
 			return true
 		}
 	}
-	return false
+	if b == .Confirm && rl.IsKeyPressed(.KP_ENTER) {
+		return true
+	}
+	went_down := pad_now - pad_before
+	pad := bindings[b].pad
+	return (pad != .None && pad in went_down) || (STICK_DIRECTION[b] != .None && STICK_DIRECTION[b] in went_down)
 }
 
 ui_rect :: proc(x, y, w, h: f32, color: Color) {
@@ -726,12 +848,14 @@ ui_round_rect :: proc(x, y, w, h: f32, color: Color, roundness: f32 = 0.5) {
 	rl.DrawRectangleRounded({x, y, w, h}, roundness, 8, rl.Color(color))
 }
 
+// Texts naming buttons in braces ("{Action}: pick it") are written out for
+// the keys or the controller (see expand_keys).
 ui_text :: proc(text: cstring, x, y, size: f32, color: Color) {
-	rl.DrawText(text, i32(x), i32(y), i32(size), rl.Color(color))
+	rl.DrawText(expand_keys(text), i32(x), i32(y), i32(size), rl.Color(color))
 }
 
 ui_text_width :: proc(text: cstring, size: f32) -> f32 {
-	return f32(rl.MeasureText(text, i32(size)))
+	return f32(rl.MeasureText(expand_keys(text), i32(size)))
 }
 
 // Formats a number into a short text, e.g. ui_format("%d kg", 80).
@@ -772,35 +896,40 @@ ui_vignette :: proc(strength: u8, reach: f32 = 1) {
 	rl.DrawRectangleGradientH(w - band_x, 0, band_x, h, none, edge)
 }
 
-// Keeping the saved game from one sitting to the next: in a file beside the
-// program on the desktop, and in the browser's own storage on the web (the
-// page provides the two procedures: see index_template.html).
-SAVE_FILE :: "prosio.sav"
+// Keeping the saved game, and the controls, from one sitting to the next:
+// in files beside the program on the desktop, and in the browser's own
+// storage on the web (the page provides the two procedures: see
+// index_template.html).
+Store :: enum i32 {
+	Save,
+	Controls,
+}
+STORE_FILE := [Store]cstring{.Save = "prosio.sav", .Controls = "prosio.controls"}
 
 when IS_WEB {
 	foreign import store "prosio_store"
 	@(default_calling_convention = "c")
 	foreign store {
-		store_save :: proc(data: [^]u8, size: i32) ---
-		store_load :: proc(data: [^]u8, room: i32) -> i32 ---
+		store_save :: proc(which: i32, data: [^]u8, size: i32) ---
+		store_load :: proc(which: i32, data: [^]u8, room: i32) -> i32 ---
 	}
 }
 
-store_write :: proc(data: []u8) {
+store_write :: proc(data: []u8, which: Store = .Save) {
 	when IS_WEB {
-		store_save(raw_data(data), i32(len(data)))
+		store_save(i32(which), raw_data(data), i32(len(data)))
 	} else {
-		rl.SaveFileData(rl.TextFormat("%s%s", rl.GetApplicationDirectory(), cstring(SAVE_FILE)), raw_data(data), i32(len(data)))
+		rl.SaveFileData(rl.TextFormat("%s%s", rl.GetApplicationDirectory(), STORE_FILE[which]), raw_data(data), i32(len(data)))
 	}
 }
 
 // Reads what was saved into data, and says how many bytes there were (0 if
 // nothing was saved, or it does not fit).
-store_read :: proc(data: []u8) -> int {
+store_read :: proc(data: []u8, which: Store = .Save) -> int {
 	when IS_WEB {
-		return int(store_load(raw_data(data), i32(len(data))))
+		return int(store_load(i32(which), raw_data(data), i32(len(data))))
 	} else {
-		path := rl.TextFormat("%s%s", rl.GetApplicationDirectory(), cstring(SAVE_FILE))
+		path := rl.TextFormat("%s%s", rl.GetApplicationDirectory(), STORE_FILE[which])
 		if !rl.FileExists(path) {
 			return 0
 		}

@@ -191,7 +191,7 @@ autoplay :: proc(minutes: int, seed: int) -> bool {
 		// (A line just said is a different line, or leaves his bubble with
 		// more time on it than the frame alone would have.)
 		if p.bubble != nil && (p.bubble != text_before || p.bubble_t > bubble_before - 1.0 / 60 + 0.004) && p.bubble_t > 0 {
-			stats.said[strings.clone(string(p.bubble))] += 1
+			stats.said[strings.clone(string(game.expand_keys(p.bubble)))] += 1
 			bot.e_answered = true
 		}
 		for n, item in p.sack {

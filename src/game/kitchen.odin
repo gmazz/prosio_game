@@ -292,7 +292,7 @@ EAT_TEXT := [Item]cstring {
 	.Meat          = "Raw meat? No! The fire by the pond roasts it.",
 	.Milk          = "Glug glug... creamy milk!",
 	.Honey         = "Sticky, sweet honey! Mmm!",
-	.Pebble        = "I can't eat a pebble! Hold F to throw one.",
+	.Pebble        = "I can't eat a pebble! Hold {Grab} to throw one.",
 	.Wheat         = "I can't eat raw wheat! The mill makes flour of it.",
 	.Egg           = "A raw egg? Yuck! The fire by the pond fries it.",
 	.Flour         = "Dry flour? Blergh! It wants baking.",
@@ -310,10 +310,10 @@ EAT_TEXT := [Item]cstring {
 	.Wood          = "I can't eat wood! It is for fires, and for building.",
 	.Fence         = "No room for a fence here!",
 	.Scarecrow     = "No room for a scarecrow here!",
-	.Rod           = "My fishing rod! F at the pond casts it.",
-	.Spear         = "My spear! Hold F to throw it.",
-	.Gate          = "A gate! Q puts it up in a fence.",
-	.Larder        = "A larder! Q stands it up.",
+	.Rod           = "My fishing rod! {Grab} at the pond casts it.",
+	.Spear         = "My spear! Hold {Grab} to throw it.",
+	.Gate          = "A gate! {Eat} puts it up in a fence.",
+	.Larder        = "A larder! {Eat} stands it up.",
 }
 
 Ingredient :: struct {
@@ -640,7 +640,7 @@ eat_from_sack :: proc() {
 	p := &g.prosio
 	item := p.sack_sel
 	if p.sack[item] <= 0 {
-		answer("My sack is empty! E picks food up.")
+		answer("My sack is empty! {Action} picks food up.")
 		return
 	}
 	if item == .Fence || item == .Scarecrow || item == .Gate || item == .Larder {
@@ -1675,7 +1675,7 @@ draw_cook_menu :: proc() {
 	if cook_refused_t > 0 {
 		label_centred(cook_at == .Bench || cook_at == .Churn ? "Not enough in the sack for that!" : "Not enough in the sack for that! (A fire needs wood: branches lie under the forest trees.)", sw / 2, py + ph - 82 * s, 20 * s, UI_RED)
 	}
-	label_centred("UP / DOWN: choose     LEFT / RIGHT: how many     E or ENTER: make it     ESC: close", sw / 2, py + ph - 42 * s, 18 * s, UI_YELLOW)
+	label_centred("UP / DOWN: choose     LEFT / RIGHT: how many     {Action}: make it     {Close}: close", sw / 2, py + ph - 42 * s, 18 * s, UI_YELLOW)
 }
 
 // The mill, by the wheat fields: it grinds wheat into flour, a sheaf at a
