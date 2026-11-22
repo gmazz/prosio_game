@@ -64,7 +64,12 @@ Enemy :: struct {
 	facing: f32,
 	spin:   f32,
 	hop:    f32,
-	gait:   f32, // metres it has walked, run or swum: the legs of a packed animal keep step with it (see quadruped.odin)
+	gait:   f32, // how many strides it has walked, run or swum: the legs of a packed animal keep step with it (see quadruped.odin)
+	pace:   f32, // a goat on four legs: how fast its legs step (m/s, less than 0 backwards; turning on the spot steps too)
+	look:   f32, // how far its head is turned to watch him (radians)
+	squaring: bool, // a goat, squaring up to him: it faces him, and steps forwards and back
+	detour:   f32, // which way a goat on four legs turns to get round something in its way,
+	detour_t: f32, // and for how much longer
 	timer:  f32, // attack pause, dizzy time or time until it comes back
 	ko:     bool, // no health left: once it has landed and lain dizzy a moment, that is the end of it
 	skip:   bool, // slammed down spinning: it skips along the ground
@@ -115,10 +120,11 @@ ENEMY_RADIUS := [Enemy_Kind]f32 {
 }
 ENEMY_SPEED := [Enemy_Kind]f32 {
 	.Turkey = 2.8,
-	.Goat   = 2.3,
-	.Billy  = 2.0,
+	.Goat   = 3.2, // (faster than a turkey: a goat is a runner)
+	.Billy  = 2.9,
 	.Fox    = 3.4,
 }
+GOAT_CHARGE :: f32(1.8) // how many times its own speed a goat charges at
 ENEMY_GRIP := [Enemy_Kind]f32 {
 	.Turkey = 560,
 	.Goat   = 450,
@@ -415,20 +421,40 @@ update_enemies :: proc(dt: f32) {
 				continue
 			}
 			target := chase_velocity(&e, index, dt)
-			accel: f32 = e.kind == .Goat || e.kind == .Billy ? 10 : 14
-			e.vel = approach2(e.vel, target, accel * dt)
-			e.pos += e.vel * dt
-			speed := length2(e.vel)
-			look := e.vel
-			if e.hunt == .Stalk && length2(p.pos - e.pos) < 9 {
-				// Circling or squaring up, it keeps its eyes on him.
-				look = normalize2(e.vel) * 0.6 + normalize2(p.pos - e.pos)
-			}
-			if speed > 0.3 && look != {} {
-				e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
+			speed: f32
+			if quad_legged(e.kind) {
+				// Four legs that step: it goes the way it faces, forwards or
+				// slowly backwards, and turns to change its way (see quad_steer).
+				quad_steer(&e, target, dt)
+				e.pos += e.vel * dt
+				speed = length2(e.vel)
+			} else {
+				_, packed := quad_model_for(e.kind)
+				accel: f32 = e.kind == .Goat || e.kind == .Billy ? 10 : 14
+				e.vel = approach2(e.vel, target, accel * dt)
+				e.pos += e.vel * dt
+				speed = length2(e.vel)
+				look := e.vel
+				near := e.hunt == .Stalk && length2(p.pos - e.pos) < 9
+				if near && !packed {
+					// Circling or squaring up, it keeps its eyes on him.
+					look = normalize2(e.vel) * 0.6 + normalize2(p.pos - e.pos)
+				}
+				if packed {
+					// The pack's fox turns its body the way it goes, but
+					// near him, slow, it keeps facing him.
+					if near && speed < QUAD_SQUARE_UP {
+						to := p.pos - e.pos
+						e.facing = approach_angle(e.facing, math.atan2(to.x, to.y), 4 * dt)
+					} else if speed > QUAD_WALK_FROM {
+						e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
+					}
+				} else if speed > 0.3 && look != {} {
+					e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
+				}
+				e.gait += quad_stride_rate(e.kind, dot2(e.vel, facing_dir(e.facing))) * dt // (backwards, it steps backwards)
 			}
 			e.hop += dt * (speed > 0.3 ? 9 : 3)
-			e.gait += speed * dt
 			if hit, n := collide_static(&e.pos, r, e.y, true); hit && dot2(target, n) < -0.2 * length2(target) {
 				// Something is in the way: go round it, the side nearer its goal.
 				along := Vec2{-n.y, n.x}
@@ -436,7 +462,14 @@ update_enemies :: proc(dt: f32) {
 				if abs(side) > 0.2 * length2(target) && e.turn_lock <= 0 {
 					e.turn = side > 0 ? 1 : -1
 				}
-				e.vel = along * e.turn * max(length2(target), speed)
+				if quad_legged(e.kind) {
+					// (On four legs it turns to walk along it.)
+					aim := along * e.turn
+					e.detour = math.atan2(aim.x, aim.y)
+					e.detour_t = 0.4
+				} else {
+					e.vel = along * e.turn * max(length2(target), speed)
+				}
 				// Wedged in a corner, getting nowhere: try the other way round.
 				e.stuck_t += dt
 				if e.stuck_t > 0.8 {
@@ -555,7 +588,7 @@ update_enemies :: proc(dt: f32) {
 			if !e.ko {
 				e.facing = math.atan2(to.x, to.y)
 				e.hop += dt * 9
-				e.gait += length2(e.vel) * dt
+				e.gait += quad_stride_rate(e.kind, length2(e.vel)) * dt
 				if DROWN_RATE[e.kind] > 0 && hurt_enemy(&e, DROWN_RATE[e.kind] * dt) {
 					// Glub glub... bottoms up.
 					burst({e.pos.x, 0.3, e.pos.y}, 12, 2, POND_SPLASH, 0.1)
@@ -646,6 +679,7 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 	dist := length2(to)
 	goat := e.kind == .Goat || e.kind == .Billy
 	e.licking = false
+	e.squaring = false
 	e.home_t -= dt
 	if length2(e.pos - e.home) > LEASH[e.kind] {
 		e.home_t = GIVE_UP
@@ -925,15 +959,18 @@ goat_velocity :: proc(e: ^Enemy, index: int, dist: f32, toward: Vec2) -> Vec2 {
 	switch e.hunt {
 	case .Stalk:
 		// A few steps off, facing him, pawing the ground.
+		e.squaring = true
 		closing := clamp((dist - 4) * 1.2, -0.8 * speed, 0.8 * speed)
 		v := toward * closing + keep_apart(e, index) * speed
 		if e.hunt_t <= 0 {
 			e.hunt_t = random_range(0.3, 0.8)
 			if e.timer <= 0 && dist < 6.5 && random() < 0.6 * (1 - 0.8 * wariness(e.kind)) {
 				e.hunt = .Charge
-				e.hunt_t = clamp(dist / (speed * 2.2) + 0.5, 0.8, 1.8)
+				e.hunt_t = clamp(dist / (speed * GOAT_CHARGE) + 0.5, 0.8, 1.8)
 				e.orbit = math.atan2(toward.x, toward.y) // straight at where he is now
-				e.facing = e.orbit
+				if _, packed := quad_model_for(e.kind); !packed {
+					e.facing = e.orbit // (one with legs that step turns into it instead)
+				}
 			}
 		}
 		return v
@@ -942,8 +979,10 @@ goat_velocity :: proc(e: ^Enemy, index: int, dist: f32, toward: Vec2) -> Vec2 {
 			e.hunt = .Retreat
 			e.hunt_t = random_range(0.7, 1.2)
 		}
-		return facing_dir(e.orbit) * speed * 2.2
+		return facing_dir(e.orbit) * speed * GOAT_CHARGE + keep_apart(e, index) * speed // (swerving round another goat)
 	case .Retreat:
+		// (On four legs it backs off still facing him.)
+		e.squaring = true
 		if e.hunt_t <= 0 {
 			e.hunt = .Stalk
 			e.hunt_t = random_range(1, 2.4)

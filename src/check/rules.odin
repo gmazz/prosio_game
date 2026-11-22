@@ -372,7 +372,8 @@ rules_packed_animals :: proc() {
 		ys, zs: [240]f32
 		for k in 0 ..< 240 {
 			e.pos.y = 30 + speed * dt * f32(k)
-			e.gait = speed * dt * f32(k)
+			e.gait = game.quad_stride_rate(.Goat, speed) * dt * f32(k)
+			e.pace = speed
 			pose := game.Animal_Pose{}
 			pose.rear = game.translate({e.pos.x, 0, e.pos.y}) * game.rot_y(e.facing) * game.scale({r, r, r})
 			pose.front = pose.rear
@@ -402,8 +403,79 @@ rules_packed_animals :: proc() {
 		}
 		return planted > 0 ? moved / planted / speed : 1
 	}
-	walking, running := slide(1.2), slide(2.2)
-	check("a packed goat's planted hoof stays put as it walks and gallops, rather than sliding along", walking < 0.25 && running < 0.35, fmt.tprintf("a planted hoof moves at %.0f%% of the goat's speed walking, %.0f%% galloping", walking * 100, running * 100))
+	ambling, walking, brisk, running := slide(0.6), slide(1.2), slide(2.3), slide(4.6)
+	check("a packed goat's planted hoof stays put as it ambles, walks, walks briskly and gallops, rather than sliding along", ambling < 0.25 && walking < 0.25 && brisk < 0.25 && running < 0.35, fmt.tprintf("a planted hoof moves at %.0f%% of the goat's speed ambling, %.0f%% walking, %.0f%% walking briskly, %.0f%% galloping", ambling * 100, walking * 100, brisk * 100, running * 100))
+
+	// A minute among three goats, as he stands, walks round and away: they
+	// square up, back off, charge and turn, and never slide sideways, their
+	// legs step as fast as they go, and their heads turn smoothly to watch
+	// him, never flicking from side to side.
+	{
+		fresh()
+		g.enemy_count = 0
+		p.pos = {20, 20}
+		for k in 0 ..< 3 {
+			a := f32(k) * 2.1
+			game.add_enemy(.Goat, p.pos + game.facing_dir(a) * 4.5)
+		}
+		moves := [8]bit_set[game.Button]{{}, {.Left}, {}, {.Right}, {.Up}, {}, {.Down}, {}}
+		frames, sliding, stumbling, bumps: int
+		worst_head, quickest: f32
+		last_head: [3]f32
+		before: [3]game.Vec2
+		before_facing: [3]f32
+		for e, k in g.enemies[:3] {
+			last_head[k] = e.facing + e.look
+		}
+		dt: f32 = 1.0 / 60
+		for f in 0 ..< 3600 {
+			for e, k in g.enemies[:3] {
+				before[k], before_facing[k] = e.pos, e.facing
+			}
+			step(1, moves[(f / 70) % 8])
+			for e, k in g.enemies[:3] {
+				if e.state != .Chase {
+					last_head[k] = e.facing + e.look
+					continue
+				}
+				frames += 1
+				ahead := game.facing_dir(e.facing)
+				moved := (e.pos - before[k]) / dt
+				side := abs(moved.x * ahead.y - moved.y * ahead.x)
+				forward := game.dot2(moved, ahead)
+				// (Bumping into him, another goat or a rock, it is shoved: that is no slide.)
+				touching := game.length2(e.pos - p.pos) < game.prosio_radius(p.kg) + game.ENEMY_RADIUS[.Goat] + 0.15
+				for o, j in g.enemies[:3] {
+					if j != k && game.length2(o.pos - e.pos) < 2 * game.ENEMY_RADIUS[.Goat] + 0.15 {
+						touching = true
+					}
+				}
+				for rd in g.rounds[:g.round_count] {
+					if rd.r > 0 && rd.kind != .Pebbles && game.length2(rd.pos - e.pos) < rd.r + game.ENEMY_RADIUS[.Goat] + 0.1 {
+						touching = true
+					}
+				}
+				if touching {
+					bumps += 1
+					last_head[k] = e.facing + e.look
+					continue
+				}
+				if side > 0.3 {
+					sliding += 1
+				}
+				turning := abs(game.angle_diff(e.facing, before_facing[k])) / dt
+				if turning < 0.3 && abs(forward - e.pace) > 0.4 {
+					stumbling += 1
+				}
+				head := e.facing + e.look
+				worst_head = max(worst_head, abs(game.angle_diff(head, last_head[k])) / dt)
+				last_head[k] = head
+				quickest = max(quickest, game.length2(e.vel))
+			}
+		}
+		check("goats round him never slide sideways, their legs keep step with the ground, and their heads turn smoothly", frames > 2000 && f32(sliding) < 0.02 * f32(frames) && f32(stumbling) < 0.03 * f32(frames) && worst_head < game.QUAD_TURN + game.QUAD_HEAD_SPEED + 0.5, fmt.tprintf("%d goat-frames (%d of them bumping into something): sideways in %.1f%%, legs out of step in %.1f%%, the head turning at most %.1f rad/s, fastest %.1f m/s", frames, bumps, 100 * f32(sliding) / f32(max(frames, 1)), 100 * f32(stumbling) / f32(max(frames, 1)), worst_head, quickest))
+		check("a goat runs faster than a turkey", game.ENEMY_SPEED[.Goat] > game.ENEMY_SPEED[.Turkey], fmt.tprintf("goat %.1f m/s, turkey %.1f", game.ENEMY_SPEED[.Goat], game.ENEMY_SPEED[.Turkey]))
+	}
 
 	// He grabs a goat by its hind legs: a hoof in each of his.
 	fresh()

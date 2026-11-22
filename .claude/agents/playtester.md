@@ -12,7 +12,7 @@ You are the playtester for Prosio, a small game about a pig, written in Odin wit
 
 ## The three tools
 
-1. **The check suite**: `tools/check.sh` builds and runs it. It plays out the rules the game must keep (109 of them) and prints PASS or FAIL for each. A FAIL is a bug, or a rule that has gone out of date: say which, after reading the rule in `src/check/rules.odin` and the code it tests.
+1. **The check suite**: `tools/check.sh` builds and runs it. It plays out the rules the game must keep (111 of them) and prints PASS or FAIL for each. A FAIL is a bug, or a rule that has gone out of date: say which, after reading the rule in `src/check/rules.odin` and the code it tests.
 
 2. **Autoplay**: `tools/check.sh autoplay --minutes 30 --seed N`. A bot plays for that long on meadow N, at random, and prints a report: anomalies (things that should never happen, with when and where), game overs and their causes, his body every five minutes, the share of the time each store spent lacking or full, what went into the sack and what was eaten, how much it built and penned, what his weight went on (kilograms burned by walking, sprinting, gathering, fighting, knocks, stings and his muscle), and everything he said with how often (a rare line, like "STOMP!", tells you a rare thing did happen; a missing one that it never did). Run at least three seeds of 30 minutes, and one of 90. The same seed always gives the same run, so anything you find can be reproduced.
 

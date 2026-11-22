@@ -23,7 +23,24 @@ import "core:math/linalg"
 QUAD_ANIMALS :: #config(QUAD_ANIMALS, true) // false draws the goats as before, from shapes
 PACK_FOX :: #config(PACK_FOX, true) // the fox from the pack; false draws the asset pilot's fox instead (-define:PACK_FOX=false)
 QUAD_EYE_SIZE :: f32(0.11) // the cartoon eyes, in the animal's own units (it is scaled by its radius)
-QUAD_RUN :: f32(0.7) // above this share of its top speed it gallops rather than walks
+// How it goes from standing to walking to galloping, by its speed (m/s):
+// each blends into the next, on one stride cycle, so nothing jumps.
+QUAD_WALK_FROM :: f32(0.08) // it starts to walk,
+QUAD_WALK_FULL :: f32(0.4) // and is walking from here;
+QUAD_GALLOP_FROM :: f32(3.2) // the gallop starts to take over (only a charge is this fast: chasing, backing off or trotting up it walks, briskly),
+QUAD_GALLOP_FULL :: f32(4.2) // and has from here
+QUAD_GALLOP_SLOWEST :: f32(0.65) // a gallop's legs never go slower than this share of their own pace
+QUAD_SHORT_STEP :: f32(0.6) // going slowly it takes shorter steps: this share of the walk's own, quicker for it,
+QUAD_LONG_STEP_AT :: f32(2.5) // growing to the full step at this speed (m/s)
+QUAD_HEAD_TURN :: f32(0.9) // how far (radians) a packed animal turns its head to watch him,
+QUAD_HEAD_SPEED :: f32(3.5) // how fast it turns it (radians a second; with him behind it, it looks ahead)
+QUAD_SQUARE_UP :: f32(0.9) // the pack's fox: slower than this (m/s) near him, it keeps facing him
+// A goat on four legs cannot slide sideways (see quad_steer):
+QUAD_GOAT_ACCEL :: f32(12) // how fast it gets up to speed, or stops (m/s each second; the drawn ones 10),
+QUAD_TURN :: f32(4.5) // how fast it turns (radians a second),
+QUAD_BACKWARDS :: f32(1.1) // how fast it backs off, facing him (m/s),
+QUAD_ASIDE :: f32(0.8) // crowded (wanting to go sideways this fast, m/s), it turns and walks aside a few steps,
+QUAD_TURN_STEP :: f32(0.35) // turning on the spot, its hooves step as if it walked this far (m) for each radian
 
 Quad_Vertex :: [17]f32 // position, flat normal, smooth normal, four bones, four weights
 Quad_Group :: struct {
@@ -169,50 +186,153 @@ quad_reach :: proc(pose: ^[QUAD_MAX_BONES]Mat4, bones: []int, root, tip, target:
 	}
 }
 
-// What the animal is doing, as an animation and how far into it (seconds).
-quad_action :: proc(m: ^Quad_Model, e: Enemy) -> (clip: string, t: f32) {
+// What the animal is doing, as an animation and how far into it (seconds),
+// for everything but going about on its feet (see quad_moving).
+quad_action :: proc(m: ^Quad_Model, e: Enemy) -> (clip: string, t: f32, moving: bool) {
 	offset := e.home.x * 0.37 + e.home.y * 0.53 // so that a herd does not move as one
-	speed := linalg.length(e.vel)
 	switch e.state {
 	case .Dead:
-		return "Death", 99
+		return "Death", 99, false
 	case .Swimming:
 		if e.ko {
-			return "Death", 99
+			return "Death", 99, false
 		}
-		return "Gallop", quad_stepped(m, "Gallop", e)
+		c, _ := quad_clip(m, "Gallop")
+		return "Gallop", e.gait * f32(c.count) / c.fps, false
 	case .Flying:
-		return "Gallop_Jump", 0.4
+		return "Gallop_Jump", 0.4, false
 	case .Held:
 		if e.ko {
-			return "Death", 99 // (lying no more: see quad_skin)
+			return "Death", 99, false // (lying no more: see quad_skin)
 		}
-		return "Gallop", e.hop / math.TAU // kicking
+		return "Gallop", e.hop / math.TAU, false // kicking
 	case .Dizzy:
-		return "Idle_HitReact_Left", 0.25
+		return "Idle_HitReact_Left", 0.25, false
 	case .Chase, .Gone:
 	}
-	switch {
-	case e.licking:
-		return "Eating", g.time + offset
-	case speed < 0.3:
-		return "Idle", g.time + offset
-	case speed > ENEMY_SPEED[e.kind] * QUAD_RUN || e.hunt == .Charge:
-		return "Gallop", quad_stepped(m, "Gallop", e)
+	if e.licking {
+		return "Eating", g.time + offset, false
 	}
-	return "Walk", quad_stepped(m, "Walk", e)
+	return "Idle", g.time + offset, true
 }
 
-// How far into a walking or running animation an animal is, by how far it
-// has gone: one cycle for each stride (measured from the animation when it
-// was packed), so its legs keep step with the ground and do not slide.
-quad_stepped :: proc(m: ^Quad_Model, name: string, e: Enemy) -> f32 {
-	c, ok := quad_clip(m, name)
-	if !ok || c.stride <= 0 {
-		return e.hop / math.TAU
+// How much of a walk (against standing), and of a gallop (against a walk),
+// there is at this speed.
+quad_mix :: proc(speed: f32) -> (walk, gallop: f32) {
+	walk = smooth(clamp((speed - QUAD_WALK_FROM) / (QUAD_WALK_FULL - QUAD_WALK_FROM), 0, 1))
+	gallop = smooth(clamp((speed - QUAD_GALLOP_FROM) / (QUAD_GALLOP_FULL - QUAD_GALLOP_FROM), 0, 1))
+	return
+}
+
+// Strides a second at this speed: as many as carry it over the ground at
+// that speed (each stride measured from the animation when it was packed),
+// so its planted feet stay put; but a gallop no slower than looks right.
+quad_stride_rate :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
+	qk, ok := quad_model_for(kind)
+	if !ok {
+		return 0
 	}
-	stride := c.stride * ENEMY_RADIUS[e.kind] // metres a cycle
-	return e.gait / stride * f32(c.count) / c.fps
+	m := &QUAD_MODELS[qk]
+	r := ENEMY_RADIUS[kind]
+	walk, has_walk := quad_clip(m, "Walk")
+	run, has_run := quad_clip(m, "Gallop")
+	if !has_walk || !has_run || walk.stride <= 0 || run.stride <= 0 {
+		return speed
+	}
+	pace := abs(speed) // (going backwards, the same strides, the other way)
+	_, gallop := quad_mix(pace)
+	walking := pace / (walk.stride * r * quad_step(pace))
+	running := max(pace / (run.stride * r), QUAD_GALLOP_SLOWEST * run.fps / f32(run.count))
+	return math.sign(speed) * lerp(walking, running, gallop)
+}
+
+// How long a walking step is at this speed, as a share of the walk's own.
+quad_step :: proc(pace: f32) -> f32 {
+	return lerp(QUAD_SHORT_STEP, 1, clamp(pace / QUAD_LONG_STEP_AT, 0, 1))
+}
+
+// Whether this kind is a goat on four legs that step (see quad_steer).
+quad_legged :: proc(kind: Enemy_Kind) -> bool {
+	_, packed := quad_model_for(kind)
+	return packed && (kind == .Goat || kind == .Billy)
+}
+
+// Moves a goat on four legs towards the way the game wants it to go
+// (target, m/s), as an animal on legs can: it goes the way it faces, turns
+// to change its way, and never slides sideways. Squaring up to him it keeps
+// facing him and steps forwards or slowly backwards; otherwise it turns
+// towards where it is going and walks there (it does not back off far, or
+// fast). Turning on the spot, its hooves step round. Its head turns to
+// watch him, smoothly, and looks ahead again when he is behind it.
+quad_steer :: proc(e: ^Enemy, target: Vec2, dt: f32) {
+	to := g.prosio.pos - e.pos
+	heading := e.facing
+	backs := e.squaring
+	e.detour_t -= dt
+	if e.squaring && e.detour_t <= 0 && length2(to) > 0.01 {
+		// Crowded by another goat as it squares up: it turns and walks
+		// aside a few steps rather than edging sideways.
+		side := Vec2{to.y, -to.x} / length2(to)
+		aside := dot2(target, side)
+		if abs(aside) > QUAD_ASIDE {
+			aim := target
+			e.detour = math.atan2(aim.x, aim.y)
+			e.detour_t = 0.6
+		}
+	}
+	if e.detour_t > 0 {
+		heading = e.detour // going round something in its way
+		backs = false
+	} else if e.squaring && length2(to) > 0.01 {
+		heading = math.atan2(to.x, to.y)
+	} else if length2(target) > QUAD_WALK_FROM {
+		heading = math.atan2(target.x, target.y)
+	}
+	before := e.facing
+	e.facing = approach_angle(e.facing, heading, QUAD_TURN * dt)
+	turning := abs(angle_diff(e.facing, before)) / max(dt, 1e-4)
+
+	// Only what lies ahead (or behind) of the target is any use to it.
+	ahead := facing_dir(e.facing)
+	want := dot2(target, ahead)
+	want = backs ? max(want, -QUAD_BACKWARDS) : max(want, 0)
+	forward := dot2(e.vel, ahead)
+	step := QUAD_GOAT_ACCEL * dt
+	forward += clamp(want - forward, -step, step)
+	e.vel = ahead * forward
+
+	// Its legs step with it, and round as it turns.
+	legs := max(forward, -QUAD_BACKWARDS * 1.5) // (bounced back hard, its hooves skid)
+	if turning * QUAD_TURN_STEP > abs(legs) {
+		legs = (want < 0 ? -1 : 1) * turning * QUAD_TURN_STEP // (backing off as it turns, it steps backwards)
+	}
+	quick := 2 * step
+	e.pace += clamp(legs - e.pace, -quick, quick)
+	e.gait += quad_stride_rate(e.kind, e.pace) * dt
+
+	// Its head watches him when he is near and in front of it.
+	look: f32 = 0
+	if length2(to) < 9 && length2(to) > 0.01 {
+		off := angle_diff(math.atan2(to.x, to.y), e.facing)
+		if abs(off) < QUAD_HEAD_TURN + 0.6 {
+			look = clamp(off, -QUAD_HEAD_TURN, QUAD_HEAD_TURN)
+		}
+	}
+	e.look += clamp(look - e.look, -QUAD_HEAD_SPEED * dt, QUAD_HEAD_SPEED * dt)
+}
+
+// Blends two sets of bone frames: k of the way from a to b, into a.
+quad_blend :: proc(a, b: ^[QUAD_MAX_BONES]Mat4, k: f32, count: int) {
+	if k <= 0 {
+		return
+	}
+	for i in 0 ..< count {
+		for c in 0 ..< 4 {
+			for r in 0 ..< 3 {
+				a[i][r, c] += (b[i][r, c] - a[i][r, c]) * k
+			}
+		}
+	}
 }
 
 // Each bone's whole journey for an animal as it is now: from rest, through
@@ -226,8 +346,40 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 	m := &QUAD_MODELS[qk]
 	r := ENEMY_RADIUS[e.kind]
 	bones: [QUAD_MAX_BONES]Mat4
-	clip, t := quad_action(m, e)
+	clip, t, moving := quad_action(m, e)
 	quad_sample(m, clip, t, &bones)
+	if moving {
+		// On its feet: standing, walking and galloping, blended by its speed
+		// on one stride cycle (e.gait).
+		pace := quad_legged(e.kind) ? abs(e.pace) : linalg.length(e.vel)
+		walk, gallop := quad_mix(pace)
+		if walk > 0 {
+			strides: [2][QUAD_MAX_BONES]Mat4
+			for name, i in ([2]string{"Walk", "Gallop"}) {
+				c, _ := quad_clip(m, name)
+				quad_sample(m, name, e.gait * f32(c.count) / c.fps, &strides[i])
+			}
+			// A shorter step is the walk drawn part of the way back towards
+			// standing (its stride shortened to match: see quad_stride_rate).
+			quad_blend(&strides[0], &bones, 1 - quad_step(pace), len(m.bones))
+			quad_blend(&strides[0], &strides[1], gallop, len(m.bones))
+			quad_blend(&bones, &strides[0], walk, len(m.bones))
+		}
+		// Near him, it turns its head to watch him (see quad_steer).
+		turn := e.look
+		if turn != 0 {
+			neck := quad_bone(m, "Neck1")
+			if neck >= 0 {
+				pivot := Vec3{bones[neck][0, 3], bones[neck][1, 3], bones[neck][2, 3]}
+				look := translate(pivot) * rot_y(turn) * translate(-pivot)
+				for name, b in m.bones {
+					if len(name) >= 4 && (name[:4] == "Neck" || name[:4] == "Head" || name[:3] == "Ear") {
+						bones[b] = look * bones[b]
+					}
+				}
+			}
+		}
+	}
 
 	if e.state == .Held && e.ko {
 		// Limp, as the death animation leaves it, but held: the body is not
