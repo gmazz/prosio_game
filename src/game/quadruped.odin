@@ -39,8 +39,10 @@ QUAD_SQUARE_UP :: f32(0.9) // the pack's fox: slower than this (m/s) near him, i
 QUAD_GOAT_ACCEL :: f32(12) // how fast it gets up to speed, or stops (m/s each second; the drawn ones 10),
 QUAD_TURN :: f32(4.5) // how fast it turns (radians a second),
 QUAD_BACKWARDS :: f32(1.1) // how fast it backs off, facing him (m/s),
-QUAD_ASIDE :: f32(0.8) // crowded (wanting to go sideways this fast, m/s), it turns and walks aside a few steps,
-QUAD_TURN_STEP :: f32(0.35) // turning on the spot, its hooves step as if it walked this far (m) for each radian
+QUAD_SLOWEST :: f32(0.8) // it walks no slower than this (m/s): it stands, or walks;
+QUAD_SET_OFF :: f32(0.3) // standing, it sets off once it wants to go this fast, and walking it stops below
+QUAD_STOP :: f32(0.12) // this (so it does not creep, its legs barely moving),
+QUAD_TURN_STEP :: f32(0.25) // turning on the spot, its hooves step as if it walked this far (m) for each radian
 
 Quad_Vertex :: [17]f32 // position, flat normal, smooth normal, four bones, four weights
 Quad_Group :: struct {
@@ -260,26 +262,16 @@ quad_legged :: proc(kind: Enemy_Kind) -> bool {
 // Moves a goat on four legs towards the way the game wants it to go
 // (target, m/s), as an animal on legs can: it goes the way it faces, turns
 // to change its way, and never slides sideways. Squaring up to him it keeps
-// facing him and steps forwards or slowly backwards; otherwise it turns
-// towards where it is going and walks there (it does not back off far, or
-// fast). Turning on the spot, its hooves step round. Its head turns to
+// facing him and steps forwards or slowly backwards (whatever pushes it
+// sideways, another goat crowding it, is no use to it then); otherwise it
+// turns towards where it is going and walks there. It stands, or walks at a
+// walking pace, and never creeps. Turning on the spot, its hooves step round. Its head turns to
 // watch him, smoothly, and looks ahead again when he is behind it.
 quad_steer :: proc(e: ^Enemy, target: Vec2, dt: f32) {
 	to := g.prosio.pos - e.pos
 	heading := e.facing
 	backs := e.squaring
 	e.detour_t -= dt
-	if e.squaring && e.detour_t <= 0 && length2(to) > 0.01 {
-		// Crowded by another goat as it squares up: it turns and walks
-		// aside a few steps rather than edging sideways.
-		side := Vec2{to.y, -to.x} / length2(to)
-		aside := dot2(target, side)
-		if abs(aside) > QUAD_ASIDE {
-			aim := target
-			e.detour = math.atan2(aim.x, aim.y)
-			e.detour_t = 0.6
-		}
-	}
 	if e.detour_t > 0 {
 		heading = e.detour // going round something in its way
 		backs = false
@@ -297,6 +289,12 @@ quad_steer :: proc(e: ^Enemy, target: Vec2, dt: f32) {
 	want := dot2(target, ahead)
 	want = backs ? max(want, -QUAD_BACKWARDS) : max(want, 0)
 	forward := dot2(e.vel, ahead)
+	// It stands, or it walks at a walking pace: it does not creep.
+	if abs(want) < (abs(forward) > 0.05 ? QUAD_STOP : QUAD_SET_OFF) {
+		want = 0
+	} else if abs(want) < QUAD_SLOWEST {
+		want = math.sign(want) * QUAD_SLOWEST
+	}
 	step := QUAD_GOAT_ACCEL * dt
 	forward += clamp(want - forward, -step, step)
 	e.vel = ahead * forward

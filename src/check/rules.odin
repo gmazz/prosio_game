@@ -419,7 +419,8 @@ rules_packed_animals :: proc() {
 			game.add_enemy(.Goat, p.pos + game.facing_dir(a) * 4.5)
 		}
 		moves := [8]bit_set[game.Button]{{}, {.Left}, {}, {.Right}, {.Up}, {}, {.Down}, {}}
-		frames, sliding, stumbling, bumps: int
+		frames, sliding, stumbling, bumps, creeping, backwards: int
+		slow: [3]int // how many frames running each goat has been creeping along
 		worst_head, quickest: f32
 		last_head: [3]f32
 		before: [3]game.Vec2
@@ -467,6 +468,21 @@ rules_packed_animals :: proc() {
 				if turning < 0.3 && abs(forward - e.pace) > 0.4 {
 					stumbling += 1
 				}
+				// It stands or walks: it never creeps along for long, its legs
+				// barely moving; and squaring up, it never turns its back on him.
+				pace := game.length2(e.vel)
+				if pace > 0.1 && pace < 0.7 {
+					slow[k] += 1
+					if slow[k] > 12 {
+						creeping += 1
+					}
+				} else {
+					slow[k] = 0
+				}
+				to := p.pos - e.pos
+				if e.squaring && abs(game.angle_diff(math.atan2(to.x, to.y), e.facing)) > 2 {
+					backwards += 1
+				}
 				head := e.facing + e.look
 				worst_head = max(worst_head, abs(game.angle_diff(head, last_head[k])) / dt)
 				last_head[k] = head
@@ -474,6 +490,7 @@ rules_packed_animals :: proc() {
 			}
 		}
 		check("goats round him never slide sideways, their legs keep step with the ground, and their heads turn smoothly", frames > 2000 && f32(sliding) < 0.02 * f32(frames) && f32(stumbling) < 0.03 * f32(frames) && worst_head < game.QUAD_TURN + game.QUAD_HEAD_SPEED + 0.5, fmt.tprintf("%d goat-frames (%d of them bumping into something): sideways in %.1f%%, legs out of step in %.1f%%, the head turning at most %.1f rad/s, fastest %.1f m/s", frames, bumps, 100 * f32(sliding) / f32(max(frames, 1)), 100 * f32(stumbling) / f32(max(frames, 1)), worst_head, quickest))
+		check("goats round him stand or walk, never creeping along, and squaring up to him never turn their backs on him", f32(creeping) < 0.01 * f32(frames) && f32(backwards) < 0.01 * f32(frames), fmt.tprintf("creeping along in %.1f%% of goat-frames, back to him while squaring up in %.1f%%", 100 * f32(creeping) / f32(max(frames, 1)), 100 * f32(backwards) / f32(max(frames, 1))))
 		check("a goat runs faster than a turkey", game.ENEMY_SPEED[.Goat] > game.ENEMY_SPEED[.Turkey], fmt.tprintf("goat %.1f m/s, turkey %.1f", game.ENEMY_SPEED[.Goat], game.ENEMY_SPEED[.Turkey]))
 	}
 
