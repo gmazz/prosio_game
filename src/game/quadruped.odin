@@ -17,12 +17,13 @@ import "core:math/linalg"
 // are turned and stretched to reach his hooves. The mesh is bent on the CPU
 // each time it is drawn, into fixed buffers: nothing is allocated.
 //
-// The pack's own eyes are hidden: the game's big cartoon eyes are drawn in
-// their place, so a goat still shuts them when dizzy and shows crosses when
-// dead. A nanny goat's udder still shows whether she has milk.
+// The eyes come from the mesh, with separate marks for dizzy and dead poses.
 QUAD_ANIMALS :: #config(QUAD_ANIMALS, true) // false draws the goats as before, from shapes
 PACK_FOX :: #config(PACK_FOX, true) // the fox from the pack; false draws the asset pilot's fox instead (-define:PACK_FOX=false)
-QUAD_EYE_SIZE :: f32(0.11) // the cartoon eyes, in the animal's own units (it is scaled by its radius)
+QUAD_EYE_SIZE :: f32(0.047) // small closed or crossed eye marks in this rig's units
+QUAD_GRAB_KICK :: f32(0.40)
+QUAD_GRAB_TWIST :: f32(0.16)
+QUAD_FLOOR_EPSILON :: f32(0.0001)
 // How it goes from standing to walking to galloping, by its speed (m/s):
 // each blends into the next, on one stride cycle, so nothing jumps.
 QUAD_WALK_FROM :: f32(0.08) // it starts to walk,
@@ -34,7 +35,6 @@ QUAD_SHORT_STEP :: f32(0.6) // going slowly it takes shorter steps: this share o
 QUAD_LONG_STEP_AT :: f32(2.5) // growing to the full step at this speed (m/s)
 QUAD_HEAD_TURN :: f32(0.9) // how far (radians) a packed animal turns its head to watch him,
 QUAD_HEAD_SPEED :: f32(3.5) // how fast it turns it (radians a second; with him behind it, it looks ahead)
-QUAD_SQUARE_UP :: f32(0.9) // the pack's fox: slower than this (m/s) near him, it keeps facing him
 // A goat on four legs cannot slide sideways (see quad_steer):
 QUAD_GOAT_ACCEL :: f32(12) // how fast it gets up to speed, or stops (m/s each second; the drawn ones 10),
 QUAD_TURN :: f32(4.5) // how fast it turns (radians a second),
@@ -204,16 +204,10 @@ quad_action :: proc(m: ^Quad_Model, e: Enemy) -> (clip: string, t: f32, moving: 
 	case .Flying:
 		return "Gallop_Jump", 0.4, false
 	case .Held:
-		if e.ko {
-			return "Death", 99, false // (lying no more: see quad_skin)
-		}
-		return "Gallop", e.hop / math.TAU, false // kicking
+		return "Idle", 0, false // a separate template braces or kicks
 	case .Dizzy:
 		return "Idle_HitReact_Left", 0.25, false
 	case .Chase, .Gone:
-	}
-	if e.licking {
-		return "Eating", g.time + offset, false
 	}
 	return "Idle", g.time + offset, true
 }
@@ -253,13 +247,13 @@ quad_step :: proc(pace: f32) -> f32 {
 	return lerp(QUAD_SHORT_STEP, 1, clamp(pace / QUAD_LONG_STEP_AT, 0, 1))
 }
 
-// Whether this kind is a goat on four legs that step (see quad_steer).
+// Whether this kind uses the packed quadruped motion templates.
 quad_legged :: proc(kind: Enemy_Kind) -> bool {
 	_, packed := quad_model_for(kind)
-	return packed && (kind == .Goat || kind == .Billy)
+	return packed
 }
 
-// Moves a goat on four legs towards the way the game wants it to go
+// Moves a quadruped towards the way the game wants it to go
 // (target, m/s), as an animal on legs can: it goes the way it faces, turns
 // to change its way, and never slides sideways. Squaring up to him it keeps
 // facing him and steps forwards or slowly backwards (whatever pushes it
@@ -268,21 +262,29 @@ quad_legged :: proc(kind: Enemy_Kind) -> bool {
 // walking pace, and never creeps. Turning on the spot, its hooves step round. Its head turns to
 // watch him, smoothly, and looks ahead again when he is behind it.
 quad_steer :: proc(e: ^Enemy, target: Vec2, dt: f32) {
+	target := target
 	to := g.prosio.pos - e.pos
 	heading := e.facing
 	backs := e.squaring
+	if e.yield_t > 0 {
+		target = e.yield_dir * QUAD_YIELD_SPEED
+		if e.kind == .Fox && e.has_loot {
+			target += normalize2(e.home - e.pos) * QUAD_YIELD_SPEED
+		}
+		backs = false
+		e.squaring = false
+	}
 	e.detour_t -= dt
 	if e.detour_t > 0 {
 		heading = e.detour // going round something in its way
+		target = facing_dir(heading) * length2(target)
 		backs = false
 	} else if e.squaring && length2(to) > 0.01 {
 		heading = math.atan2(to.x, to.y)
 	} else if length2(target) > QUAD_WALK_FROM {
 		heading = math.atan2(target.x, target.y)
 	}
-	before := e.facing
 	e.facing = approach_angle(e.facing, heading, QUAD_TURN * dt)
-	turning := abs(angle_diff(e.facing, before)) / max(dt, 1e-4)
 
 	// Only what lies ahead (or behind) of the target is any use to it.
 	ahead := facing_dir(e.facing)
@@ -298,15 +300,6 @@ quad_steer :: proc(e: ^Enemy, target: Vec2, dt: f32) {
 	step := QUAD_GOAT_ACCEL * dt
 	forward += clamp(want - forward, -step, step)
 	e.vel = ahead * forward
-
-	// Its legs step with it, and round as it turns.
-	legs := max(forward, -QUAD_BACKWARDS * 1.5) // (bounced back hard, its hooves skid)
-	if turning * QUAD_TURN_STEP > abs(legs) {
-		legs = (want < 0 ? -1 : 1) * turning * QUAD_TURN_STEP // (backing off as it turns, it steps backwards)
-	}
-	quick := 2 * step
-	e.pace += clamp(legs - e.pace, -quick, quick)
-	e.gait += quad_stride_rate(e.kind, e.pace) * dt
 
 	// Its head watches him when he is near and in front of it.
 	look: f32 = 0
@@ -342,6 +335,10 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 		return {}, false
 	}
 	m := &QUAD_MODELS[qk]
+	if quad_drag_grounded(e) {
+		quad_drag_skin(qk, pose, e, skin)
+		return qk, true
+	}
 	r := ENEMY_RADIUS[e.kind]
 	bones: [QUAD_MAX_BONES]Mat4
 	clip, t, moving := quad_action(m, e)
@@ -349,7 +346,7 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 	if moving {
 		// On its feet: standing, walking and galloping, blended by its speed
 		// on one stride cycle (e.gait).
-		pace := quad_legged(e.kind) ? abs(e.pace) : linalg.length(e.vel)
+		pace := abs(e.motion.active ? e.motion.gait_speed : e.pace)
 		walk, gallop := quad_mix(pace)
 		if walk > 0 {
 			strides: [2][QUAD_MAX_BONES]Mat4
@@ -362,6 +359,11 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 			quad_blend(&strides[0], &bones, 1 - quad_step(pace), len(m.bones))
 			quad_blend(&strides[0], &strides[1], gallop, len(m.bones))
 			quad_blend(&bones, &strides[0], walk, len(m.bones))
+		}
+		if e.motion.graze > 0.001 {
+			graze: [QUAD_MAX_BONES]Mat4
+			quad_sample(m,"Eating",t,&graze)
+			quad_blend(&bones,&graze,e.motion.graze,len(m.bones))
 		}
 		// Near him, it turns its head to watch him (see quad_steer).
 		turn := e.look
@@ -379,17 +381,18 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 		}
 	}
 
-	if e.state == .Held && e.ko {
-		// Limp, as the death animation leaves it, but held: the body is not
-		// laid down on the ground (it hangs where his hand puts it), so the
-		// animation's own fall is taken out again.
+	limp := e.ko ? 1 : e.motion.limp_blend
+	if pose.held && limp > 0.001 {
+		// Reuse the slack limb pose but remove the clip's fall to the
+		// ground. The carry chain controls the body's position.
+		death: [QUAD_MAX_BONES]Mat4
+		quad_sample(m, "Death", 99, &death)
 		body := quad_bone(m, "Body")
-		if body >= 0 {
-			undo := linalg.inverse(transmute(Mat4)m.rest[body]) * linalg.inverse(bones[body])
-			for b in 0 ..< len(m.bones) {
-				bones[b] = undo * bones[b]
-			}
+		undo := linalg.inverse(transmute(Mat4)m.rest[body]) * linalg.inverse(death[body])
+		for b in 0 ..< len(m.bones) {
+			death[b] = undo * death[b]
 		}
+		quad_blend(&bones, &death, limp, len(m.bones))
 	}
 	rear, front := pose.rear, pose.front
 	lying := e.state == .Dead || (e.state == .Swimming && e.ko)
@@ -405,48 +408,105 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 		rear = translate({e.pos.x, lift, e.pos.y}) * rot_y(e.facing) * scale({r, r, r}) * turn
 		front = rear
 	}
-	if pose.held && e.kind == .Fox {
-		// Held by the tip of its tail: the tail runs to his hoof.
-		root, has_root := quad_socket(m, "tail_root")
-		tip, has_tip := quad_socket(m, "tail_tip")
-		if has_root && has_tip {
-			tail: [QUAD_MAX_BONES]int
-			n := 0
-			for name, b in m.bones {
-				if len(name) >= 4 && name[:4] == "Tail" {
-					tail[n] = b
-					n += 1
-				}
-			}
-			hand := linalg.inverse(rear) * [4]f32{pose.hand.x, pose.hand.y, pose.hand.z, 1}
-			quad_reach(&bones, tail[:n], quad_carry(m, &bones, root.bone, root.pos), quad_carry(m, &bones, tip.bone, tip.pos), hand.xyz)
-		}
-	} else if pose.held && !held_up(e.kind) {
-		// Both hind legs run to his hooves, one in each.
-		inv := linalg.inverse(rear)
-		for side in ([2]string{"L", "R"}) {
-			s: f32 = side == "L" ? 1 : -1
-			hip, ok_hip := quad_socket(m, side == "L" ? "hip_L" : "hip_R")
-			hoof, ok_hoof := quad_socket(m, side == "L" ? "hoof_L" : "hoof_R")
-			if !ok_hip || !ok_hoof {
+	if e.motion.active && (e.state == .Chase || e.state == .Dizzy) {
+		// Counter-rotate the chest and let the hips follow behind the turn.
+		rear = rear * rot_y(e.motion.rear_twist) * rot_z(e.motion.lean)
+		front = front * rot_y(-e.motion.rear_twist * 0.30) * rot_z(e.motion.lean * 0.65)
+	}
+	phase := e.motion.struggle_phase
+	struggle: f32
+	if pose.held && !e.ko {
+		burst := 0.45 + 0.55 * math.pow((1 + math.sin(phase * 0.26)) * 0.5, 2)
+		struggle = burst * (1 - limp)
+		front *= rot_y(QUAD_GRAB_TWIST * struggle * math.sin(phase * 0.63)) *
+		         rot_z(QUAD_GRAB_TWIST * struggle * math.sin(phase * 0.53))
+	}
+	for b in 0..<len(m.bones) {
+		bones[b] = (m.front[b] ? front : rear) * bones[b]
+	}
+	if struggle > 0.001 {
+		// Free limbs recoil independently. Keep the hooves in Prosio's
+		// hands out of this pass; those use the grip solver below.
+		legs := quad_leg_rig(qk)
+		frontward := facing_dir(e.facing)
+		for leg, i in legs^ {
+			if e.kind != .Fox && i % 2 == 1 {
 				continue
 			}
-			leg := [5]int {
-				quad_bone(m, side == "L" ? "BackLeg.L" : "BackLeg.R"),
-				quad_bone(m, side == "L" ? "BackUpperLeg.L" : "BackUpperLeg.R"),
-				quad_bone(m, side == "L" ? "BackLowerLeg.L" : "BackLowerLeg.R"),
-				quad_bone(m, side == "L" ? "IKBackLeg.L" : "IKBackLeg.R"),
-				quad_bone(m, side == "L" ? "FFB.L" : "FFB.R"),
-			}
-			grip := quad_grip(pose, s)
-			grip = (inv * [4]f32{grip.x, grip.y, grip.z, 1}).xyz
-			quad_reach(&bones, leg[:], quad_carry(m, &bones, hip.bone, hip.pos), quad_carry(m, &bones, hoof.bone, hoof.pos), grip)
+			sole := quad_origin(bones[leg.sole])
+			pulse := math.sin(phase * (0.67 + f32(i) * 0.11) + f32(i) * 1.9) * 0.5 + 0.5
+			kick := pulse * pulse * QUAD_GRAB_KICK * r * struggle
+			airborne := smooth(clamp(sole.y / (r * 0.55), 0, 1))
+			target := sole + Vec3{-frontward.x * kick, kick * (0.65 + airborne), -frontward.y * kick}
+			target.y = max(target.y, leg.contact_y * r)
+			foot := translate(target - sole) * bones[leg.sole]
+			quad_reach_foot(&bones, leg, foot, frontward)
 		}
 	}
-	for b in 0 ..< len(m.bones) {
-		skin[b] = (m.front[b] ? front : rear) * bones[b] * transmute(Mat4)m.rest[b]
+	quad_held_grips(m, &bones, pose, e.kind)
+	quad_build_skin(m, &bones, skin)
+	if e.state == .Dead || e.state == .Dizzy || (pose.held && !in_pond(e.pos)) {
+		// The authored death pose uses a different floor from the standing
+		// mesh. Find support after deforming, with the final silhouette.
+		for _ in 0..<(pose.held ? 2 : 1) {
+			low := quad_mesh_low(m, skin)
+			lift := e.state == .Dead ? -low : max(-low,0)
+			if abs(lift) <= QUAD_FLOOR_EPSILON {break}
+			for b in 0..<len(m.bones) {bones[b][1,3] += lift}
+			quad_held_grips(m, &bones, pose, e.kind)
+			quad_build_skin(m, &bones, skin)
+		}
 	}
 	return qk, true
+}
+
+quad_build_skin :: proc(m: ^Quad_Model, bones: ^[QUAD_MAX_BONES]Mat4, skin: ^[QUAD_MAX_BONES]Mat4) {
+	for b in 0..<len(m.bones) {
+		skin[b] = bones[b]*transmute(Mat4)m.rest[b]
+	}
+}
+
+quad_mesh_low :: proc(m: ^Quad_Model, skin: ^[QUAD_MAX_BONES]Mat4) -> f32 {
+	low: f32 = 1e9
+	for v in m.mesh {
+		y: f32
+		for k in 0..<4 {
+			w := v[13+k]
+			if w <= 0 {continue}
+			s := &skin[int(v[9+k])]
+			y += w*(s[1,0]*v[0] + s[1,1]*v[1] + s[1,2]*v[2] + s[1,3])
+		}
+		low = min(low,y)
+	}
+	return low
+}
+
+quad_held_grips :: proc(m: ^Quad_Model, bones: ^[QUAD_MAX_BONES]Mat4, pose: Animal_Pose, kind: Enemy_Kind) {
+	if !pose.held {return}
+	if kind == .Fox {
+		root, _ := quad_socket(m,"tail_root")
+		tip, _ := quad_socket(m,"tail_tip")
+		tail: [QUAD_MAX_BONES]int
+		n := 0
+		for name, b in m.bones {
+			if len(name) >= 4 && name[:4] == "Tail" {
+				tail[n] = b
+				n += 1
+			}
+		}
+		quad_reach(bones, tail[:n], quad_carry(m,bones,root.bone,root.pos),quad_carry(m,bones,tip.bone,tip.pos),pose.hand)
+		return
+	}
+	for side in ([2]f32{1,-1}) {
+		left := side > 0
+		hip, _ := quad_socket(m,left ? "hip_L" : "hip_R")
+		hoof, _ := quad_socket(m,left ? "hoof_L" : "hoof_R")
+		names := left ? [5]string{"BackLeg.L","BackUpperLeg.L","BackLowerLeg.L","IKBackLeg.L","FFB.L"} :
+		                [5]string{"BackLeg.R","BackUpperLeg.R","BackLowerLeg.R","IKBackLeg.R","FFB.R"}
+		leg: [5]int
+		for name,i in names {leg[i]=quad_bone(m,name)}
+		quad_reach(bones,leg[:],quad_carry(m,bones,hip.bone,hip.pos),quad_carry(m,bones,hoof.bone,hoof.pos),quad_grip(pose,side))
+	}
 }
 
 // Where one of a held goat's hind hooves is gripped: his hand, a little to
@@ -462,13 +522,14 @@ quad_socket_at :: proc(qk: Quad_Kind, skin: ^[QUAD_MAX_BONES]Mat4, name: string)
 }
 
 // Draws an animal from its packed model. False if its kind has none.
-draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> bool {
+draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> (head_top: Vec3, ok: bool) {
 	skin: [QUAD_MAX_BONES]Mat4
-	qk, ok := quad_skin(pose, e, &skin)
-	if !ok {
-		return false
+	qk, found := quad_skin(pose, e, &skin)
+	if !found {
+		return {}, false
 	}
 	m := &QUAD_MODELS[qk]
+	grounded := e.state != .Swimming && !in_pond(e.pos)
 	for v, i in m.mesh {
 		p, n, sn: Vec3
 		for k in 0 ..< 4 {
@@ -481,6 +542,7 @@ draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> bool {
 			n += w * (s^ * [4]f32{v[3], v[4], v[5], 0}).xyz
 			sn += w * (s^ * [4]f32{v[6], v[7], v[8], 0}).xyz
 		}
+		if grounded {p.y = max(0,p.y)}
 		quad_pos[i] = p
 		quad_flat[i] = linalg.normalize0(n)
 		quad_smooth[i] = linalg.normalize0(sn)
@@ -489,14 +551,15 @@ draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> bool {
 	shown: [QUAD_MAX_GROUPS]bool
 	for grp, i in m.groups {
 		colors[i], shown[i] = quad_color(e.kind, grp.name)
+		if (pose.dizzy || pose.dead) && quad_eye_material(grp.name) {shown[i] = false}
 	}
 	draw_quad_mesh(qk, len(m.mesh), colors[:len(m.groups)], shown[:len(m.groups)])
 
-	// The game's own cartoon eyes, and a nanny goat's udder.
+	// The sculpted eyes follow the head; only the closed-eye marks are drawn separately.
 	head := quad_bone(m, "Head")
 	for name in ([2]string{"eye_L", "eye_R"}) {
 		eye, has := quad_socket(m, name)
-		if !has || head < 0 {
+		if !has || head < 0 || (!pose.dizzy && !pose.dead) {
 			continue
 		}
 		z := linalg.normalize0(eye.normal)
@@ -522,26 +585,22 @@ draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> bool {
 			}
 		}
 	}
-	return true
+	head_top = quad_socket_at(qk, &skin, "eye_L") + {0, ENEMY_RADIUS[e.kind] * 0.5, 0}
+	return head_top, true
 }
 
-// The top of a packed animal's head, as it is now: where stars go round
-// when it is dizzy.
-quad_head_top :: proc(pose: Animal_Pose, e: Enemy) -> Vec3 {
-	skin: [QUAD_MAX_BONES]Mat4
-	qk, ok := quad_skin(pose, e, &skin)
-	if !ok {
-		return (pose.front * [4]f32{0, 2.3, 0.6, 1}).xyz
-	}
-	eye := quad_socket_at(qk, &skin, "eye_L")
-	return eye + {0, ENEMY_RADIUS[e.kind] * 0.5, 0}
+quad_eye_material :: proc(name: string) -> bool {
+	return len(name) >= 3 && name[:3] == "Eye"
 }
 
-// The colour of each part of a packed animal, by the material it came with
-// (and whether to draw it: the pack's eyes are not).
+// The colour of each part of a packed animal.
 quad_color :: proc(kind: Enemy_Kind, group: string) -> (Color, bool) {
-	if len(group) >= 3 && group[:3] == "Eye" {
-		return {}, false
+	if quad_eye_material(group) {
+		switch group {
+		case "Eye_Lighter": return {112,77,40,255}, true
+		case "Eye_White": return {226,211,177,255}, true
+		case: return ANIMAL_INK, true
+		}
 	}
 	if kind == .Fox {
 		switch group {

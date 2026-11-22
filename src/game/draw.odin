@@ -571,7 +571,10 @@ draw_enemy :: proc(e: Enemy) {
 			pace = 1 // paddling for all it is worth
 		}
 		stride := math.sin(e.hop) * pace
-		bob := abs(stride) * 0.07
+		bob: f32
+		if !quad_legged(e.kind) {
+			bob = abs(stride) * 0.07 // packed clips already move the body
+		}
 		lift := e.y
 		if e.state == .Swimming {
 			lift = -SWIM_SINK[e.kind] + 0.04 * math.sin(g.time * 5 + e.pos.y) // low in the water, bobbing
@@ -593,21 +596,21 @@ draw_enemy :: proc(e: Enemy) {
 			}
 		}
 	}
-	when PACK_FOX {
-		if e.kind == .Fox && draw_quad_enemy(pose, e) {
-			draw_enemy_marks(e, quad_head_top(pose, e))
-			return // the pack's fox (see quadruped.odin)
-		}
+	if head, drawn := draw_quad_enemy(pose, e); drawn {
+		draw_enemy_marks(e, head)
+		return
 	}
 	switch e.kind {
 	case .Turkey:
 		draw_turkey(pose, e)
 	case .Goat, .Billy:
-		if !draw_quad_enemy(pose, e) {
-			draw_goat(pose, e) // (with QUAD_ANIMALS off)
-		}
+		draw_goat(pose, e)
 	case .Fox:
-		draw_fox(pose, e)
+		when FOX_PROCEDURAL {
+			draw_fox(pose, e)
+		} else {
+			draw_workshop_fox(pose, e)
+		}
 	}
 	draw_enemy_marks(e, (pose.front * [4]f32{0, 2.3, 0.6, 1}).xyz)
 }

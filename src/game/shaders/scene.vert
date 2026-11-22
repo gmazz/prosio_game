@@ -7,6 +7,7 @@ uniform mat4 matModel;
 uniform mat4 matView;
 uniform mat4 matProjection;
 uniform float windTime;
+uniform float outlineExpansion;
 uniform float sway; // how far the top of the shape moves in the wind
 VARY vec3 normal;
 VARY vec3 position;
@@ -17,7 +18,9 @@ void main() {
     uv = vertexTexCoord;
     normal = normalize((matNormal * vec4(vertexNormal, 0.0)).xyz);
     position = (matModel * vec4(local, 1.0)).xyz;
-    if (sway > 0.0) {
+    if (outlineExpansion > 0.0) {
+        gl_Position = matProjection * matView * vec4(position + normal * outlineExpansion, 1.0);
+    } else if (sway > 0.0) {
         // Leaves move in the wind; the higher on the shape, the more.
         float phase = position.x * 0.37 + position.z * 0.29;
         vec3 push = vec3(sin(windTime * 1.7 + phase), 0.0, cos(windTime * 1.3 + phase * 1.3));

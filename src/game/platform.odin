@@ -239,6 +239,7 @@ platform_init :: proc(title: cstring, width, height: i32) {
 
 	material = rl.LoadMaterialDefault()
 	material.shader = rl.LoadShaderFromMemory(cstring(raw_data(VERTEX_SHADER)), cstring(raw_data(FRAGMENT_SHADER)))
+	when !FOX_PROCEDURAL {init_fox_meshes()}
 	surface_location = rl.GetShaderLocation(material.shader, "surface")
 	flash_location = rl.GetShaderLocation(material.shader, "hitFlash")
 	uniforms.fade = rl.GetShaderLocation(material.shader, "fade")
@@ -308,6 +309,7 @@ gen_frustum :: proc(top: f32, slices: int) -> rl.Mesh {
 }
 
 platform_shutdown :: proc() {
+	when !FOX_PROCEDURAL {for mesh in fox_meshes {rl.UnloadMesh(mesh)}}
 	if pixel_view.width > 0 {
 		rl.UnloadRenderTexture(pixel_view.target)
 		rl.UnloadRenderTexture(pixel_view.shadows)
@@ -544,10 +546,14 @@ draw_quad_mesh :: proc(k: Quad_Kind, count: int, colors: []Color, shown: []bool)
 		return
 	}
 	if outlines_enabled && outline_width > 0 {
-		for i in 0 ..< count {
-			quad_hull[i] = quad_pos[i] + quad_smooth[i] * outline_width
+		for grp, gidx in QUAD_MODELS[k].groups {
+			for i in grp.first ..< grp.first + grp.count {
+				// Collapse hidden eye triangles so they leave no outline.
+				quad_hull[i] = shown[gidx] ? quad_pos[i] + quad_smooth[i] * outline_width : quad_pos[grp.first]
+			}
 		}
 		rl.UpdateMeshBuffer(whole, 0, &quad_hull[0], bytes(count), 0)
+		rl.UpdateMeshBuffer(whole, 2, &quad_smooth[0], bytes(count), 0)
 		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(OUTLINE_COLOR)
 		flash := flash_value
 		if flash > 0 {
@@ -824,4 +830,58 @@ save_screenshot :: proc(path: cstring) {
 	}
 	rl.ExportImage(img, path)
 	rl.UnloadImage(img)
+}
+
+fox_meshes: [len(FOX_GROUPS)]rl.Mesh
+fox_outline_location: i32
+
+init_fox_meshes :: proc() {
+	vertices := #load("../../assets/fox/vertices.bin", [][6]f32)
+	indices := #load("../../assets/fox/indices.bin", []u16)
+	fox_outline_location = rl.GetShaderLocation(material.shader, "outlineExpansion")
+	for group, i in FOX_GROUPS {
+		mesh := &fox_meshes[i]
+		mesh.vertexCount = i32(group.vertex_count)
+		mesh.triangleCount = i32(group.index_count/3)
+		mesh.vertices = cast([^]f32)rl.MemAlloc(u32(group.vertex_count*3*size_of(f32)))
+		mesh.normals = cast([^]f32)rl.MemAlloc(u32(group.vertex_count*3*size_of(f32)))
+		mesh.indices = cast([^]u16)rl.MemAlloc(u32(group.index_count*size_of(u16)))
+		for v in 0..<group.vertex_count {
+			row := vertices[group.first_vertex+v]
+			copy(mesh.vertices[v*3:][:3], row[:3])
+			copy(mesh.normals[v*3:][:3], row[3:])
+		}
+		copy(mesh.indices[:group.index_count], indices[group.first_index:][:group.index_count])
+		rl.UploadMesh(mesh, false)
+	}
+}
+
+draw_fox_meshes :: proc(frames: ^[Fox_Joint]Mat4, hide_eyes: bool) {
+	draw_groups :: proc(frames: ^[Fox_Joint]Mat4, hide_eyes: bool, outline: bool) {
+		for group, i in FOX_GROUPS {
+			if hide_eyes && (group.joint == .eye_L || group.joint == .eye_R) {continue}
+			m := frames[group.joint]
+			color := group.color
+			if shadow_pass {
+				m = FLATTEN * m
+				color = SHADOW_INK
+			} else if outline {
+				color = OUTLINE_COLOR
+			}
+			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(color)
+			rl.DrawMesh(fox_meshes[i], material, rl.Matrix(m))
+		}
+	}
+	if !shadow_pass && outlines_enabled && outline_width > 0 {
+		zero: f32
+		flash := flash_value
+		if flash > 0 {set_hit_flash(0)}
+		rl.SetShaderValue(material.shader, fox_outline_location, &outline_width, .FLOAT)
+		rlgl.SetCullFace(.FRONT)
+		draw_groups(frames, hide_eyes, true)
+		rlgl.SetCullFace(.BACK)
+		rl.SetShaderValue(material.shader, fox_outline_location, &zero, .FLOAT)
+		if flash > 0 {set_hit_flash(flash)}
+	}
+	draw_groups(frames, hide_eyes, false)
 }

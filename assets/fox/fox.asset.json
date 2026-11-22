@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "model": "fox.glb",
+  "units": "metres",
+  "up": "+Y",
+  "forward": "+Z",
+  "sockets": {
+    "mouth": "socket.mouth",
+    "paw.fore.L": "socket.paw.fore.L",
+    "paw.fore.R": "socket.paw.fore.R",
+    "tail_grip": "socket.tail_grip",
+    "paw.hind.L": "socket.paw.hind.L",
+    "paw.hind.R": "socket.paw.hind.R"
+  }
+}

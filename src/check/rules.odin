@@ -38,6 +38,7 @@ run_rules :: proc() -> int {
 	rules_world()
 	rules_kitchen()
 	rules_animals()
+	rules_fox_rig()
 	rules_fighting()
 	rules_stones()
 	rules_workshop()
@@ -510,6 +511,199 @@ rules_packed_animals :: proc() {
 		off = max(linalg.length(game.quad_socket_at(qk, &skin, "hoof_L") - game.quad_grip(pose, 1)), linalg.length(game.quad_socket_at(qk, &skin, "hoof_R") - game.quad_grip(pose, -1)))
 	}
 	check("a held goat's hind hooves are in his hands", off < 0.05, fmt.tprintf("held %v, the farther hoof %.3f m from his grip", e.state == .Held, off))
+	check_quad_contacts()
+}
+
+check_quad_contacts :: proc() {
+	// Sample the skinned pose through the same movement update the renderer
+	// uses. A step counter alone cannot catch feet overridden during skinning.
+	g := &game.g
+	p := &g.prosio
+	for kind in ([3]game.Enemy_Kind{.Goat, .Billy, .Fox}) {
+		qk, packed := game.quad_model_for(kind)
+		if !packed {
+			continue
+		}
+		model := &game.QUAD_MODELS[qk]
+		feet, shins: [4]int
+		for name, i in ([4]string{"FF.L", "FF.R", "FFB.L", "FFB.R"}) {
+			feet[i] = game.quad_bone(model, name)
+		}
+		for name, i in ([4]string{"FrontLowerLeg.L", "FrontLowerLeg.R", "BackLowerLeg.L", "BackLowerLeg.R"}) {
+			shins[i] = game.quad_bone(model, name)
+		}
+		r := game.ENEMY_RADIUS[kind]
+		dt: f32 = 1.0 / 60
+		for pace in ([3]f32{2.5, 5, 0}) {
+			e := game.Enemy{kind = kind, state = .Chase, pos = {20, 20}}
+			game.quad_update_motion(&e, dt)
+			low := [4]f32{100, 100, 100, 100}
+			high := [4]f32{-100, -100, -100, -100}
+			worst_scale: f32
+			for frame in 0 ..< 170 {
+				e.pos.y += pace * dt
+				if pace == 0 {
+					e.facing += dt * 3
+				}
+				game.quad_update_motion(&e, dt)
+				if frame < 60 {
+					continue
+				}
+				body := game.translate({e.pos.x, 0, e.pos.y}) * game.rot_y(e.facing) * game.scale({r, r, r})
+				pose := game.Animal_Pose{rear = body, front = body}
+				skin, authored: [game.QUAD_MAX_BONES]game.Mat4
+				game.quad_skin(pose, e, &skin)
+				clip := e
+				clip.motion.active = false
+				clip.pace = e.motion.gait_speed
+				game.quad_skin(pose, clip, &authored)
+				for bone, i in feet {
+					rest := linalg.inverse(transmute(game.Mat4)model.rest[bone])
+					y := game.quad_origin(skin[bone] * rest).y
+					low[i], high[i] = min(low[i], y), max(high[i], y)
+				}
+				for bone in shins {
+					for col in 0 ..< 3 {
+						a := game.Vec3{authored[bone][0, col], authored[bone][1, col], authored[bone][2, col]}
+						b := game.Vec3{skin[bone][0, col], skin[bone][1, col], skin[bone][2, col]}
+						worst_scale = max(worst_scale, abs(linalg.length(b) / linalg.length(a) - 1))
+					}
+				}
+			}
+			lift := high - low
+			min_lift := min(lift[0], lift[1], lift[2], lift[3])
+			if pace == 0 {
+				check("a packed quadruped lifts its feet and bends its rear while turning",
+					min_lift > 0.015 && abs(e.motion.rear_twist) > 0.15 && worst_scale < 0.005,
+					fmt.tprintf("%v, least foot lift %.3f m", kind, min_lift))
+			} else {
+				check("a packed quadruped lifts every foot without stretching its shins",
+					min_lift > (pace == 5 ? 0.12 : 0.04) && worst_scale < 0.005,
+					fmt.tprintf("%v at %.1f m/s, least foot lift %.3f m, scale error %.3f", kind, pace, min_lift, worst_scale))
+			}
+		}
+	}
+
+	skin: [game.QUAD_MAX_BONES]game.Mat4
+	for kind in ([3]game.Enemy_Kind{.Goat, .Billy, .Fox}) {
+		qk, packed := game.quad_model_for(kind)
+		if !packed {
+			continue
+		}
+		fresh()
+		g.enemy_count, g.round_count = 0, 0
+		p.pos, p.facing = {20, 20}, 0
+		e := animal_before_him(kind)
+		e.state, e.ko, e.body_t = .Dead, true, 30
+		game.quad_skin({}, e^, &skin)
+		model := &game.QUAD_MODELS[qk]
+		dead_floor := game.quad_mesh_low(model, &skin)
+		rest: [game.QUAD_MAX_BONES]game.Mat4
+		game.quad_sample(model, "Death", 99, &rest)
+		r := game.ENEMY_RADIUS[kind]
+		// Measure the visible head, chest and each foreleg separately. A
+		// hoof on the ground alone would also pass for the stiff old pose.
+		regions: [game.QUAD_MAX_BONES]int
+		for name, i in model.bones {
+			switch name {
+			case "Head", "Neck3":
+				regions[i] = 1
+			case "Torso2", "Torso3":
+				regions[i] = 2
+			case "FF.L", "FrontLowerLeg.L", "IKFrontLeg.L":
+				regions[i] = 3
+			case "FF.R", "FrontLowerLeg.R", "IKFrontLeg.R":
+				regions[i] = 4
+			}
+		}
+		step(2, {}, {.Grab})
+		below, worst_gap, worst_grip, worst_scale, worst_link: f32
+		dragged := 0
+		for i in 0 ..< 70 {
+			moves := [3]bit_set[game.Button]{{.Up}, {.Left}, {.Right}}
+			step(1, moves[i / 24])
+			if e.state != .Held || i < 10 {
+				continue
+			}
+			dragged += 1
+			pose := game.held_pose(e^)
+			game.quad_skin(pose, e^, &skin)
+			lows := [5]f32{100, 100, 100, 100, 100}
+			for v in model.mesh {
+				y: f32
+				for j in 0 ..< 4 {
+					y += v[13 + j] * (skin[int(v[9 + j])] * [4]f32{v[0], v[1], v[2], 1}).y
+				}
+				region := regions[int(v[9])]
+				lows[region] = min(lows[region], y)
+			}
+			below = min(below, min(lows[0], lows[1], lows[2], lows[3], lows[4]))
+			worst_gap = max(worst_gap, max(lows[1], lows[2], lows[3], lows[4]))
+			switch kind {
+			case .Fox:
+				worst_grip = max(worst_grip, linalg.length(game.quad_socket_at(qk, &skin, "tail_tip") - pose.hand))
+			case .Goat, .Billy:
+				worst_grip = max(worst_grip, linalg.length(game.quad_socket_at(qk, &skin, "hoof_L") - game.quad_grip(pose, 1)))
+				worst_grip = max(worst_grip, linalg.length(game.quad_socket_at(qk, &skin, "hoof_R") - game.quad_grip(pose, -1)))
+			case .Turkey:
+			}
+			for name in ([5]string{"Back", "Torso2", "BackLowerLeg.L", "FrontLowerLeg.L", "Tail3"}) {
+				b := game.quad_bone(model, name)
+				bone := skin[b] * linalg.inverse(transmute(game.Mat4)model.rest[b])
+				parent := model.parents[b]
+				parent_pose := skin[parent] * linalg.inverse(transmute(game.Mat4)model.rest[parent])
+				authored := linalg.length(game.quad_origin(rest[b]) - game.quad_origin(rest[parent])) * r
+				actual := linalg.length(game.quad_origin(bone) - game.quad_origin(parent_pose))
+				worst_link = max(worst_link, abs(actual - authored))
+				for col in 0 ..< 3 {
+					a := game.Vec3{rest[b][0, col], rest[b][1, col], rest[b][2, col]} * r
+					z := game.Vec3{bone[0, col], bone[1, col], bone[2, col]}
+					worst_scale = max(worst_scale, abs(linalg.length(z) / linalg.length(a) - 1))
+				}
+			}
+		}
+		check("the dragged quadruped lies on its side and keeps its grip and proportions through turns",
+			abs(dead_floor) < 0.002 && below > -0.01 && worst_gap < 0.065 && dragged == 60 && worst_grip < 0.01 && worst_scale < 0.005 && worst_link < 0.005,
+			fmt.tprintf("%v: floor %.3f m, largest ground gap %.3f m, grip %.3f m, scale error %.3f, link error %.3f m",
+				kind, below, worst_gap, worst_grip, worst_scale, worst_link))
+	}
+
+	when game.PACK_FOX {
+		fresh()
+		g.enemy_count, g.round_count = 0, 0
+		p.pos = {20, 20}
+		e := animal_before_him(.Fox)
+		e.home = e.pos
+		e.has_loot = true
+		e.loot = .Apple
+		at_den := e.pos
+		step(42, {.Down})
+		check("a fox that eats its loot steps away instead of remaining rigid",
+			!e.has_loot && game.length2(e.pos - at_den) > 0.3 && e.motion.active,
+			fmt.tprintf("moved %.2f m", game.length2(e.pos - at_den)))
+
+		fresh()
+		g.enemy_count, g.round_count = 0, 0
+		p.pos, p.facing = {20, 20}, 0
+		e = animal_before_him(.Fox)
+		step(8, {}, {.Grab})
+		pose := game.held_pose(e^)
+		qk, _ := game.quad_skin(pose, e^, &skin)
+		leg := game.quad_bone(&game.QUAD_MODELS[qk], "FF.L")
+		first := skin[leg]
+		game.quad_update_motion(e, 0.24)
+		qk, _ = game.quad_skin(pose, e^, &skin)
+		kicked := first != skin[leg]
+		tail_error := linalg.length(game.quad_socket_at(qk, &skin, "tail_tip") - pose.hand)
+		e.limp = 3
+		for _ in 0 ..< 60 {
+			game.quad_update_motion(e, 1.0 / 60)
+		}
+		check("a fox kicks with free legs, keeps its tail grip, and settles when limp",
+			e.state == .Held && kicked && tail_error < 0.01 && e.motion.limp_blend > 0.99,
+			fmt.tprintf("tail error %.3f m, limp %.0f%%", tail_error, 100 * e.motion.limp_blend))
+	}
+
 }
 
 rules_stones :: proc() {
@@ -1951,4 +2145,25 @@ rules_workshop :: proc() {
 	check("a Prosio saved before there was wood is carried over, knowing every plan", loaded && abs(p.fat - 48) < 0.01 && p.sack[.Pebble] == 4 && p.sack[.Cheese] == 1 && p.sack[.Wood] == 0 && p.sack_sel == .Bread && p.knows[.Fence] && p.knows[.Bread] && g.fence_count == 0, fmt.tprintf("loaded %v, fat %.0f, pebbles %d, cheese %d, wood %d, chosen %v, knows the fence %v", loaded, p.fat, p.sack[.Pebble], p.sack[.Cheese], p.sack[.Wood], p.sack_sel, p.knows[.Fence]))
 	g.opts.no_save = true
 	free(old)
+}
+
+// The second actor may trot while the first is being held. Both passes can
+// rebuild each pose without sharing mutable bone or vertex state.
+rules_fox_rig :: proc() {
+	section("imported fox")
+	pose := game.Animal_Pose{
+		rear = game.translate({4, 2, -3}) * game.rot_z(0.35),
+		front = game.translate({4, 2, -3}) * game.rot_y(0.4),
+		held = true, hand = {3.8, 3.35, -4.1},
+	}
+	held := game.fox_joint_frames(pose, 0)
+	tip := game.fox_point(held[game.FOX_GRIP], game.FOX_PIVOT[game.FOX_GRIP])
+	check("workshop fox tail socket reaches the simulated grip", math.abs(tip.x-pose.hand.x)+math.abs(tip.y-pose.hand.y)+math.abs(tip.z-pose.hand.z) < 0.0001)
+	other := game.Animal_Pose{rear=game.IDENTITY, front=game.IDENTITY}
+	other.legs[0][1].x = 0.5
+	trot := game.fox_joint_frames(other, 0.5)
+	check("second fox has its own moving paw and tail", trot[.fore_R] != trot[.fore_L] && trot[.tail] != trot[.hips] && held == game.fox_joint_frames(pose, 0))
+	mouth := game.fox_point(held[game.FOX_MOUTH], game.FOX_PIVOT[game.FOX_MOUTH])
+	expect := game.fox_point(pose.front, game.FOX_PIVOT[game.FOX_MOUTH]*game.FOX_MODEL_SCALE)
+	check("stolen food follows the front body frame", math.abs(mouth.x-expect.x)+math.abs(mouth.y-expect.y)+math.abs(mouth.z-expect.z)<0.0001)
 }

@@ -65,7 +65,10 @@ Enemy :: struct {
 	spin:   f32,
 	hop:    f32,
 	gait:   f32, // how many strides it has walked, run or swum: the legs of a packed animal keep step with it (see quadruped.odin)
-	pace:   f32, // a goat on four legs: how fast its legs step (m/s, less than 0 backwards; turning on the spot steps too)
+	pace:   f32, // measured ground step speed (m/s, negative when backing up)
+	motion: Quad_Motion,
+	yield_t: f32,
+	yield_dir: Vec2,
 	look:   f32, // how far its head is turned to watch him (radians)
 	squaring: bool, // a goat, squaring up to him: it faces him, and steps forwards and back
 	detour:   f32, // which way a goat on four legs turns to get round something in its way,
@@ -352,6 +355,7 @@ update_enemies :: proc(dt: f32) {
 
 	for &e, index in g.enemies[:g.enemy_count] {
 		r := ENEMY_RADIUS[e.kind]
+		e.yield_t = max(0, e.yield_t - dt)
 		e.hit_t -= dt
 		e.scared_t -= dt
 		e.milk_t -= dt
@@ -429,30 +433,18 @@ update_enemies :: proc(dt: f32) {
 				e.pos += e.vel * dt
 				speed = length2(e.vel)
 			} else {
-				_, packed := quad_model_for(e.kind)
 				accel: f32 = e.kind == .Goat || e.kind == .Billy ? 10 : 14
 				e.vel = approach2(e.vel, target, accel * dt)
 				e.pos += e.vel * dt
 				speed = length2(e.vel)
 				look := e.vel
 				near := e.hunt == .Stalk && length2(p.pos - e.pos) < 9
-				if near && !packed {
-					// Circling or squaring up, it keeps its eyes on him.
+				if near {
 					look = normalize2(e.vel) * 0.6 + normalize2(p.pos - e.pos)
 				}
-				if packed {
-					// The pack's fox turns its body the way it goes, but
-					// near him, slow, it keeps facing him.
-					if near && speed < QUAD_SQUARE_UP {
-						to := p.pos - e.pos
-						e.facing = approach_angle(e.facing, math.atan2(to.x, to.y), 4 * dt)
-					} else if speed > QUAD_WALK_FROM {
-						e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
-					}
-				} else if speed > 0.3 && look != {} {
+				if speed > 0.3 && look != {} {
 					e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
 				}
-				e.gait += quad_stride_rate(e.kind, dot2(e.vel, facing_dir(e.facing))) * dt // (backwards, it steps backwards)
 			}
 			e.hop += dt * (speed > 0.3 ? 9 : 3)
 			if hit, n := collide_static(&e.pos, r, e.y, true); hit && dot2(target, n) < -0.2 * length2(target) {
@@ -667,6 +659,9 @@ update_enemies :: proc(dt: f32) {
 			collide_static(&b.pos, ENEMY_RADIUS[b.kind], 0, true)
 		}
 	}
+	for &e in g.enemies[:g.enemy_count] {
+		quad_update_motion(&e, dt)
+	}
 }
 
 // How fast, and which way, a chasing enemy wants to go.
@@ -809,10 +804,12 @@ fox_velocity :: proc(e: ^Enemy, dist: f32, toward: Vec2, dt: f32) -> Vec2 {
 			e.loot_t = 0
 			e.has_loot = false
 			e.timer = FOX_REST
+			e.yield_dir = normalize2(-toward)
+			e.yield_t = QUAD_YIELD_TIME
 			if dist < 40 {
 				say_named("Oh no! The fox ate my %s!", ITEM_NAME[e.loot])
 			}
-			return {}
+			return e.yield_dir * QUAD_YIELD_SPEED
 		}
 		return normalize2(home) * speed * 1.5
 	}
@@ -1109,6 +1106,11 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 	// Push them apart, the lighter one moving more. If the enemy is pinned
 	// against something, Prosio takes up the rest.
 	overlap := pr + r - dist
+	if e.state == .Chase && quad_legged(e.kind) && p.fail == .None &&
+	   (dot2(p.vel, away) > QUAD_YIELD_MIN_SPEED || overlap > QUAD_YIELD_OVERLAP) {
+		e.yield_dir = away
+		e.yield_t = QUAD_YIELD_TIME
+	}
 	share := p.kg / (p.kg + ENEMY_KG[e.kind])
 	e.pos += away * overlap * share
 	p.pos -= away * overlap * (1 - share)
