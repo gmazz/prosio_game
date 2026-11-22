@@ -23,11 +23,12 @@ import "core:math"
 
 KCAL_PER_KG :: f32(200) // calories eaten for each kilogram he puts on
 // The sack holds SACK_LITRES, whatever is in it: each thing takes up the
-// room in ITEM_LITRES, and weighs ITEM_KG, which he carries. What it weighs
-// has no limit but his back: a load slows him, makes walking, sprinting and
-// jumping cost more, and trains his legs (and his lungs, sprinting) faster,
-// as a pack does (see prosio.odin).
-SACK_LITRES :: f32(30)
+// room in ITEM_LITRES, and weighs ITEM_KG, which he carries. It is meant to
+// be roomy: a whole pen's worth of wood, or a day's food, goes in at once.
+// What it weighs has no limit but his back: a load slows him a little,
+// makes walking, sprinting and jumping cost a little more, and trains his
+// legs (and his lungs, sprinting) faster, as a pack does (see load_share).
+SACK_LITRES :: f32(60)
 BATCH_MOST :: 9 // of one dish at once
 OVEN_RADIUS :: f32(1.15)
 
@@ -124,15 +125,15 @@ ITEM_KG := [Item]f32 {
 	.Apple         = 0.2,
 	.Berries       = 0.1,
 	.Mushroom      = 0.05,
-	.Pumpkin       = 4,
+	.Pumpkin       = 3,
 	.Cabbage       = 1,
 	.Nuts          = 0.1,
-	.Wheat         = 1,
+	.Wheat         = 0.5,
 	.Egg           = 0.06,
 	.Flour         = 0.5,
 	.Salt          = 0.3,
-	.Fish          = 0.5,
-	.Meat          = 1,
+	.Fish          = 0.4,
+	.Meat          = 0.5,
 	.Milk          = 1,
 	.Honey         = 0.5,
 	.Pebble        = 0.3,
@@ -147,48 +148,48 @@ ITEM_KG := [Item]f32 {
 	.Roast         = 0.8,
 	.Butter        = 0.5,
 	.Cheese        = 0.6,
-	.Wood          = 2,
-	.Fence         = 6,
-	.Scarecrow     = 4,
-	.Rod           = 0.5,
-	.Spear         = 1.5,
-	.Gate          = 7,
-	.Larder        = 10,
+	.Wood          = 1,
+	.Fence         = 3,
+	.Scarecrow     = 3,
+	.Rod           = 0.4,
+	.Spear         = 1,
+	.Gate          = 4,
+	.Larder        = 6,
 }
 ITEM_LITRES := [Item]f32 {
 	.Apple         = 0.3,
 	.Berries       = 0.2,
 	.Mushroom      = 0.15,
-	.Pumpkin       = 6,
-	.Cabbage       = 2,
+	.Pumpkin       = 4,
+	.Cabbage       = 1.5,
 	.Nuts          = 0.15,
-	.Wheat         = 3, // a sheaf is bulky
+	.Wheat         = 1.5,
 	.Egg           = 0.1,
 	.Flour         = 0.6,
 	.Salt          = 0.15,
-	.Fish          = 0.7,
-	.Meat          = 1,
-	.Milk          = 1.2,
+	.Fish          = 0.5,
+	.Meat          = 0.6,
+	.Milk          = 1,
 	.Honey         = 0.5,
 	.Pebble        = 0.15,
-	.Apple_Pie     = 2,
-	.Pumpkin_Pie   = 2,
+	.Apple_Pie     = 1.5,
+	.Pumpkin_Pie   = 1.5,
 	.Berry_Muffins = 1,
-	.Mushroom_Pie  = 2,
-	.Nut_Cake      = 1.5,
-	.Bread         = 1.5,
+	.Mushroom_Pie  = 1.5,
+	.Nut_Cake      = 1,
+	.Bread         = 1,
 	.Fried_Egg     = 0.2,
 	.Grilled_Fish  = 0.6,
 	.Roast         = 1,
 	.Butter        = 0.5,
 	.Cheese        = 0.6,
-	.Wood          = 3,
-	.Fence         = 8, // three pieces fill the sack
-	.Scarecrow     = 10,
-	.Rod           = 2,
-	.Spear         = 3,
-	.Gate          = 10,
-	.Larder        = 25, // nearly the whole sack
+	.Wood          = 1.5,
+	.Fence         = 4, // a flat-pack piece
+	.Scarecrow     = 6,
+	.Rod           = 1.5,
+	.Spear         = 2,
+	.Gate          = 5,
+	.Larder        = 15,
 }
 
 // What is in the sack weighs, and the room it takes.
@@ -1596,7 +1597,7 @@ draw_sack :: proc(x, y, s: f32) {
 	line := top + size + text + 6 * s
 	GREY :: Color{220, 220, 220, 255}
 	label(room, centre - both / 2, line, text * 0.9, litres >= SACK_LITRES - 0.3 ? UI_ORANGE : GREY)
-	weight_color := load_share() > LOAD_HEAVY ? UI_ORANGE : GREY
+	weight_color := sack_kg() / g.prosio.kg > LOAD_HEAVY ? UI_ORANGE : GREY
 	label(ui_format2("%d.%d kg", tenths / 10, tenths % 10), centre - both / 2 + room_w + 16 * s, line, text * 0.9, weight_color)
 }
 

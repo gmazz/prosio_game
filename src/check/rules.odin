@@ -517,17 +517,31 @@ rules_weight :: proc() {
 	ate := game.sack_take(.Apple, 1)
 	check("the sack keeps the calories of each kind of food all together: a piece taken out is worth the average", one == 100 && ate == 100 && p.sack_kcal[.Apple] == 200, fmt.tprintf("a piece is shown as %.0f kcal, one taken out held %.0f, %.0f left in two", one, ate, p.sack_kcal[.Apple]))
 
-	// The sack holds 30 litres, whatever is in it; what is in it he carries.
+	// The sack holds 60 litres, whatever is in it; what is in it he carries.
 	fresh()
 	g.enemy_count = 0
 	room := game.sack_room(.Pumpkin)
 	for _ in 0 ..< room {
 		game.sack_add(.Pumpkin, 400)
 	}
-	check("the sack holds 30 litres: five pumpkins fill it, or two hundred mushrooms", room == 5 && game.sack_room(.Mushroom) == 0 && game.sack_room(.Apple) == 0 && abs(game.total_kg() - p.kg - 20) < 0.01, fmt.tprintf("room for %d pumpkins; then for %d mushrooms; carrying %.1f kg", room, game.sack_room(.Mushroom), game.total_kg() - p.kg))
+	check("the sack holds 60 litres: fifteen pumpkins fill it", room == 15 && game.sack_room(.Mushroom) == 0 && game.sack_room(.Apple) == 0 && abs(game.total_kg() - p.kg - 45) < 0.01, fmt.tprintf("room for %d pumpkins; then for %d mushrooms; carrying %.1f kg", room, game.sack_room(.Mushroom), game.total_kg() - p.kg))
+
+	// Roomy enough for a whole pen at once: sixteen logs, then the eight
+	// pieces of fence they make, with food beside them.
+	fresh()
+	for _ in 0 ..< 16 {
+		game.sack_add(.Wood, 0)
+	}
+	logs_fit := game.sack_room(.Apple) >= 30
+	fresh()
+	for _ in 0 ..< 8 {
+		game.sack_add(.Fence, 0)
+	}
+	pieces_fit := game.sack_room(.Apple) >= 30
+	check("a whole pen's wood, or its eight pieces of fence, goes in the sack at once, with room for food", logs_fit && pieces_fit, fmt.tprintf("16 logs leave room %v, 8 pieces %v", logs_fit, pieces_fit))
 
 	// A load costs and trains: ten seconds' walk empty-handed, then with 16
-	// kg of wood on his back.
+	// kg of wood on his back (it feels like LOAD_EASE of that).
 	walk :: proc(logs: int) -> (burned, legs: f32) {
 		g := &game.g
 		fresh()
@@ -542,8 +556,8 @@ rules_weight :: proc() {
 		return g.burned[.Walking] - before, g.prosio.trait[.Legs]
 	}
 	burn_light, legs_light := walk(0)
-	burn_heavy, legs_heavy := walk(8)
-	check("walking with a load of a fifth of his weight burns a fifth more, and trains his legs faster", burn_heavy > burn_light * 1.15 && burn_heavy < burn_light * 1.25 && legs_heavy > legs_light * 1.4, fmt.tprintf("burned walking %.3f kg empty, %.3f kg with 16 kg; legs %.4f and %.4f", burn_light, burn_heavy, legs_light, legs_heavy))
+	burn_heavy, legs_heavy := walk(16)
+	check("walking with 16 kg in the sack burns about an eighth more, and trains his legs faster", burn_heavy > burn_light * 1.08 && burn_heavy < burn_light * 1.16 && legs_heavy > legs_light * 1.2, fmt.tprintf("burned walking %.3f kg empty, %.3f kg with 16 kg; legs %.4f and %.4f", burn_light, burn_heavy, legs_light, legs_heavy))
 
 	// Protein makes no carbs: not as it is eaten, with his protein full,
 	// and not as it is used up.

@@ -189,7 +189,7 @@ new_game :: proc() {
 		if f := add_food(.Spear, g.prosio.pos + {-1.2, 2.4}); f != nil {
 			f.fallen, f.life, f.size = true, 1e9, 1
 		}
-		for it in ([?]Item{.Wood, .Fence, .Rod, .Spear, .Gate}) { // (26 litres: the sack holds 30)
+		for it in ([?]Item{.Wood, .Fence, .Rod, .Spear, .Gate}) { // (14 litres: the sack holds 60)
 			sack_add(it, 0)
 		}
 		g.prosio.sack_sel = .Fence

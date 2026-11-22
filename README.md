@@ -186,12 +186,12 @@ So a strong pig is hungry: he gets through his carbs in under 20 minutes at rest
 
 Food is not eaten where it is found. `E` next to it and Prosio stoops, picks it up and drops it over his shoulder into the sack on his back. He eats from the sack when he likes: `Z` and `C` choose, `Q` eats.
 
-**The sack holds 30 litres**, of whatever he likes: five pumpkins fill it, or a hundred and fifty bunches of berries. Each thing takes up room and has a weight (a berry bunch 0.1 kg and 0.2 litres, an apple 0.2 kg and 0.3 litres, a log 2 kg and 3 litres, a pumpkin 4 kg and 6 litres, a piece of fence 6 kg and 8 litres: all in `ITEM_KG` and `ITEM_LITRES` in `kitchen.odin`). Under the sack on the screen are how full it is and what it weighs ("18 / 30 L   7.5 kg"). **The weight has no limit but his back**, and he carries it:
+**The sack holds 60 litres**, of whatever he likes, and is meant to be roomy: the sixteen logs for a whole pen go in at once, or the eight pieces of fence they make, with room for food beside them; fifteen pumpkins fill it. Each thing takes up room and has a weight (a berry bunch 0.1 kg and 0.2 litres, an apple 0.2 kg and 0.3 litres, a log 1 kg and 1.5 litres, a pumpkin 3 kg and 4 litres, a flat-packed piece of fence 3 kg and 4 litres: all in `ITEM_KG` and `ITEM_LITRES` in `kitchen.odin`). Under the sack on the screen are how full it is and what it weighs ("18 / 60 L   7.5 kg"). **The weight has no limit but his back**, and he carries it. The sack sits well on his back, so his legs feel only 60% of its weight (a rock in his arms they feel all of):
 
-- It slows him, as the same legs have more to move: 16 kg on an 80 kg pig makes him about a sixth slower.
-- Walking and sprinting burn more, in proportion to his weight and the load together: a fifth more with 16 kg. Sprinting and jumping cost more stamina, and he jumps less high (so a full sack can stop him clearing a fence).
-- Like a pack on a long walk, it trains him: his legs grow up to three times as fast under a load (1.6 times with a fifth of his weight), and his lungs too when he sprints.
-- Over a quarter of his weight, he says so: "Oof! This sack is heavy...".
+- It slows him a little: 16 kg in the sack makes him about a tenth slower, a full sack of wood (40 kg) about a quarter.
+- Walking and sprinting burn a little more: an eighth more with 16 kg. Sprinting and jumping cost more stamina, and he jumps less high (all of the sack's weight counts for that, so a heavy sack can stop him clearing a fence).
+- Like a pack on a long walk, it trains him: his legs grow faster under a load (1.36 times as fast with 16 kg), and his lungs too when he sprints.
+- Over 30% of his weight in the sack, he says so: "Oof! This sack is heavy...".
 
 His weight on the screen is his body alone; the load is shown with the sack.
 
@@ -673,7 +673,7 @@ A few choices shape the rest:
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (104 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (105 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -738,7 +738,7 @@ The desktop build takes options that script a run, save a picture and quit. As i
 | `--bruises 50` | start bruised: this many points off the top of his stamina |
 | `--far` | with `--near`: the animal stands five metres off, out of reach, to throw at |
 | `--pebbles` | start with six pebbles, chosen in the sack |
-| `--built` | start with things built: a turkey in a pen beside him (its near side a gate), a larder with cheese and fish in it, a scarecrow, a spear in the ground, and a log, a piece of fence, a rod, a spear and a gate in the sack |
+| `--built` | start with things built: a turkey in a pen beside him (its near side a gate), a larder with cheese and fish in it, a scarecrow, a spear in the ground, and a log, a piece of fence, a rod, a spear and a gate in the sack (14 of its 60 litres) |
 | `--swimmers` | put a turkey and a goat swimming in the pond, and a drowned turkey floating |
 | `--choose Spear` | this is chosen in the sack at the start, if he has any (a thing by its name in the code: `Apple`, `Apple_Pie`, `Wood`, `Rod`...) |
 | `--shot name.png` | save a picture, then quit |
@@ -777,7 +777,7 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | How often turkeys lay, in the wild and in a pen, the chance of a shaken-out egg | `enemies.odin` (`EGG_EVERY`, `PEN_EGG_EVERY`, `SHAKE_EGG`) |
 | How fast each animal swims, how fast it tires or drowns, how low it sits in the water | `enemies.odin` (`SWIM_SPEED`, `DROWN_RATE`, `SWIM_SINK`, `FLOAT_DRIFT`) |
 | What lifts over a fence, and what never goes over | `workshop.odin` (`HOIST_SHARE`, `FENCE_HEAVY`) |
-| What each thing weighs and how much room it takes, how big the sack is, what a load does | `kitchen.odin` (`ITEM_KG`, `ITEM_LITRES`, `SACK_LITRES`, `BATCH_MOST`), `prosio.odin` (`LOAD_TRAIN`, `LOAD_HEAVY`) |
+| What each thing weighs and how much room it takes, how big the sack is, what a load does | `kitchen.odin` (`ITEM_KG`, `ITEM_LITRES`, `SACK_LITRES`, `BATCH_MOST`), `prosio.odin` (`LOAD_EASE`, `LOAD_TRAIN`, `LOAD_HEAVY`) |
 | How fast each food goes off, when it is thrown out, how much longer a larder keeps it and how big it is, how a body goes off | `larder.odin` (`SPOIL_HALF`, `ROTTEN`, `STALE`, `LARDER_KEEPS`, `LARDER_LITRES`, `MAX_LARDERS`, `BODY_FLIES`, `BODY_MEAT_LEAST`) |
 | The cooking bonus at each station for a beginner and a master, and the titles | `kitchen.odin` (`COOK_RANGE`, `COOK_TITLE`, `STATION_SKILL`), `body.odin` (`COOK_WORK`, `COOK_QUICK`) |
 | Animal health: what a blow takes, how sturdy each kind is, how fast it mends | `enemies.odin` (`ENEMY_HEALTH`, `HARD_BLOW`, `ENEMY_STURDY`, `HEAL_RATE`, `HEAL_AFTER`, `HURT_SLOW`); slams in `grab.odin` (`SLAM_BLOW`, `SLAM_MOST`); stomps in `enemies.odin` (`STOMP_K`, `ENEMY_TOUGH`) |
@@ -832,7 +832,7 @@ Every number that shapes the feel is a named constant or a one-line function nea
 - A gate opens only when he faces it from a step away: standing in the gateway, he has to step back first.
 - Every recipe and plan is known from the start; nothing yet teaches him one.
 - Tools do not wear out, the rod has no line or bait to run out of, and a spear left lying when the game is closed is lost.
-- The numbers of the workshop (logs per dish, what each plan takes, what a spear does, how far a scarecrow guards), the sack's 30 litres and what each thing weighs and takes up, how fast food goes off, and how fast animals swim and drown are first guesses, not tuned by play.
+- The numbers of the workshop (logs per dish, what each plan takes, what a spear does, how far a scarecrow guards), the sack's 60 litres and what each thing weighs and takes up, how fast food goes off, and how fast animals swim and drown are first guesses, not tuned by play.
 - Food in the sack goes off by the clock of play only; nothing goes off while the game is closed.
 - A dead body in the water floats straight to the nearest bank, through lily pads and all; the pond has no current. The bot gathers wood, builds, and puts fences up at random, but never builds a whole pen: pens are covered by the rules only.
 - The story is deliberately not written yet.

@@ -75,7 +75,7 @@ shot_at 70 holding_goat "Holding a goat by both hind legs, a hoof on each; the p
 shot_at 70 holding_fox "Holding a fox by its tail" --pos 6 5 --near fox --tap g --tap-at 12 --hold l
 shot_at 170 licking "A salty Prosio: the goat stands licking him, and the prompt offers to milk her without a grab" --pos 6 5 --near goat --needs 50,50,50,80,50,95
 shot_at 50 aiming "Winding up a pebble: a yellow arrowhead over the turkey he aims at, a bar at his feet, the pebble in his raised hoof" --pos 6 5 --near turkey --far --pebbles --hold g
-shot built "What he builds: a turkey in a pen whose near side is a gate (a leaf with a brace and a latch), a larder (a cupboard on legs, salt at its foot), a scarecrow, a spear stuck in the ground, and a yellow mark where Q would put the piece of fence chosen in the sack; the sack line says 26 / 30 L" --pos 6 6 --built
+shot built "What he builds: a turkey in a pen whose near side is a gate (a leaf with a brace and a latch), a larder (a cupboard on legs, salt at its foot), a scarecrow, a spear stuck in the ground, and a yellow mark where Q would put the piece of fence chosen in the sack; the sack line says 14 / 60 L" --pos 6 6 --built
 shot swimmers "Animals in the pond: a turkey and a goat low in the water paddling for the bank, a drowned turkey floating feet up" --pos -26 -38.5 --swimmers
 shot_at 50 spear "Winding up the spear at the turkey in the pen: a yellow arrowhead over it, a bar at his feet, the spear over his shoulder" --pos 6 7 --built --choose Spear --hold g --tap r --tap-at 20
 shot_at 24 rod "Casting the rod from the pond's bank: the rod up, a line out to a red and white float on the water" --pos -24 -40.7 --built --choose Rod --tap g --tap-at 12

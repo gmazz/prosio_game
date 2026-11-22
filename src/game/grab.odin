@@ -312,12 +312,20 @@ total_kg :: proc() -> f32 {
 	return p.kg + sack_kg() + (p.carry == .Rock ? p.carry_kg : 0)
 }
 
-// What he carries, against what he weighs: 0.2 for a 16 kg load on an 80 kg
-// pig. It makes walking and sprinting cost that much more, and trains his
-// legs (and, sprinting, his lungs) LOAD_TRAIN times that much faster.
+// How much what he carries weighs on him, against what he weighs: a rock in
+// his arms all of its weight, the sack on his back, well packed, only
+// LOAD_EASE of it; so 0.12 for a 16 kg sack on an 80 kg pig. It makes
+// walking and sprinting cost that much more and slows him as much, and
+// trains his legs (and, sprinting, his lungs) LOAD_TRAIN times that much
+// faster.
 load_share :: proc() -> f32 {
 	p := &g.prosio
-	return (total_kg() - p.kg) / p.kg
+	return (total_kg() - p.kg - sack_kg() * (1 - LOAD_EASE)) / p.kg
+}
+
+// What he and his load come to, as his legs feel it.
+felt_kg :: proc() -> f32 {
+	return g.prosio.kg * (1 + load_share())
 }
 
 load_training :: proc() -> f32 {

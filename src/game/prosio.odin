@@ -22,8 +22,9 @@ PICK_TIME :: f32(0.5) // stooping to pick something up and putting it in the sac
 // weight: these are for an 80 kg Prosio.
 WALK_BURN :: f32(0.02) // kg per second of walking
 SPRINT_BURN :: f32(0.06) // kg per second of sprinting
-LOAD_TRAIN :: f32(3) // with a load of a fifth of his weight, his legs train 1.6 times as fast
-LOAD_HEAVY :: f32(0.25) // a load this share of his weight, and he says so
+LOAD_EASE :: f32(0.6) // the share of the sack's weight his legs feel (it is on his back, well packed)
+LOAD_TRAIN :: f32(3) // so with 16 kg in the sack his legs train 1.36 times as fast
+LOAD_HEAVY :: f32(0.3) // a sack this share of his weight, and he says so
 GATHER_BURN :: f32(0.03) // kg per thing picked up
 JUMP_BURN :: f32(0.06) // kg per jump
 FIGHT_BURN :: f32(0.2) // kg per bump, grab, bash or throw
@@ -403,10 +404,10 @@ update_prosio :: proc(dt: f32) {
 	}
 
 	// A heavy sack: he says so, once.
-	if load_share() > LOAD_HEAVY && !p.heavy_said {
+	if sack_kg() / p.kg > LOAD_HEAVY && !p.heavy_said {
 		p.heavy_said = true
 		say("Oof! This sack is heavy...", 1.4)
-	} else if load_share() < LOAD_HEAVY * 0.8 {
+	} else if sack_kg() / p.kg < LOAD_HEAVY * 0.8 {
 		p.heavy_said = false
 	}
 
@@ -419,7 +420,7 @@ update_prosio :: proc(dt: f32) {
 	if p.sprinting {
 		p.stamina -= sprint_drain() * (p.rush ? RUSH_DRAIN : 1) * (1 + load_share()) * dt
 		p.regen_delay = lerp(0.3, 1.0, t)
-		burn(SPRINT_BURN * total_kg() / KG_START * dt, .Sprinting, true)
+		burn(SPRINT_BURN * felt_kg() / KG_START * dt, .Sprinting, true)
 		train(.Legs, SPRINT_WORK * load_training() * dt)
 		train(.Lungs, SPRINT_WORK * load_training() * dt)
 		p.dust_t -= dt
@@ -444,7 +445,7 @@ update_prosio :: proc(dt: f32) {
 			speed *= sprint_boost()
 		}
 		// With a load, the same legs have more weight to move.
-		speed *= p.kg / total_kg()
+		speed *= p.kg / felt_kg()
 		// And a dead weight dragged behind him holds him back.
 		if p.carry == .Enemy && g.enemies[p.carry_index].ko {
 			speed *= p.kg / (p.kg + ENEMY_KG[g.enemies[p.carry_index].kind] * DRAG_SLIDE / strength())
@@ -469,7 +470,7 @@ update_prosio :: proc(dt: f32) {
 			p.facing = approach_angle(p.facing, math.atan2(move.x, move.y), 12 * dt)
 		}
 		if moving && target != {} && grounded && !p.sprinting {
-			burn(WALK_BURN * total_kg() / KG_START * dt, .Walking)
+			burn(WALK_BURN * felt_kg() / KG_START * dt, .Walking)
 			train(.Legs, WALK_WORK * load_training() * dt)
 		}
 	}
