@@ -310,8 +310,8 @@ draw_larder_menu :: proc() {
 	top := py + 100 * s
 	label("IN THE SACK", px + 290 * s, top, 15 * s, GREY)
 	label("IN THE LARDER", px + 470 * s, top, 15 * s, GREY)
-	label(ui_format2("sack %d / %d L", i32(math.round(sack_litres())), i32(SACK_LITRES)), px + 290 * s, top + 18 * s, 13 * s, GREY)
-	label(ui_format2("larder %d / %d L", i32(math.round(larder_litres(l))), i32(LARDER_LITRES)), px + 470 * s, top + 18 * s, 13 * s, GREY)
+	label(ui_format("sack %d%% full", i32(math.round(sack_full() * 100))), px + 290 * s, top + 18 * s, 13 * s, GREY)
+	label(ui_format("larder %d%% full", i32(math.round(larder_litres(l) / LARDER_LITRES * 100))), px + 470 * s, top + 18 * s, 13 * s, GREY)
 	if len(rows) == 0 {
 		label_centred("Nothing in the sack, nothing in the larder.", sw / 2, top + 50 * s, 18 * s, UI_WHITE)
 	}

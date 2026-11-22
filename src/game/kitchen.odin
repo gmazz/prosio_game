@@ -207,6 +207,11 @@ sack_litres :: proc() -> (sum: f32) {
 	return
 }
 
+// How full the sack is, from 0 to 1 (what the player sees, as a per cent).
+sack_full :: proc() -> f32 {
+	return sack_litres() / SACK_LITRES
+}
+
 // How many more of this would fit.
 sack_room :: proc(item: Item) -> int {
 	return int(math.floor((SACK_LITRES - sack_litres()) / ITEM_LITRES[item] + 0.001))
@@ -1587,18 +1592,20 @@ draw_sack :: proc(x, y, s: f32) {
 		label_centred(ui_format("%d", i32(p.sack[it])), bx + size / 2, top + size + 3 * s, text * 0.9, chosen ? UI_YELLOW : UI_WHITE)
 		bx += size + gap
 	}
-	// How full it is, and what it weighs on his back.
-	litres := sack_litres()
-	tenths := i32(math.round(sack_kg() * 10))
-	room := ui_format2("%d / %d L", i32(math.round(litres)), i32(SACK_LITRES))
+	// How full it is, and how heavy, both in per cent (the litres and
+	// kilograms stay inside the game): the room taken, and the load as a
+	// share of his own weight.
+	full := sack_full()
+	load := i32(math.round(sack_kg() / g.prosio.kg * 100))
+	room := ui_format("%d%% full", i32(math.round(full * 100)))
 	room_w := ui_text_width(room, text * 0.9)
-	weight := ui_format2("%d.%d kg", tenths / 10, tenths % 10)
+	weight := ui_format("load %d%%", load)
 	both := room_w + 16 * s + ui_text_width(weight, text * 0.9)
 	line := top + size + text + 6 * s
 	GREY :: Color{220, 220, 220, 255}
-	label(room, centre - both / 2, line, text * 0.9, litres >= SACK_LITRES - 0.3 ? UI_ORANGE : GREY)
+	label(room, centre - both / 2, line, text * 0.9, full >= 0.99 ? UI_ORANGE : GREY)
 	weight_color := sack_kg() / g.prosio.kg > LOAD_HEAVY ? UI_ORANGE : GREY
-	label(ui_format2("%d.%d kg", tenths / 10, tenths % 10), centre - both / 2 + room_w + 16 * s, line, text * 0.9, weight_color)
+	label(ui_format("load %d%%", load), centre - both / 2 + room_w + 16 * s, line, text * 0.9, weight_color)
 }
 
 // A station's menu: what can be made there, what it needs and what it is
