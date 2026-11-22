@@ -64,6 +64,7 @@ Enemy :: struct {
 	facing: f32,
 	spin:   f32,
 	hop:    f32,
+	gait:   f32, // metres it has walked, run or swum: the legs of a packed animal keep step with it (see quadruped.odin)
 	timer:  f32, // attack pause, dizzy time or time until it comes back
 	ko:     bool, // no health left: once it has landed and lain dizzy a moment, that is the end of it
 	skip:   bool, // slammed down spinning: it skips along the ground
@@ -427,6 +428,7 @@ update_enemies :: proc(dt: f32) {
 				e.facing = approach_angle(e.facing, math.atan2(look.x, look.y), 8 * dt)
 			}
 			e.hop += dt * (speed > 0.3 ? 9 : 3)
+			e.gait += speed * dt
 			if hit, n := collide_static(&e.pos, r, e.y, true); hit && dot2(target, n) < -0.2 * length2(target) {
 				// Something is in the way: go round it, the side nearer its goal.
 				along := Vec2{-n.y, n.x}
@@ -553,6 +555,7 @@ update_enemies :: proc(dt: f32) {
 			if !e.ko {
 				e.facing = math.atan2(to.x, to.y)
 				e.hop += dt * 9
+				e.gait += length2(e.vel) * dt
 				if DROWN_RATE[e.kind] > 0 && hurt_enemy(&e, DROWN_RATE[e.kind] * dt) {
 					// Glub glub... bottoms up.
 					burst({e.pos.x, 0.3, e.pos.y}, 12, 2, POND_SPLASH, 0.1)
@@ -812,7 +815,7 @@ steal :: proc(e: ^Enemy) {
 	e.loot_t = 0
 	sack_step(0)
 	say_named("Hey! The fox took my %s!", ITEM_NAME[best])
-	burst({p.pos.x, p.height + 1.2, p.pos.y}, 6, 2.5, COLOR_STAR, 0.08)
+	burst({p.pos.x, p.height + 1.2 * PROSIO_SIZE, p.pos.y}, 6, 2.5, COLOR_STAR, 0.08)
 }
 
 // A fox that is hit or frightened lets go of what it stole, and Prosio has

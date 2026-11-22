@@ -427,9 +427,10 @@ update_frame :: proc(dt: f32) {
 		zoom = 1.25
 	}
 	if scene == .Bag && bag_tab == .Outfit {
-		// In close, with Prosio to the right of the menu.
-		zoom = 0.42
-		focus.x -= 1.3
+		// In close, with Prosio to the right of the menu (as close as he is
+		// small).
+		zoom = 0.42 * PROSIO_SIZE
+		focus.x -= 1.3 * PROSIO_SIZE
 	}
 	g.camera += (focus - g.camera) * (1 - math.exp(-5 * dt))
 	g.camera_zoom += (zoom - g.camera_zoom) * (1 - math.exp(-4 * dt))

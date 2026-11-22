@@ -223,6 +223,11 @@ Tree_Shape :: struct {
 	size:     f32,
 	canopy:   f32, // radius of the crown
 	canopy_y: f32, // height of the crown's centre
+	// Drawn from a model (see trees.odin): which, where its leaves start and
+	// end, and how it is scaled.
+	model:    Tree_Model_Kind,
+	low, high: f32,
+	scale:    Vec3,
 }
 
 // Trees are tall and slim, so that standing close together they make a
@@ -234,19 +239,25 @@ tree_shape :: proc(index: int) -> Tree_Shape {
 // The shape a tree of this species would have as tree number index.
 tree_shape_of :: proc(species: Tree_Species, index: int) -> Tree_Shape {
 	size := 0.85 + 0.4 * math.mod(f32(index) * 0.37, 1)
+	when PACKED_TREES {
+		return packed_tree_shape(species, index, size)
+	}
 	switch species {
 	case .Pine:
-		return {species, size, 1.25 * size, 3.2 * size}
+		return {species = species, size = size, canopy = 1.25 * size, canopy_y = 3.2 * size}
 	case .Apple:
 		size *= 0.85 // apple trees are smaller, with a low, round crown
-		return {species, size, 1.55 * size, 3.7 * size}
+		return {species = species, size = size, canopy = 1.55 * size, canopy_y = 3.7 * size}
 	case .Broadleaf, .Blossom:
 	}
-	return {species, size, 1.4 * size, 4.7 * size}
+	return {species = species, size = size, canopy = 1.4 * size, canopy_y = 4.7 * size}
 }
 
 // How high a tree's leaves start and how high they reach.
 foliage :: proc(t: Tree_Shape) -> (low, high: f32) {
+	when PACKED_TREES {
+		return t.low, t.high
+	}
 	switch t.species {
 	case .Pine:
 		return 1.2 * t.size, 6.45 * t.size
@@ -273,7 +284,7 @@ tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
 	crown := world_to_screen(middle)
 	wide := abs(world_to_screen(middle + {t.canopy, 0, 0}).x - crown.x)
 	tall := abs(world_to_screen({pos.x, high, pos.y}).y - crown.y)
-	him := world_to_screen({p.pos.x, p.height + 1, p.pos.y})
+	him := world_to_screen({p.pos.x, p.height + PROSIO_SIZE, p.pos.y})
 	apart := length2((crown - him) / Vec2{max(wide, 1), max(tall, 1)})
 	// In the forest it clears a wider space round him, so that he sees the
 	// ground he is walking on, and what lies there, through the trees.
@@ -297,6 +308,10 @@ draw_tree :: proc(pos: Vec2, index: int) {
 	}
 	defer if fade > 0 {
 		set_fade(0)
+	}
+	when PACKED_TREES {
+		draw_packed_tree(pos, index, t)
+		return
 	}
 	m := translate({pos.x, 0, pos.y}) * rot_y(f32(index) * 2.39)
 	// A shaken tree trembles for a moment.
@@ -578,17 +593,30 @@ draw_enemy :: proc(e: Enemy) {
 			}
 		}
 	}
+	when PACK_FOX {
+		if e.kind == .Fox && draw_quad_enemy(pose, e) {
+			draw_enemy_marks(e, quad_head_top(pose, e))
+			return // the pack's fox (see quadruped.odin)
+		}
+	}
 	switch e.kind {
 	case .Turkey:
 		draw_turkey(pose, e)
 	case .Goat, .Billy:
-		draw_goat(pose, e)
+		if !draw_quad_enemy(pose, e) {
+			draw_goat(pose, e) // (with QUAD_ANIMALS off)
+		}
 	case .Fox:
 		draw_fox(pose, e)
 	}
+	draw_enemy_marks(e, (pose.front * [4]f32{0, 2.3, 0.6, 1}).xyz)
+}
+
+// Stars over a dizzy animal's head, and a bar of its health when it is hurt.
+draw_enemy_marks :: proc(e: Enemy, head: Vec3) {
+	r := ENEMY_RADIUS[e.kind]
 	if !e.ko && (e.state == .Dizzy || (e.state == .Held && e.limp > 0)) {
-		head := pose.front * [4]f32{0, 2.3, 0.6, 1}
-		draw_stars(head.xyz, r * 0.75, e.home.x * 1.7 + e.home.y)
+		draw_stars(head, r * 0.75, e.home.x * 1.7 + e.home.y)
 	}
 	// A hurt animal shows how much health it has left, in a little bar over it.
 	if !e.ko && e.health < ENEMY_HEALTH - 0.5 && !drawing_shadows() {
@@ -944,7 +972,7 @@ draw_prosio :: proc() {
 		skin = blend(skin, {255, 150, 40, 255}, glow)
 		skin_dark = blend(skin_dark, {230, 110, 30, 255}, glow)
 	}
-	r := prosio_radius(p.kg)
+	r := prosio_radius(p.kg) / PROSIO_SIZE // (drawn in his own measurements, then scaled)
 	wob := p.wobble
 
 	speed := length2(p.vel)
@@ -969,7 +997,7 @@ draw_prosio :: proc() {
 	hips := 0.3 + 0.1 * t
 	head := f32(0.46) // a big round head: he is drawn cute, kawaii style
 
-	base := translate({p.pos.x, p.height, p.pos.y}) * rot_y(p.facing)
+	base := translate({p.pos.x, p.height, p.pos.y}) * rot_y(p.facing) * scale({PROSIO_SIZE, PROSIO_SIZE, PROSIO_SIZE})
 	m := base * translate({0, bob, 0})
 	eyes_closed := math.mod(g.time, 3.2) < 0.12
 	brow_tilt: f32 = 0 // positive is worried, negative is fierce
@@ -1081,7 +1109,7 @@ draw_prosio :: proc() {
 			// A hoof on the leg or the tail, wherever it is (or both hooves,
 			// one on each hind leg of a goat): the hold point is turned into
 			// his own frame and kept within arm's reach.
-			local := direction_to_prosio(p.hand - {p.pos.x, p.height, p.pos.y})
+			local := direction_to_prosio(p.hand - {p.pos.x, p.height, p.pos.y}) / PROSIO_SIZE
 			if two_handed(g.enemies[p.carry_index].kind) {
 				local.x += side * 0.09
 			}
@@ -1197,7 +1225,7 @@ draw_prosio :: proc() {
 		ball(h, {0, -0.22, 0.34}, {0.09, 0.025, 0.03}, COLOR_WHITE) // gritted teeth
 	}
 
-	head_top := Vec3{p.pos.x, p.height + 2.2, p.pos.y}
+	head_top := Vec3{p.pos.x, p.height + 2.2 * PROSIO_SIZE, p.pos.y}
 	if p.dazed_t > 0 {
 		draw_stars(head_top, 0.45, 3.3)
 	}
@@ -1209,12 +1237,12 @@ draw_prosio :: proc() {
 		box(bar, {-(1 - power) / 2, 0, 0.02}, {power, 0.1, 0.03}, power >= 1 ? UI_RED : UI_YELLOW)
 	}
 	if (p.fail == .Fainted || p.fail == .Diet || p.fail == .Beaten) && p.fail_t > 0.4 {
-		draw_stars({p.pos.x, p.height + 1.3, p.pos.y}, 0.6, 5.1)
+		draw_stars({p.pos.x, p.height + 1.3 * PROSIO_SIZE, p.pos.y}, 0.6 * PROSIO_SIZE, 5.1)
 	}
 	if p.fail == .Heart_Attack && p.fail_t > 0.4 {
 		// A thumping cartoon heart above him.
 		beat := 1 + 0.25 * abs(math.sin(g.time * 7))
-		hm := translate({p.pos.x, p.height + 2.3, p.pos.y}) * scale({beat, beat, beat})
+		hm := translate({p.pos.x, p.height + 2.3 * PROSIO_SIZE, p.pos.y}) * scale({beat, beat, beat})
 		ball(hm, {-0.13, 0.08, 0}, {0.17, 0.17, 0.12}, COLOR_HEART)
 		ball(hm, {0.13, 0.08, 0}, {0.17, 0.17, 0.12}, COLOR_HEART)
 		draw_shape(.Cone, hm * translate({0, 0.08, 0}) * rot_z(math.PI) * scale({0.29, 0.36, 0.12}), COLOR_HEART)

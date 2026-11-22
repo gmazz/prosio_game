@@ -1,0 +1,306 @@
+{
+ "name": "goat",
+ "source": "Deer.blend",
+ "bones": [
+  "Body",
+  "Back",
+  "Torso",
+  "Torso2",
+  "Torso3",
+  "Neck1",
+  "Neck2",
+  "Neck3",
+  "Head",
+  "Ear1.L",
+  "Ear2.L",
+  "Ear3.L",
+  "Ear4.L",
+  "Ear1.R",
+  "Ear2.R",
+  "Ear3.R",
+  "Ear4.R",
+  "FrontShoulder.L",
+  "FrontUpperLeg.L",
+  "FrontLowerLeg.L",
+  "FrontShoulder.R",
+  "FrontUpperLeg.R",
+  "FrontLowerLeg.R",
+  "BackShoulder.L",
+  "BackLeg.L",
+  "BackUpperLeg.L",
+  "BackLowerLeg.L",
+  "BackShoulder.R",
+  "BackLeg.R",
+  "BackUpperLeg.R",
+  "BackLowerLeg.R",
+  "Tail1",
+  "Tail2",
+  "Tail3",
+  "PoleTargetBack.L",
+  "PoleTarget.L",
+  "PoleTargetBack.R",
+  "PoleTarget.R",
+  "IKBackLeg.L",
+  "FFB.L",
+  "IKFrontLeg.L",
+  "FF.L",
+  "IKBackLeg.R",
+  "FFB.R",
+  "IKFrontLeg.R",
+  "FF.R"
+ ],
+ "parents": [
+  -1,
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  8,
+  13,
+  14,
+  15,
+  3,
+  17,
+  18,
+  3,
+  20,
+  21,
+  1,
+  23,
+  24,
+  25,
+  1,
+  27,
+  28,
+  29,
+  1,
+  31,
+  32,
+  0,
+  0,
+  0,
+  0,
+  -1,
+  38,
+  -1,
+  40,
+  -1,
+  42,
+  -1,
+  44
+ ],
+ "groups": [
+  {
+   "name": "Beard",
+   "first": 0,
+   "count": 138
+  },
+  {
+   "name": "Eye_Black",
+   "first": 138,
+   "count": 132
+  },
+  {
+   "name": "Eye_Lighter",
+   "first": 270,
+   "count": 240
+  },
+  {
+   "name": "Eye_White",
+   "first": 510,
+   "count": 12
+  },
+  {
+   "name": "Hooves",
+   "first": 522,
+   "count": 534
+  },
+  {
+   "name": "Horn",
+   "first": 1056,
+   "count": 348
+  },
+  {
+   "name": "Main",
+   "first": 1404,
+   "count": 3930
+  },
+  {
+   "name": "Main_Dark",
+   "first": 5334,
+   "count": 228
+  },
+  {
+   "name": "Main_Light",
+   "first": 5562,
+   "count": 1218
+  }
+ ],
+ "clips": [
+  {
+   "name": "Idle",
+   "first": 0,
+   "count": 67,
+   "fps": 20,
+   "loop": true,
+   "stride": 0.0
+  },
+  {
+   "name": "Walk",
+   "first": 67,
+   "count": 23,
+   "fps": 20,
+   "loop": true,
+   "stride": 2.1099126242822215
+  },
+  {
+   "name": "Gallop",
+   "first": 90,
+   "count": 11,
+   "fps": 20,
+   "loop": true,
+   "stride": 3.4926147277538595
+  },
+  {
+   "name": "Eating",
+   "first": 101,
+   "count": 120,
+   "fps": 20,
+   "loop": true,
+   "stride": 0.0
+  },
+  {
+   "name": "Idle_HitReact_Left",
+   "first": 221,
+   "count": 10,
+   "fps": 20,
+   "loop": false,
+   "stride": 0.0
+  },
+  {
+   "name": "Death",
+   "first": 231,
+   "count": 18,
+   "fps": 20,
+   "loop": false,
+   "stride": 0.0
+  },
+  {
+   "name": "Attack_Headbutt",
+   "first": 249,
+   "count": 17,
+   "fps": 20,
+   "loop": false,
+   "stride": 0.0
+  },
+  {
+   "name": "Gallop_Jump",
+   "first": 266,
+   "count": 29,
+   "fps": 20,
+   "loop": false,
+   "stride": 0.0
+  }
+ ],
+ "sockets": {
+  "eye_L": {
+   "pos": [
+    0.17247742550292364,
+    1.7334898853053649,
+    0.8761026266341408
+   ],
+   "normal": [
+    0.9444915261119604,
+    0.008554938667657552,
+    0.17548548359263805
+   ],
+   "bone": "Head"
+  },
+  "eye_R": {
+   "pos": [
+    -0.2588909075129777,
+    1.6965873471150796,
+    0.8392451039204994
+   ],
+   "normal": [
+    -0.9479996589943767,
+    -0.15399451004486764,
+    0.01309809580561705
+   ],
+   "bone": "Head"
+  },
+  "udder": {
+   "pos": [
+    0,
+    0.6380187273025513,
+    -0.5852895736694336
+   ],
+   "bone": "Torso"
+  },
+  "hoof_L": {
+   "pos": [
+    0.22856071591377258,
+    0.17575910687446594,
+    -0.8731215596199036
+   ],
+   "bone": "FFB.L"
+  },
+  "hip_L": {
+   "pos": [
+    0.22856058180332184,
+    1.0895757675170898,
+    -0.7352895736694336
+   ],
+   "bone": "BackLeg.L"
+  },
+  "hoof_R": {
+   "pos": [
+    -0.2285604625940323,
+    0.17575877904891968,
+    -0.8731216192245483
+   ],
+   "bone": "FFB.R"
+  },
+  "hip_R": {
+   "pos": [
+    -0.22856053709983826,
+    1.0895756483078003,
+    -0.7352895736694336
+   ],
+   "bone": "BackLeg.R"
+  },
+  "mouth": {
+   "pos": [
+    0,
+    1.4194544315338136,
+    1.453333330154419
+   ],
+   "bone": "Head"
+  },
+  "tail_tip": {
+   "pos": [
+    0.013279521837830544,
+    1.0579439401626587,
+    -1.0805591344833374
+   ],
+   "bone": "Tail3"
+  },
+  "tail_root": {
+   "pos": [
+    -8.80027550831386e-10,
+    1.1180691719055176,
+    -0.8771527409553528
+   ],
+   "bone": "Tail1"
+  }
+ },
+ "scale": 0.5553770175099346
+}

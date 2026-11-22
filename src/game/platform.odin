@@ -251,6 +251,8 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	uniforms.forest = rl.GetShaderLocation(material.shader, "forest")
 	uniforms.hills = rl.GetShaderLocation(material.shader, "hills")
 	uniforms.pond = rl.GetShaderLocation(material.shader, "pond")
+	init_quad_meshes()
+	init_tree_meshes()
 }
 
 // How much a tapered limb narrows from one end to the other.
@@ -312,6 +314,18 @@ platform_shutdown :: proc() {
 	}
 	for mesh in meshes {
 		rl.UnloadMesh(mesh)
+	}
+	for k in Tree_Model_Kind {
+		for part in Tree_Part {
+			rl.UnloadMesh(tree_meshes[k][part])
+			rl.UnloadMesh(tree_hulls[k][part])
+		}
+	}
+	for k in Quad_Kind {
+		rl.UnloadMesh(quad_whole[k])
+		for i in 0 ..< len(QUAD_MODELS[k].groups) {
+			rl.UnloadMesh(quad_parts[k][i])
+		}
 	}
 	rl.UnloadMaterial(material)
 	rl.CloseWindow()
@@ -483,6 +497,130 @@ draw_shape :: proc(shape: Shape, transform: Mat4, color: Color) {
 	}
 	material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(color)
 	rl.DrawMesh(meshes[shape], material, rl.Matrix(transform))
+}
+
+// Packed four-legged animals (see quadruped.odin): for each, one mesh of the
+// whole animal (for its shadow and its outline) and one for each of its
+// materials, each bent anew (on the CPU, into quad_pos and its normals)
+// every time it is drawn. Made once at the start.
+@(private = "file")
+quad_whole: [Quad_Kind]rl.Mesh
+@(private = "file")
+quad_parts: [Quad_Kind][QUAD_MAX_GROUPS]rl.Mesh
+@(private = "file")
+quad_hull: [QUAD_MAX_VERTS][3]f32
+
+init_quad_meshes :: proc() {
+	for model, k in QUAD_MODELS {
+		quad_whole[k] = quad_new_mesh(len(model.mesh))
+		for grp, i in model.groups {
+			quad_parts[k][i] = quad_new_mesh(grp.count)
+		}
+	}
+}
+
+@(private = "file")
+quad_new_mesh :: proc(n: int) -> (mesh: rl.Mesh) {
+	mesh.vertexCount = i32(n)
+	mesh.triangleCount = i32(n / 3)
+	mesh.vertices = cast([^]f32)rl.MemAlloc(u32(n * 3 * size_of(f32)))
+	mesh.normals = cast([^]f32)rl.MemAlloc(u32(n * 3 * size_of(f32)))
+	rl.UploadMesh(&mesh, true)
+	return
+}
+
+// Draws the bent animal: its shadow; or its outline (the whole of it pushed
+// out along its smooth normals, drawn inside out) and then each part in its
+// colour.
+draw_quad_mesh :: proc(k: Quad_Kind, count: int, colors: []Color, shown: []bool) {
+	whole := quad_whole[k]
+	bytes :: proc(n: int) -> i32 {
+		return i32(n * size_of([3]f32))
+	}
+	if shadow_pass {
+		rl.UpdateMeshBuffer(whole, 0, &quad_pos[0], bytes(count), 0)
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(SHADOW_INK)
+		rl.DrawMesh(whole, material, rl.Matrix(FLATTEN))
+		return
+	}
+	if outlines_enabled && outline_width > 0 {
+		for i in 0 ..< count {
+			quad_hull[i] = quad_pos[i] + quad_smooth[i] * outline_width
+		}
+		rl.UpdateMeshBuffer(whole, 0, &quad_hull[0], bytes(count), 0)
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(OUTLINE_COLOR)
+		flash := flash_value
+		if flash > 0 {
+			set_hit_flash(0)
+		}
+		rlgl.SetCullFace(.FRONT)
+		rl.DrawMesh(whole, material, rl.Matrix(IDENTITY))
+		rlgl.SetCullFace(.BACK)
+		if flash > 0 {
+			set_hit_flash(flash)
+		}
+	}
+	for grp, i in QUAD_MODELS[k].groups {
+		if !shown[i] {
+			continue
+		}
+		part := quad_parts[k][i]
+		rl.UpdateMeshBuffer(part, 0, &quad_pos[grp.first], bytes(grp.count), 0)
+		rl.UpdateMeshBuffer(part, 2, &quad_flat[grp.first], bytes(grp.count), 0)
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(colors[i])
+		rl.DrawMesh(part, material, rl.Matrix(IDENTITY))
+	}
+}
+
+// Trees from models (see trees.odin): the bark and the leaves of each, made
+// once at the start; and one mesh for an outline, refilled for each part
+// drawn.
+@(private = "file")
+tree_meshes: [Tree_Model_Kind][Tree_Part]rl.Mesh
+@(private = "file")
+tree_hulls: [Tree_Model_Kind][Tree_Part]rl.Mesh
+@(private = "file")
+tree_hull_at: [TREE_MAX_VERTS][3]f32
+
+init_tree_meshes :: proc() {
+	for model, k in TREE_MODELS {
+		for part in Tree_Part {
+			first, count := part == .Bark ? 0 : model.bark, part == .Bark ? model.bark : model.leaves
+			mesh := quad_new_mesh(count)
+			for i in 0 ..< count {
+				v := model.mesh[first + i]
+				for c in 0 ..< 3 {
+					mesh.vertices[i * 3 + c] = v[c]
+					mesh.normals[i * 3 + c] = v[3 + c]
+				}
+			}
+			rl.UpdateMeshBuffer(mesh, 0, mesh.vertices, i32(count * 3 * size_of(f32)), 0)
+			rl.UpdateMeshBuffer(mesh, 2, mesh.normals, i32(count * 3 * size_of(f32)), 0)
+			tree_meshes[k][part] = mesh
+			tree_hulls[k][part] = quad_new_mesh(count)
+		}
+	}
+}
+
+// Draws a part of a tree: its shadow; or its outline, then itself.
+draw_tree_part :: proc(model: Tree_Model_Kind, part: Tree_Part, m: Mat4, color: Color) {
+	mesh := tree_meshes[model][part]
+	if shadow_pass {
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(SHADOW_INK)
+		rl.DrawMesh(mesh, material, rl.Matrix(FLATTEN * m))
+		return
+	}
+	if outlines_enabled && outline_width > 0 {
+		n := tree_hull(model, part, m, outline_width, tree_hull_at[:])
+		hull := tree_hulls[model][part]
+		rl.UpdateMeshBuffer(hull, 0, &tree_hull_at[0], i32(n * size_of([3]f32)), 0)
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(OUTLINE_COLOR)
+		rlgl.SetCullFace(.FRONT)
+		rl.DrawMesh(hull, material, rl.Matrix(IDENTITY))
+		rlgl.SetCullFace(.BACK)
+	}
+	material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(color)
+	rl.DrawMesh(mesh, material, rl.Matrix(m))
 }
 
 // The outline is the same shape drawn slightly bigger and inside out, so only

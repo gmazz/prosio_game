@@ -466,7 +466,7 @@ update_bees :: proc(dt: f32) {
 				p.wobble_vel += 2
 				g.shake = max(g.shake, 0.1)
 				say(felt < 0.7 ? "Ha! I hardly feel them!" : "Ow! Ow! Bees!", 0.7)
-				burst({p.pos.x, p.height + 1.4, p.pos.y}, 3, 2, COLOR_STAR, 0.06)
+				burst({p.pos.x, p.height + 1.4 * PROSIO_SIZE, p.pos.y}, 3, 2, COLOR_STAR, 0.06)
 			}
 		}
 	}

@@ -213,7 +213,7 @@ throw_stone :: proc() {
 		p.regen_delay = 0.3
 		speed := stone_speed(kg) * p.throw_power
 		dir := facing_dir(p.facing)
-		height := p.height + 1.1
+		height := p.height + 1.1 * PROSIO_SIZE
 		rise := speed * 0.08
 		if d, r, ok := aimed_throw(p.pos, height, speed); ok {
 			dir, rise = d, r
@@ -244,7 +244,7 @@ LUNGE_SPEED :: f32(3) // how much faster a dragged animal pulls when it lunges
 SKIP_KEEP :: f32(0.82) // share of forward speed kept at each skip
 SKIP_BOUNCE :: f32(0.55) // share of falling speed that bounces back up
 SKIP_SPIN :: f32(0.18) // share of falling speed the spin turns into forward speed
-ARM_LEN :: f32(0.55) // from his shoulder to his hoof, arm outstretched
+ARM_LEN :: f32(0.55) * PROSIO_SIZE // from his shoulder to his hoof, arm outstretched
 HOLD_SIDE :: f32(1) // which hand holds an animal by the leg: +1 is the side his model's +x points to
 FOLLOW_THROUGH :: f32(0.12) // seconds his arm stays down after a swing lands
 // What a slam takes from a held animal's health: so much, plus so much for
@@ -395,7 +395,7 @@ carry_place :: proc() -> (pos: Vec2, height: f32) {
 	lifted := smooth(1 - p.lift_t / max(p.lift_total, 0.001))
 	reach := (prosio_radius(p.kg) + carry_radius()) * (1 - lifted)
 	pos = p.pos + facing_dir(p.facing) * reach
-	height = p.height + lerp(0.05, 1.95, lifted)
+	height = p.height + lerp(0.05, 1.95 * PROSIO_SIZE, lifted)
 	return
 }
 
@@ -675,8 +675,8 @@ start_hold :: proc(e: ^Enemy) {
 prosio_to_world :: proc(local: Vec3) -> Vec3 {
 	p := &g.prosio
 	right := Vec2{math.cos(p.facing), -math.sin(p.facing)}
-	xz := p.pos + right * local.x + facing_dir(p.facing) * local.z
-	return {xz.x, p.height + local.y, xz.y}
+	xz := p.pos + (right * local.x + facing_dir(p.facing) * local.z) * PROSIO_SIZE
+	return {xz.x, p.height + local.y * PROSIO_SIZE, xz.y}
 }
 
 // A direction in the world, turned into his own frame.
@@ -778,7 +778,7 @@ heave :: proc(dt: f32) {
 	lift := 6 * min(p.kg / p.carry_kg, 1)
 	e.chain_old[1].y -= lift * dt
 	p.lunge_t = 0.35
-	burst({p.pos.x, p.height + 1.6, p.pos.y}, 4, 2.5, COLOR_SWEAT, 0.06)
+	burst({p.pos.x, p.height + 1.6 * PROSIO_SIZE, p.pos.y}, 4, 2.5, COLOR_SWEAT, 0.06)
 	say("Hnnnngh! Way too heavy!", 1)
 }
 
@@ -842,7 +842,7 @@ update_drag :: proc(dt: f32) {
 		to := e.chain[1] - shoulder
 		hand = shoulder + linalg.normalize0(to) * ARM_LEN
 	}
-	hand.y = max(hand.y, p.height + 0.2)
+	hand.y = max(hand.y, p.height + 0.2 * PROSIO_SIZE)
 
 	// Its body falls and flies freely between steps. Held up by the feet, a
 	// turkey cannot stand: it flaps, and every beat of its wings jerks it
@@ -961,7 +961,7 @@ update_drag :: proc(dt: f32) {
 				say("BONK!", 0.6)
 			}
 		}
-		if point.y < p.height + 1.6 {
+		if point.y < p.height + 1.6 * PROSIO_SIZE {
 			push_out_circle(&xz, r * 0.45, p.pos, prosio_radius(p.kg))
 		}
 		// Being pushed out moves it, but must not fling it: the push is not

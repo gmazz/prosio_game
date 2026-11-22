@@ -546,7 +546,7 @@ The meadow is 200 by 140 metres inside a fence, more than five times as big as b
 
 | Where | Which way from home | What is there |
 |---|---|---|
-| The forest | west | About 155 trees on a darker floor strewn with leaves, all through it, each at least 4.6 m from the next and thinning out towards the edge; a trail from the path from home to three clearings, where the 14 wild apple trees and most of the 40 berry bushes are; mushrooms, heaps of nuts and fallen branches at the foot of the trees; and five foxes |
+| The forest | west | About 147 trees, drawn from low-poly models, on a darker floor strewn with leaves, all through it, each at least 4.6 m from the next and thinning out towards the edge; a trail from the path from home to three clearings, where the 14 wild apple trees and most of the 40 berry bushes are; mushrooms, heaps of nuts and fallen branches at the foot of the trees; and five foxes |
 | The wheat fields | south-east | Three small ploughed fields of wheat, the windmill that grinds it, a few shady trees, and two crows overhead |
 | The garden | south | Two beds of pumpkins and a bed of cabbages, and two rabbit burrows |
 | Turkey Meadow | north | Open grass, most of the 22 turkeys and their eggs |
@@ -603,6 +603,29 @@ Two things in the web build are worth knowing if you change it:
 - `-sDECLARE_ASM_MODULE_EXPORTS=0` stops Emscripten renaming the functions that Odin's runtime needs from the page.
 - The web build never asks raylib whether the window should close, because that call stalls a browser page.
 
+### Animals from the animal pack
+
+The goat, the billy goat and the fox are not built from shapes like the other animals: they come from an animated animal pack (low-poly Blender files that share one four-legged skeleton and its animations, in the style of Quaternius's pack; its licence still needs confirming). `tools/pack_quadrupeds.sh` runs Blender (at `$BLENDER`, on the path, or `/Applications/Blender.app`) on the pack's files, by default in `~/Desktop/3D_assets/animated_animals_blender`:
+
+- **It reshapes each animal into the game's cuter build**, bone by bone: a bigger head, a shorter and thicker neck, a rounder body, shorter legs (the legs' foot targets move up with them, so the animations still work). The goat and the billy goat are both made from the deer; the goat gets short horns and a small beard, the billy goat great curled horns and a big beard. The numbers are `RECIPES` in `tools/pack_quadruped.py`.
+- **It writes `assets/<name>/`**: every triangle with its bones and weights, each bone's rest frame, the pack's animations sampled 20 times a second (idle, walk, gallop, eating, a flinch, death, a headbutt, a jump), how far one cycle of the walk and of the gallop carries the animal over the ground (measured from a hind hoof while it is down), and where the eyes, the mouth, the udder, the hips, the hooves and the tail are. Then it writes the Odin tables, `src/game/quadruped_assets.odin`.
+
+In the game (`quadruped.odin`) the animal's state picks the animation: standing still it idles, walking or running it walks or gallops, the animation run by how far it has gone rather than by time, so its legs keep step with the ground (a planted hoof drifts by under a tenth of the animal's speed), licking Prosio it eats, dizzy it flinches, dead it lies as the death animation leaves it, thrown it is caught mid-jump, swimming it gallops slowly, drowned it floats feet up. The front and rear halves of the body follow the frames the game gives them, so a held goat bends at the middle, and held by its hind legs both legs are turned and stretched to reach his hooves (a fox held by its tail, its tail to his hoof); held dead, it hangs limp as the death animation leaves it, but upright in his hand rather than laid on the ground. The mesh is bent on the CPU each time it is drawn (about 0.1 ms for a goat), into fixed buffers, so nothing is allocated. Its outline is the bent mesh pushed out along its smooth normals and drawn inside out, and its shadow is the bent mesh flattened, like every other shape. The pack's own eyes are hidden and the game's big cartoon eyes drawn in their place (shut when dizzy, crosses when dead), a nanny goat still shows her udder, a fox carries what it stole in its mouth, and stars still go round a dizzy animal's head.
+
+Two build switches: `-define:QUAD_ANIMALS=false` draws the goats from shapes as before, and `-define:PACK_FOX=false` draws the asset pilot's fox instead of the pack's (and leaves the pack fox's data out of the game).
+
+### Trees from models
+
+The trees are drawn from four low-poly tree models (Blender files in `~/Desktop/3D_assets/trees`), packed by `tools/pack_trees.sh` into `assets/trees/` and `src/game/tree_assets.odin`: a **round** broadleaf (five leafy balls on a branching trunk), a **lumpy** broadleaf (a tree of thousands of loose leaves, melted into one crown and simplified to about 900 triangles), a layered **pine** and a small **fir**. A fifth file in that folder, an apple, is a fruit and is not used.
+
+Each tree in the meadow takes one of its kind's two models, by its number (broadleaves, apple trees and blossom trees the round or the lumpy one, pines the pine or the fir), and is made its own:
+
+- scaled to its kind's height (broadleaf 6.7 m, blossom 6.2, pine 6.4, apple 4.6) times its own size (0.85 to 1.25), and to its kind's crown width;
+- a little wider or narrower (up to 12% either way), leaning a little (up to 3.4 degrees), and turned;
+- its leaves a little lighter or darker (up to 10%) than its kind's: green, a paler green for apple trees, pink for blossom.
+
+Its crown, as the meadow's rules see it (what it hides from the camera, where it turns see-through round him), is measured from the model as drawn, so the rules about trees in front of paths and food still hold. Forest trees are also kept from standing where their crowns would hide a clearing, so the clearings, their apple trees and their bushes stay in view; that leaves the forest about 147 trees. An apple tree's apples hang at spots on the upper slope of its crown, picked when it is packed. The leaves sway in the wind, a shaken tree trembles, and the outline is the model pushed out along its smooth normals and drawn inside out (about 0.015 ms a tree). `-define:PACKED_TREES=false` draws the trees from shapes as before.
+
 ## How the code is organised
 
 Everything is built in code from simple shapes; the game loads no image files.
@@ -630,6 +653,12 @@ src/
                      the spear
     larder.odin      food going off, in the sack and in a larder; the
                      larder, its menu and its picture
+    quadruped.odin   animals made from the animal pack: posing them from
+                     what they are doing, bending the mesh, their colours
+    quadruped_assets.odin  their tables, written by tools/pack_quadrupeds.sh
+    trees.odin       trees from low-poly models: each tree's model, size,
+                     width, lean and shade, and its apples
+    tree_assets.odin their tables, written by tools/pack_trees.sh
     diet.odin        what he is made of, in kilograms, and his weight as the
                      sum of it; what each food is made of; eating, burning,
                      and what too much or too little of each store does; the
@@ -651,7 +680,13 @@ src/
 build_desktop.sh
 build_web.sh
 tools/               check.sh (the check suite and autoplay), tour.sh (screenshots)
-                     and play.sh (a program plays a step at a time)
+                     and play.sh (a program plays a step at a time);
+                     pack_quadrupeds.sh, pack_quadruped.py and quadruped_odin.py
+                     (animals from the animal pack, with Blender); pack_trees.sh
+                     and pack_trees.py (trees from tree models, with Blender)
+assets/              goat/, billy/ and packfox/: animals packed from the animal
+                     pack (see Animals from the animal pack); trees/: the tree
+                     models (see Trees from models)
 AGENTS.md            where an agent that tests or plays the game begins
 .claude/agents/      the playtester agent
 lib/                 raylib compiled for the web
@@ -673,7 +708,7 @@ A few choices shape the rest:
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (105 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (109 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -794,6 +829,9 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | The fence grid, how high a jump clears it, how far ahead a piece goes, how big a pen can be, where the workbench stands | `workshop.odin` (`FENCE_LEN`, `FENCE_TOP`, `FENCE_AHEAD`, `FENCE_REACH`, `PEN_MOST`, `MAX_FENCES`, `BENCH_PLACE`) |
 | How far a scarecrow guards, how far the rod reaches | `workshop.odin` (`SCARECROW_REACH`, `ROD_REACH`) |
 | What a spear does to each animal, what it weighs and costs | `workshop.odin` (`SPEAR_BLOW`, `SPEAR_KG`, `SPEAR_COST`, `SPEAR_STAGGER`) |
+| The trees from models: each kind's height, crown width and leaf colour, how much trees vary, which model each kind uses | `trees.odin` (`TREE_HEIGHT`, `TREE_CROWN`, `TREE_LEAVES`, `TREE_WIDTH`, `TREE_LEAN`, `TREE_SHADE`, `TREE_PICK`); the clearings' size in `world.odin` (`CLEARING_RADIUS`) |
+| The animals from the animal pack: how they are reshaped, their horns and beard, their size; when they run rather than walk, their cartoon eyes | `tools/pack_quadruped.py` (`RECIPES`, then `tools/pack_quadrupeds.sh`), `quadruped.odin` (`QUAD_RUN`, `QUAD_EYE_SIZE`, `quad_color`) |
+| How big Prosio is against the animals and the meadow | `prosio.odin` (`PROSIO_SIZE`) |
 | What each food is made of, how big each store is, where lacking, full and too much begin, how fast stores empty, and how strong every effect is | `diet.odin` (`COMPOSITION`, `FIBRE_KCAL`, `VITAMIN_KCAL`, `SALT_KCAL`, `STORE_KG`, `FRAME`, `NEED_*`, `THIRST`, `TOO_LONG`, `DEADLY`, and the numbers under "What full and lacking do") |
 | Where the pond is and how big | `world.odin` (`POND`, `POND_RADIUS`) |
 | Recipes, where each is made, how long each place takes | `kitchen.odin` (`RECIPES`, `STATION_TIME`, `STATION_BONUS`) |
@@ -835,4 +873,6 @@ Every number that shapes the feel is a named constant or a one-line function nea
 - The numbers of the workshop (logs per dish, what each plan takes, what a spear does, how far a scarecrow guards), the sack's 60 litres and what each thing weighs and takes up, how fast food goes off, and how fast animals swim and drown are first guesses, not tuned by play.
 - Food in the sack goes off by the clock of play only; nothing goes off while the game is closed.
 - A dead body in the water floats straight to the nearest bank, through lily pads and all; the pond has no current. The bot gathers wood, builds, and puts fences up at random, but never builds a whole pen: pens are covered by the rules only.
+- The tree models come from a folder of downloads whose licences have not been checked. The layered pine's tiers show their outlines through each other, like ink lines.
+- The goats and the fox come from an animal pack whose licence has not been confirmed. Within a step the pack's walk moves a planted hoof a little to and fro (it keeps its place over the step, not every moment of it), and a charging goat gallops but does not lower its head.
 - The story is deliberately not written yet.

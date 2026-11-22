@@ -657,7 +657,7 @@ eat_from_sack :: proc() {
 	p.eat_t = 0.5
 	p.wobble_vel += 2.5
 	crumbs := is_dish(item) ? Color{226, 178, 104, 255} : COLOR_CRUMB
-	burst({p.pos.x, p.height + 1.3, p.pos.y}, 8, 2.5, crumbs, 0.07)
+	burst({p.pos.x, p.height + 1.3 * PROSIO_SIZE, p.pos.y}, 8, 2.5, crumbs, 0.07)
 }
 
 station_in_reach :: proc(at: Station_Kind, pos: Vec2, r: f32) -> bool {

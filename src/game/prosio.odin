@@ -136,15 +136,21 @@ fatness :: proc() -> f32 {
 	return clamp(g.prosio.fat / FAT_MAX, 0, 1)
 }
 
+// How big Prosio is drawn, against the animals and the meadow: his body
+// is modelled in its own measurements, and everything that comes from them
+// (his size on the ground, where his hands and shoulders are, how long his
+// arms are, how high he lifts and throws) is scaled by this.
+PROSIO_SIZE :: f32(0.75)
+
 // Prosio's size on the ground. The hands swing beyond this torso radius.
 prosio_radius :: proc(kg: f32) -> f32 {
-	return 0.42 + (kg - KG_SLIM) * 0.0055
+	return (0.42 + (kg - KG_SLIM) * 0.0055) * PROSIO_SIZE
 }
 
 // How wide his chest is: wider with fat, and with good lungs. His arms hang
 // from its sides.
 prosio_chest :: proc(kg: f32) -> f32 {
-	return min(prosio_radius(kg) - 0.12, 0.33 + 0.16 * fatness()) * lerp(1, 1.1, g.prosio.trait[.Lungs])
+	return min(prosio_radius(kg) / PROSIO_SIZE - 0.12, 0.33 + 0.16 * fatness()) * lerp(1, 1.1, g.prosio.trait[.Lungs]) // (in his own measurements)
 }
 
 // Everything below gets worse with fat, and the gap is deliberately wide.

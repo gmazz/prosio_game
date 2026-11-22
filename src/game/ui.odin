@@ -222,7 +222,7 @@ draw_ui :: proc() {
 	// Speech bubble.
 	if p.bubble_t > 0 && p.fail == .None {
 		size := 20 * s
-		pos := world_to_screen({p.pos.x, p.height + 2.6, p.pos.y})
+		pos := world_to_screen({p.pos.x, p.height + 2.6 * PROSIO_SIZE, p.pos.y})
 		w := ui_text_width(p.bubble, size) + 22 * s
 		ui_round_rect(pos.x - w / 2, pos.y - size, w, size + 13 * s, UI_WHITE)
 		ui_text(p.bubble, pos.x - w / 2 + 11 * s, pos.y - size + 6.5 * s, size, UI_DARK)

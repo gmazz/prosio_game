@@ -670,7 +670,7 @@ FOREST_EDGE :: f32(0.25) // thinning to this share of the trees at its edge
 // The forest's clearings, and the trail that joins them to the path from
 // home (PATH_ENDS[.Forest]).
 CLEARINGS := [3]Vec2{{-50, -14}, {-71, 8}, {-73, -36}}
-CLEARING_RADIUS :: f32(7)
+CLEARING_RADIUS :: f32(8)
 TRAILS := [3][2]Vec2{{{-30, -8}, {-50, -14}}, {{-50, -14}, {-71, 8}}, {{-50, -14}, {-73, -36}}}
 
 in_clearing :: proc(pos: Vec2, margin: f32) -> bool {
@@ -727,6 +727,9 @@ hides_something :: proc(pos: Vec2, species: Tree_Species) -> bool {
 			if kind != .Home && near_segment(behind, HOME, PATH_ENDS[kind], half) {
 				return true
 			}
+		}
+		if species != .Apple && in_clearing(behind, half - 1) {
+			return true // a clearing stays in view, with its apple trees and bushes
 		}
 		for rd in g.rounds[:g.round_count] {
 			if rd.kind != .Tree && rd.kind != .Rock && length2(behind - rd.pos) < rd.r + half {

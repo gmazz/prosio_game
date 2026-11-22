@@ -7,6 +7,7 @@ package check
 import game "../game"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 
 passed, failed: int
 
@@ -42,6 +43,7 @@ run_rules :: proc() -> int {
 	rules_workshop()
 	rules_saving()
 	rules_moving()
+	rules_packed_animals()
 	fmt.printf("\n%d passed, %d failed\n", passed, failed)
 	return failed
 }
@@ -278,6 +280,149 @@ rules_fighting :: proc() {
 }
 
 // Pebbles, thrown stones, aiming, and what they do to animals and crows.
+// The animals made from the animal pack (see quadruped.odin): their data
+// holds together, they stand on the ground, and a held goat's hind hooves
+// are in his hands.
+rules_packed_animals :: proc() {
+	section("packed animals")
+	g := &game.g
+	p := &g.prosio
+	broken := 0
+	what := ""
+	for &m, k in game.QUAD_MODELS {
+		if len(m.mesh) == 0 {
+			continue // (one compiled in only with its build switch on)
+		}
+		nb := len(m.bones)
+		frames := 0
+		for c in m.clips {
+			frames += c.count
+		}
+		for name in ([?]string{"Idle", "Walk", "Gallop", "Death"}) {
+			if _, ok := game.quad_clip(&m, name); !ok {
+				broken += 1
+				what = fmt.tprintf("%v has no %s", k, name)
+			}
+		}
+		if len(m.rest) != nb || len(m.frames) != frames * nb || len(m.mesh) % 3 != 0 {
+			broken += 1
+			what = fmt.tprintf("%v: %d rest frames for %d bones, %d frames for %d", k, len(m.rest), nb, len(m.frames), frames * nb)
+		}
+		for v in m.mesh {
+			total: f32
+			for i in 0 ..< 4 {
+				total += v[13 + i]
+				if int(v[9 + i]) >= nb {
+					broken += 1
+				}
+			}
+			if abs(total - 1) > 0.01 {
+				broken += 1
+				what = fmt.tprintf("%v: a corner's weights add up to %.2f", k, total)
+			}
+		}
+	}
+	check("the packed animals' meshes, bones and animations fit together", broken == 0, what)
+
+	fresh()
+	g.enemy_count = 0
+	g.round_count = 0
+	p.pos = {20, 20}
+	worst: f32
+	for kind in ([2]game.Enemy_Kind{.Goat, .Billy}) {
+		g.enemy_count = 0
+		game.add_enemy(kind, {30, 30})
+		e := &g.enemies[0]
+		e.vel = {}
+		skin: [game.QUAD_MAX_BONES]game.Mat4
+		pose := game.Animal_Pose{}
+		r := game.ENEMY_RADIUS[kind]
+		pose.rear = game.translate({e.pos.x, 0, e.pos.y}) * game.rot_y(e.facing) * game.scale({r, r, r})
+		pose.front = pose.rear
+		qk, ok := game.quad_skin(pose, e^, &skin)
+		if !ok {
+			worst = 99
+			continue
+		}
+		// The lowest point of the bent mesh: the bottom of a hoof.
+		lowest: f32 = 1e9
+		for v in game.QUAD_MODELS[qk].mesh {
+			y: f32
+			for i in 0 ..< 4 {
+				y += v[13 + i] * (skin[int(v[9 + i])] * [4]f32{v[0], v[1], v[2], 1}).y
+			}
+			lowest = min(lowest, y)
+		}
+		worst = max(worst, abs(lowest))
+	}
+	check("a packed goat or billy goat stands with its hooves on the ground", worst < 0.05, fmt.tprintf("its lowest point %.2f m from the ground", worst))
+
+	// A goat walking or galloping: while a hoof is planted it should stay
+	// put, not slide along with the goat.
+	slide :: proc(speed: f32) -> f32 {
+		g := &game.g
+		fresh()
+		g.enemy_count = 0
+		game.add_enemy(.Goat, {30, 30})
+		e := &g.enemies[0]
+		r := game.ENEMY_RADIUS[.Goat]
+		e.vel = {0, speed}
+		e.facing = 0
+		dt: f32 = 1.0 / 60
+		ys, zs: [240]f32
+		for k in 0 ..< 240 {
+			e.pos.y = 30 + speed * dt * f32(k)
+			e.gait = speed * dt * f32(k)
+			pose := game.Animal_Pose{}
+			pose.rear = game.translate({e.pos.x, 0, e.pos.y}) * game.rot_y(e.facing) * game.scale({r, r, r})
+			pose.front = pose.rear
+			skin: [game.QUAD_MAX_BONES]game.Mat4
+			qk, _ := game.quad_skin(pose, e^, &skin)
+			at := game.quad_socket_at(qk, &skin, "hoof_L")
+			ys[k], zs[k] = at.y, at.z
+		}
+		low: f32 = 1e9
+		for y in ys {
+			low = min(low, y)
+		}
+		// Over each stretch the hoof is down, how far it drifts in all.
+		moved, planted: f32
+		start := -1
+		for k in 0 ..< 240 {
+			down := ys[k] < low + 0.03
+			if down && start < 0 {
+				start = k
+			} else if !down && start >= 0 {
+				if k - 1 > start {
+					moved += abs(zs[k - 1] - zs[start])
+					planted += dt * f32(k - 1 - start)
+				}
+				start = -1
+			}
+		}
+		return planted > 0 ? moved / planted / speed : 1
+	}
+	walking, running := slide(1.2), slide(2.2)
+	check("a packed goat's planted hoof stays put as it walks and gallops, rather than sliding along", walking < 0.25 && running < 0.35, fmt.tprintf("a planted hoof moves at %.0f%% of the goat's speed walking, %.0f%% galloping", walking * 100, running * 100))
+
+	// He grabs a goat by its hind legs: a hoof in each of his.
+	fresh()
+	g.enemy_count = 0
+	g.round_count = 0
+	p.pos = {20, 20}
+	e := animal_before_him(.Goat)
+	step(2, {}, {.Grab})
+	step(40)
+	off: f32 = 99
+	if e.state == .Held {
+		pose := game.held_pose(e^)
+		skin: [game.QUAD_MAX_BONES]game.Mat4
+		qk, _ := game.quad_skin(pose, e^, &skin)
+		off = max(linalg.length(game.quad_socket_at(qk, &skin, "hoof_L") - game.quad_grip(pose, 1)), linalg.length(game.quad_socket_at(qk, &skin, "hoof_R") - game.quad_grip(pose, -1)))
+	}
+	check("a held goat's hind hooves are in his hands", off < 0.05, fmt.tprintf("held %v, the farther hoof %.3f m from his grip", e.state == .Held, off))
+}
+
 rules_stones :: proc() {
 	section("stones")
 	g := &game.g
@@ -860,7 +1005,7 @@ rules_world :: proc() {
 				}
 			}
 		}
-		check(fmt.tprintf("meadow %d: the forest has trees all through it, each apart from the next, and open clearings", seed), trees >= 150 && crowded == 0 && in_clearings == 0, fmt.tprintf("%d forest trees, %d pairs too close, %d in a clearing", trees, crowded, in_clearings))
+		check(fmt.tprintf("meadow %d: the forest has trees all through it, each apart from the next, and open clearings", seed), trees >= 140 && crowded == 0 && in_clearings == 0, fmt.tprintf("%d forest trees, %d pairs too close, %d in a clearing", trees, crowded, in_clearings))
 	}
 
 	// Twelve minutes of growing: nothing over its budget.
