@@ -647,6 +647,9 @@ Its crown, as the meadow's rules see it (what it hides from the camera, where it
 Everything is built in code from simple shapes; the game loads no image files.
 
 ```
+data/
+  tuning/            the numbers that shape the game, a JSON file to a subject
+tools/gen_data/      turns data/ into src/game/gen_*.odin at build time
 src/
   game/              the game itself
     platform.odin    the only file that calls raylib: window, input, shapes,
@@ -821,7 +824,13 @@ For example, Prosio grabs a turkey from the crowd on frame 12, walks off draggin
 
 ## Tuning
 
-Every number that shapes the feel is a named constant or a one-line function near the top of its file:
+Numbers that shape the game are moving out of the code into the data files in `data/tuning/`, one file to a subject (so far: `diet.json`). Each value there has its name in capitals, its type, the value, and a line saying what it is:
+
+```json
+"NEED_LOW": {"f32": 15, "about": "below this he lacks it"}
+```
+
+The game never reads these files: `tools/gen_data` (run by the build scripts and `tools/check.sh`) turns each into `src/game/gen_<subject>.odin`, so after editing one, build as usual. A mistake in a file stops the build with its line number, and a misspelled name stops it at the code that uses it. Do not edit the `gen_` files. Inside a table, a word with a capital and small letters is a name from the game's lists (`"Carbs"`), and a key in small letters is a field. The rest are still named constants or one-line functions near the top of their files:
 
 | To change | Look in |
 |---|---|
@@ -862,12 +871,13 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | Grounded drag pose for the goat, billy goat and fox | `quadruped_drag.odin` (`QUAD_DRAG_SETTLE`, `QUAD_DRAG_HIP_*`, `QUAD_DRAG_TAIL_LIFT`) |
 | The keys and controller buttons each action starts with; the stick's dead middle, how far it goes before it counts as a direction in menus, how far a trigger is pulled to count | `controls.odin` (`DEFAULT_BINDINGS`), `platform.odin` (`STICK_DEAD`, `STICK_PRESS`, `TRIGGER_PRESS`) |
 | Shaking a tree: how close, how square on, for how long, how many apples | `world.odin` (`TREE_SHAKE_REACH`, `TREE_SHAKE_ANGLE`, `TREE_SHAKE_TIME`, `TREE_SHAKE_APPLES`) |
-| Salt washed out by a drink; how far off and how long before a goat he hit forgets it | `diet.odin` (`DRINK_SALT`, `DRINK_SALT_FLOOR`), `enemies.odin` (`SOUR_SIGHT`, `SOUR_FORGET`) |
+| Salt washed out by a drink; how far off and how long before a goat he hit forgets it | `data/tuning/diet.json` (`DRINK_SALT`, `DRINK_SALT_FLOOR`), `enemies.odin` (`SOUR_SIGHT`, `SOUR_FORGET`) |
 | How a drowned animal sinks | `enemies.odin` (`SINK_WAIT`, `SINK_SPEED`, `SINK_DEPTH`) |
 | The fog round the meadow: where it starts, how thick, how far out a thrown animal is lost | `world.odin` (`FOG_START`, `FOG_THICK`, `FOG_LOST`) |
 | His campfire: what the kit costs, how much clear ground it needs | `kitchen.odin` (`RECIPES`), `workshop.odin` (`CAMP_ROOM`) |
 | How big Prosio is against the animals and the meadow | `prosio.odin` (`PROSIO_SIZE`) |
-| What each food is made of, how big each store is, where lacking, full and too much begin, how fast stores empty, and how strong every effect is | `diet.odin` (`COMPOSITION`, `FIBRE_KCAL`, `VITAMIN_KCAL`, `SALT_KCAL`, `STORE_KG`, `FRAME`, `NEED_*`, `THIRST`, `TOO_LONG`, `DEADLY`, and the numbers under "What full and lacking do") |
+| What each food is made of | `diet.odin` (`COMPOSITION`) |
+| How big each store is, where lacking, full and too much begin, how fast stores empty, and how strong every effect is | `data/tuning/diet.json` (sections `stores`, `levels`, `full_and_lacking`, `too_much`) |
 | Where the pond is and how big | `world.odin` (`POND`, `POND_RADIUS`) |
 | Recipes, where each is made, how long each place takes | `kitchen.odin` (`RECIPES`, `STATION_TIME`, `STATION_BONUS`) |
 | Meat from each animal, how long a body lies and how long until another animal comes, milk, how foxes behave | `enemies.odin` (`MEAT_FROM`, `BODY_LIFE`, `RESPAWN`, `MILK_EVERY`, `FOX_NOTICE`, `FOX_REST`) |

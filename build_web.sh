@@ -11,6 +11,7 @@ if [ ! -f "$LIB" ]; then
 	echo "Missing $LIB: raylib compiled for the web is needed." >&2
 	exit 1
 fi
+sh tools/gen_data.sh # data/*.json into src/game/gen_*.odin
 OUT=build/web
 mkdir -p "$OUT"
 odin build src/main_web -target:js_wasm32 -build-mode:obj -o:size -vet \

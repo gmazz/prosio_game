@@ -42,7 +42,7 @@ Follow `.claude/agents/playtester.md`. It is written for one kind of agent but a
 
 ## If you were asked to change the game
 
-- Every number that shapes the game is a named constant near the top of its file; the README's "Tuning" table says where each is.
+- Every number that shapes the game is in `data/tuning/*.json` (being moved there subject by subject; the rest are still named constants near the top of their files). The build turns those files into `src/game/gen_*.odin`: edit the JSON, never the `gen_` files. The README's "Tuning" table says where each number is.
 - `src/game/platform.odin` is the only file that calls raylib. The game allocates no memory.
 - When you fix or decide something, add a rule for it to `src/check/rules.odin`, and keep the README true.
 - Run `tools/check.sh` before you say you are done.

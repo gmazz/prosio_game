@@ -78,71 +78,6 @@ NEED_NAME := [Need]cstring {
 	.Electrolytes = "ELECTROLYTES",
 }
 
-FRAME :: f32(12.5) // kg of him that never change: bones, and the rest
-// What each store weighs when it is full, in kg. (Vitamins and electrolytes
-// weigh nothing.)
-STORE_KG := [Need]f32 {
-	.Carbs        = 6,
-	.Protein      = 3,
-	.Fibre        = 2,
-	.Water        = 5,
-	.Vitamins     = 0,
-	.Electrolytes = 0,
-}
-// Having run right out of these ends the game, if it lasts.
-DEADLY := [Need]bool {
-	.Carbs        = false,
-	.Protein      = false,
-	.Fibre        = false,
-	.Water        = true,
-	.Vitamins     = true,
-	.Electrolytes = true,
-}
-
-NEED_START :: f32(50)
-WATER_START :: f32(80)
-NEED_EMPTY :: f32(4) // below this he has run out
-NEED_LOW :: f32(15) // below this he lacks it
-NEED_HIGH :: f32(70) // above this he is full of it
-NEED_OVER :: f32(90) // above this it is too much
-WATER_LOW :: f32(25)
-NEED_FADE :: f32(0.001) // the share of each level used up every second, at rest: half of it in 11 minutes
-SHED :: f32(6) // above NEED_OVER it moves on this many times as fast
-THIRST :: f32(0.1) // water level used up every second: a full drink lasts a good quarter of an hour
-TOO_LONG :: f32(180) // seconds without water, vitamins or electrolytes before the game is over
-
-// What full and lacking do, in numbers.
-RUSH_SPEED :: f32(1.25) // sugar rush: how much faster he walks and runs,
-RUSH_DRAIN :: f32(0.3) // and the share of the usual stamina a sprint costs
-CRASH_TIME :: f32(8) // seconds of sugar crash when the rush wears off,
-CRASH_SPEED :: f32(0.6) // and how slow he is meanwhile
-NO_FUEL :: f32(0.5) // lacking carbs: the share of his stamina that comes back
-GAS_EVERY :: Vec2{5, 8} // seconds between his winds
-GAS_REACH :: f32(7.5) // animals this near run from it,
-GAS_SCARE :: f32(5) // for this long
-GAS_COST :: f32(1.5) // the fibre level each one lets out
-ACHE_EVERY :: Vec2{10, 16} // seconds between tummy aches,
-ACHE_TIME :: f32(1) // and how long one stops him
-EAGLE_SIGHT :: f32(1.8) // eagle eyes: how much further he sees,
-EAGLE_ZOOM :: f32(1.3) // and how far the camera pulls back
-DIM_SIGHT :: f32(0.6)
-DIM_ZOOM :: f32(0.85)
-SALTY_THIRST :: f32(2.5) // salty: how much faster he gets thirsty
-LICK :: f32(0.25) // electrolytes the goats lick off him each second
-DRINK_SALT :: f32(25) // electrolytes a drink washes out of him,
-DRINK_SALT_FLOOR :: f32(40) // but no lower than this
-CRAMP_AFTER :: f32(2.5) // lacking electrolytes: seconds of sprinting that bring on a cramp,
-CRAMP_JUMP :: f32(0.6) // and the share of his jump he still has
-BULK_BURN :: f32(1.4) // full of protein: how much more everything burns (how much faster muscle builds is BULK in body.odin)
-THIRSTY_STAMINA :: f32(50) // thirsty: his stamina only comes back this far
-DRINK_TIME :: f32(0.9)
-// Too much of each:
-HICCUP_EVERY :: Vec2{1.5, 3.5} // seconds between hiccups
-GAS_STORM :: Vec2{1.2, 2.5} // seconds between winds in a gas storm, each letting out twice the fibre
-GLOW_NOTICE :: f32(1.5) // glowing: how much further off the turkeys spot him
-PARCHED_THIRST :: f32(5) // parched: how much faster his water goes
-STIFF :: f32(1.6) // stiff: how much longer a swing or a stoop takes
-
 // What each food is made of: the share of its calories that is carbs, fat,
 // protein, fibre, vitamins and electrolytes, in per cent (they add up to
 // 100). A piece puts into him those shares of its calories and nothing else:
@@ -183,10 +118,6 @@ NUTRIENT_COLOR := [Nutrient]Color {
 }
 VITAMIN_COLOR :: Color{250, 230, 110, 255}
 SALT_COLOR :: Color{236, 236, 240, 255}
-
-FIBRE_KCAL :: f32(60) // calories of fibre to a kilogram of his fibre store
-VITAMIN_KCAL :: f32(1) // calories of vitamins to a point of his vitamins level
-SALT_KCAL :: f32(1) // and of electrolytes to a point of that level
 
 // Shares in per cent, in the order of Nutrient (index it with int(n)).
 Composition :: [len(Nutrient)]f32

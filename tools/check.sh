@@ -7,5 +7,6 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/check
+sh tools/gen_data.sh # data/*.json into src/game/gen_*.odin
 odin build src/check -out:build/check/prosio-check -vet
 exec build/check/prosio-check "$@"
