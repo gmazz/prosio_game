@@ -465,6 +465,8 @@ draw_bag_map :: proc(x, y, w, s: f32) {
 		case .Scarecrow:
 			ui_rect(at.x - 3 * s, at.y - 1 * s, 6 * s, 2 * s, TSHIRT)
 			ui_circle(at.x, at.y - 2 * s, 1.6 * s, STRAW)
+		case .Stump:
+			ui_circle(at.x, at.y, 1.5 * s, COLOR_TRUNK)
 		case .Block:
 		}
 	}

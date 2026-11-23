@@ -1340,11 +1340,27 @@ update_thrown :: proc(dt: f32) {
 	}
 }
 
-draw_rock :: proc(m: Mat4, r: f32) {
-	set_surface(.Stone)
-	ball(m, {0, 0, 0}, {r, r * 0.75, r}, COLOR_ROCK)
-	ball(m, {r * 0.35, r * 0.3, r * 0.2}, {r * 0.5, r * 0.4, r * 0.5}, COLOR_ROCK_LIGHT)
+// A rock of radius r with its middle at m, drawn from one of the rock
+// models (see tools/pack_trees.sh): which one goes by the rock's number in
+// the world (index), so it keeps its shape when he lifts and throws it, and
+// a mossy rock keeps its moss. No taller than ROCK_TALL times its radius.
+ROCK_PLAIN := [?]Tree_Model_Kind{.Rock2, .Rock3, .Rock4, .Rock5}
+ROCK_MOSSY := [?]Tree_Model_Kind{.Rockmoss1, .Rockmoss2, .Rockmoss3, .Rockmoss4}
+ROCK_TALL :: f32(1.5)
+
+draw_rock :: proc(m: Mat4, r: f32, index := -1) {
+	mossy := index >= 0 && index < g.round_count && g.rounds[index].mossy
+	k := max(index, 0)
+	model := mossy ? ROCK_MOSSY[k % len(ROCK_MOSSY)] : ROCK_PLAIN[k % len(ROCK_PLAIN)]
+	md := &TREE_MODELS[model]
+	wide := r / max(md.radius, 0.01)
+	tall := min(wide, ROCK_TALL * r / max(md.height, 0.01))
+	shaped := m * rot_y(f32(k) * 1.7) * translate({0, -md.height * tall / 2, 0}) * scale({wide, tall, wide})
 	set_surface(.Solid)
+	draw_tree_part(model, .Bark, shaped, md.bark_color)
+	if md.leaves > 0 {
+		draw_tree_part(model, .Leaves, shaped, md.leaf_color)
+	}
 }
 
 // The rock in his hands, and rocks in the air.
@@ -1352,7 +1368,7 @@ draw_grab :: proc() {
 	p := &g.prosio
 	if p.carry == .Rock {
 		pos, height := carry_place()
-		draw_rock(translate({pos.x, height + p.carry_r * 0.75, pos.y}) * rot_y(p.facing), p.carry_r)
+		draw_rock(translate({pos.x, height + p.carry_r * 0.75, pos.y}) * rot_y(p.facing), p.carry_r, p.carry_index)
 	}
 	for t in g.thrown {
 		if t.active && t.spear {
@@ -1361,7 +1377,7 @@ draw_grab :: proc() {
 			along := linalg.normalize0(Vec3{t.vel.x, t.vy, t.vel.y}) * SPEAR_LEN / 2
 			draw_spear(at - along, at + along)
 		} else if t.active {
-			draw_rock(translate({t.pos.x, t.y + t.r * 0.75, t.pos.y}) * rot_x(t.spin), t.r)
+			draw_rock(translate({t.pos.x, t.y + t.r * 0.75, t.pos.y}) * rot_x(t.spin), t.r, t.round)
 		}
 	}
 	if p.winding && !drawing_shadows() {

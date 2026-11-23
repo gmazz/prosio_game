@@ -568,6 +568,8 @@ agent_look :: proc(radius: f32) {
 			add(&things, rd.pos, radius, fmt.tprintf("salt rock, %d lumps", rd.fruit))
 		case .Pebbles:
 			add(&things, rd.pos, radius, fmt.tprintf("patch of pebbles, %d on it", rd.fruit))
+		case .Stump:
+			add(&things, rd.pos, min(radius, 4), rd.variant == 2 ? "a fallen log, in the way (jump it)" : "a mossy stump, in the way (jump it)")
 		case .Scarecrow:
 			add(&things, rd.pos, radius, "his scarecrow")
 		case .Larder:
@@ -596,8 +598,11 @@ agent_look :: proc(radius: f32) {
 		}
 	}
 	for st, at in g.stations {
+		if !game.station_standing(at) {
+			continue
+		}
 		how := st.ready ? fmt.tprintf("ready: %d %s", st.count, game.ITEM_NAME[st.dish]) : (st.baking ? fmt.tprintf("busy, %.0f s to go", st.bake_t) : "empty")
-		add(&things, st.pos, radius, fmt.tprintf("the %v (%s)", at, how))
+		add(&things, st.pos, radius, at == .Camp ? fmt.tprintf("his campfire (%s)", how) : fmt.tprintf("the %v (%s)", at, how))
 	}
 	add(&things, g.mill.pos, radius, fmt.tprintf("the mill (%d sheaves grinding, %d flour ready)", g.mill.grinding, g.mill.ready))
 	{
@@ -653,7 +658,9 @@ agent_map :: proc() {
 	}
 	fmt.println("Fixed places:")
 	for st, at in g.stations {
-		fmt.printfln("  %-14s %s", fmt.tprintf("the %v", at), agent_where(st.pos))
+		if game.station_standing(at) {
+			fmt.printfln("  %-14s %s", at == .Camp ? "his campfire" : fmt.tprintf("the %v", at), agent_where(st.pos))
+		}
 	}
 	fmt.printfln("  %-14s %s", "the mill", agent_where(g.mill.pos))
 	fmt.printfln("  %-14s %s  (%.1f m across)", "the pond", agent_where(game.POND), game.POND_RADIUS * 2)

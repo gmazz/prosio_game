@@ -1,12 +1,11 @@
 package game
 
 import "core:math"
-import "core:math/linalg"
 
-// Trees made from low-poly tree models (see tools/pack_trees.py): two
-// broadleaves, a round one and a lumpy one, and two pines, a layered pine and
-// a small fir. Each tree in the meadow takes one of its kind's two models, by
-// its number, and is made its own: scaled to its kind's height times its own
+// Trees made from low-poly tree models (see tools/pack_trees.sh): from
+// Quaternius' nature packs, several broadleaves and birches, round trees for
+// the apple and blossom trees, and pines. Each tree in the meadow takes one
+// of its kind's models (TREE_PICK), by its number, and is made its own: scaled to its kind's height times its own
 // size, narrowed or widened a little, leaning a little, and a shade lighter
 // or darker. Its crown, as the meadow's rules see it (what it hides, where
 // it fades round him), is measured from the model as drawn.
@@ -21,6 +20,9 @@ Tree_Model :: struct {
 	bark, leaves:                 int, // corners of each: the bark first in mesh
 	height:                       f32,
 	crown_low, crown_high, crown_r: f32,
+	bark_color:                   Color, // as modelled (alpha 0: none, the game's own trunk colour)
+	leaf_color:                   Color, // as modelled (alpha 0: none)
+	radius:                       f32, // how far it reaches out from its middle, anywhere
 	spots:                        []Vec3, // where apples hang
 	mesh:                         [][9]f32, // position, flat normal, smooth normal
 }
@@ -32,13 +34,13 @@ Tree_Part :: enum {
 
 // Each kind's height (metres, before a tree's own size), how wide its crown
 // is (its radius), and its two models.
-TREE_HEIGHT := [Tree_Species]f32{.Broadleaf = 6.7, .Apple = 4.6, .Blossom = 6.2, .Pine = 6.4}
+TREE_HEIGHT := [Tree_Species]f32{.Broadleaf = 5.4, .Apple = 4.6, .Blossom = 5.2, .Pine = 5.8}
 TREE_CROWN := [Tree_Species]f32{.Broadleaf = 2.0, .Apple = 1.7, .Blossom = 1.9, .Pine = 1.35}
-TREE_PICK := [Tree_Species][2]Tree_Model_Kind {
-	.Broadleaf = {.Round, .Lumpy},
-	.Apple     = {.Round, .Lumpy},
-	.Blossom   = {.Round, .Lumpy},
-	.Pine      = {.Pine, .Fir},
+TREE_PICK := [Tree_Species][]Tree_Model_Kind {
+	.Broadleaf = {.Broad1, .Broad2, .Broad3, .Broad4, .Common1, .Common2, .Birch1, .Birch2},
+	.Apple     = {.Round1, .Round2},
+	.Blossom   = {.Round3, .Broad1},
+	.Pine      = {.Pine1, .Pine2, .Pine3, .Pine4, .Pine5},
 }
 TREE_WIDTH :: f32(0.12) // how much wider or narrower a tree may be than its kind,
 TREE_LEAN :: f32(0.06) // how far it may lean (radians),
@@ -59,7 +61,8 @@ tree_random :: proc(index: int, purpose: f32) -> f32 {
 
 // The shape of tree number index, of this kind, drawn from its model.
 packed_tree_shape :: proc(species: Tree_Species, index: int, size: f32) -> Tree_Shape {
-	model := TREE_PICK[species][tree_random(index, 1) < 0.5 ? 0 : 1]
+	pick := TREE_PICK[species]
+	model := pick[min(int(tree_random(index, 1) * f32(len(pick))), len(pick) - 1)]
 	md := TREE_MODELS[model]
 	tall := TREE_HEIGHT[species] * size / md.height
 	wide := TREE_CROWN[species] * size / md.crown_r * (1 + TREE_WIDTH * (2 * tree_random(index, 2) - 1))
@@ -86,7 +89,10 @@ draw_packed_tree :: proc(pos: Vec2, index: int, t: Tree_Shape) {
 	shaped := scale(t.scale)
 
 	set_surface(.Bark)
-	bark := t.species == .Blossom ? Color{104, 78, 72, 255} : COLOR_TRUNK
+	bark := TREE_MODELS[t.model].bark_color
+	if bark.a == 0 {
+		bark = t.species == .Blossom ? Color{104, 78, 72, 255} : COLOR_TRUNK
+	}
 	draw_tree_part(t.model, .Bark, m * shaped, bark)
 
 	set_surface(.Leaf)
@@ -106,19 +112,4 @@ draw_packed_tree :: proc(pos: Vec2, index: int, t: Tree_Shape) {
 		}
 	}
 	set_surface(.Solid)
-}
-
-// The outline of a tree part: its corners carried into the world, each
-// pushed out along its smooth normal by width.
-tree_hull :: proc(model: Tree_Model_Kind, part: Tree_Part, m: Mat4, width: f32, out: [][3]f32) -> int {
-	md := &TREE_MODELS[model]
-	first, count := part == .Bark ? 0 : md.bark, part == .Bark ? md.bark : md.leaves
-	turn := linalg.matrix3_from_matrix4(m)
-	for i in 0 ..< count {
-		v := md.mesh[first + i]
-		p := (m * [4]f32{v[0], v[1], v[2], 1}).xyz
-		n := linalg.normalize0(turn * Vec3{v[6], v[7], v[8]})
-		out[i] = p + n * width
-	}
-	return count
 }

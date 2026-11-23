@@ -76,7 +76,7 @@ budget_count :: proc(item: Item) -> int {
 MAX_ROUNDS :: 640
 MAX_FOODS :: 360
 MAX_PARTICLES :: 256
-MAX_DECOR :: 2400
+MAX_DECOR :: 5000
 MAX_FIELDS :: 8
 
 Round_Kind :: enum {
@@ -94,6 +94,7 @@ Round_Kind :: enum {
 	Bench, // the workbench at home
 	Scarecrow, // one he built and stood up (see workshop.odin)
 	Larder, // one he built and stood up (see larder.odin)
+	Stump, // a mossy stump or a fallen log in the forest (variant says which); low enough to jump
 }
 
 Tree_Species :: enum {
@@ -112,6 +113,8 @@ Round :: struct {
 	fruit:   int, // apples on an apple tree, bunches of berries on a bush
 	fruit_t: f32, // until the next apple or bunch starts (or a ripe apple falls)
 	ripe:    f32, // how ripe its fruit is, 0 to 1
+	mossy:   bool, // a rock with moss on it (most in the forest)
+	variant: int, // a stump: 0 a mossy stump, 1 a plain one, 2 a fallen log
 	shake_t: f32, // just shaken: the leaves are still trembling,
 	shake_power: f32, // this hard (1 for a knock)
 }
@@ -336,11 +339,13 @@ bush_kcal :: proc(b: ^Round) -> f32 {
 }
 
 Decor_Kind :: enum {
-	Tuft,
+	Tuft, // a clump of grass (a grass model)
 	Flower,
+	Fern, // under the forest trees (a fern model)
+	Shrub, // a low bush under the forest trees, nothing on it; he walks through
 }
 
-// Grass tufts and flowers. Purely for looks.
+// Clumps of grass, flowers and ferns. Purely for looks.
 Decor :: struct {
 	pos:     Vec2,
 	kind:    Decor_Kind,
@@ -354,6 +359,13 @@ Particle :: struct {
 	size:     f32,
 	gravity:  f32,
 	color:    Color,
+}
+
+// A rock: in the forest most are mossy, out in the open a few.
+add_rock :: proc(pos: Vec2, r: f32) {
+	if i := add_round(pos, r, .Rock); i >= 0 {
+		g.rounds[i].mossy = (i % 4 != 0) == (inside_region(pos, .Forest) > 0)
+	}
 }
 
 add_round :: proc(pos: Vec2, r: f32, kind: Round_Kind) -> int {
@@ -460,8 +472,9 @@ build_world :: proc() {
 	g.stations[.Fire].pos = POND + {10.5, 4.5}
 	g.stations[.Churn].pos = {55, -33}
 	g.stations[.Bench].pos = HOME + BENCH_PLACE
+	g.camp_round, g.camp_block = -1, -1 // his campfire is not set up yet (see set_up_camp)
 	for st, kind in g.stations {
-		if kind != .Bench { // the workbench came later: it is put in last (below)
+		if kind != .Bench && kind != .Camp { // the workbench came later: it is put in last (below)
 			add_round(st.pos, STATION_RADIUS[kind], STATION_ROUND[kind])
 		}
 	}
@@ -517,6 +530,23 @@ build_world :: proc() {
 	scatter_under_trees(.Mushroom, budget_count(.Mushroom))
 	scatter_under_trees(.Nuts, budget_count(.Nuts))
 
+	// Mossy stumps and fallen logs between the forest trees, off the paths
+	// and out of the clearings.
+	for placed, tries := 0, 0; placed < FOREST_STUMPS && tries < 4000; tries += 1 {
+		pos := spot_in(.Forest, 0.95)
+		probe := pos
+		if in_clearing(pos, 2) || on_a_path(pos, 2.2) || length2(pos - HOME) < 15 {
+			continue
+		}
+		if hit, _ := collide_static(&probe, STUMP_RADIUS + 0.8, 0, true); hit {
+			continue
+		}
+		if i := add_round(pos, STUMP_RADIUS, .Stump); i >= 0 {
+			g.rounds[i].variant = placed % 3
+			placed += 1
+		}
+	}
+
 	// A few shady trees round the fields.
 	for placed, tries := 0, 0; placed < 8 && tries < 800; tries += 1 {
 		pos := spot_in(.Fields, 1.05)
@@ -532,7 +562,7 @@ build_world :: proc() {
 		pos := spot_in(.Hills, 0.98)
 		size := random() < 0.3 ? random_range(0.9, 1.5) : random_range(0.35, 0.8)
 		if clear_spot(pos, size + 1.2) {
-			add_round(pos, size, .Rock)
+			add_rock(pos, size)
 			placed += 1
 		}
 	}
@@ -594,7 +624,7 @@ build_world :: proc() {
 	for placed, tries := 0, 0; placed < 40 && tries < 3000; tries += 1 {
 		pos := random_spot()
 		if region, in_region := region_at(pos); (!in_region || region == .Turkeys) && clear_spot(pos, 2) {
-			add_round(pos, random_range(0.3, 0.7), .Rock)
+			add_rock(pos, random_range(0.3, 0.7))
 			placed += 1
 		}
 	}
@@ -626,7 +656,8 @@ build_world :: proc() {
 	scatter_under_trees(.Wood, WOOD_LYING)
 	add_round(g.stations[.Bench].pos, STATION_RADIUS[.Bench], .Bench)
 
-	// Scatter tufts and flowers where nothing else stands.
+	// Scatter grass, flowers and, in the forest, ferns where nothing else
+	// stands (and grass and ferns not on the paths).
 	w := WORLD_HALF
 	for tries := 0; g.decor_count < MAX_DECOR && tries < MAX_DECOR * 3; tries += 1 {
 		pos := Vec2{random_range(-w.x + 0.5, w.x - 0.5), random_range(-w.y + 0.5, w.y - 0.5)}
@@ -634,9 +665,20 @@ build_world :: proc() {
 		if hit, _ := collide_static(&probe, 0.5, 0, true); hit || in_field(pos, 0.3) {
 			continue
 		}
+		roll := g.decor_count % 20
+		kind: Decor_Kind = roll < 6 ? .Flower : .Tuft
+		if inside_region(pos, .Forest) > 0 {
+			kind = roll < 2 ? .Flower : (roll < 10 ? .Fern : (roll < 13 ? .Shrub : .Tuft)) // the forest floor is mostly ferns, with low bushes
+		}
+		if inside_region(pos, .Bees) > 0 {
+			kind = .Flower // the bee meadow is all flowers
+		}
+		if kind != .Flower && on_a_path(pos, 1.6) {
+			continue
+		}
 		g.decor[g.decor_count] = Decor {
 			pos     = pos,
-			kind    = g.decor_count % 3 == 0 || inside_region(pos, .Bees) > 0 ? .Flower : .Tuft, // the bee meadow is all flowers
+			kind    = kind,
 			variant = g.decor_count,
 		}
 		g.decor_count += 1
@@ -677,9 +719,11 @@ scatter_under_trees :: proc(kind: Food_Kind, count: int) {
 //   and what is put down after the trees (bushes, mushrooms, nuts, salt)
 //   goes only where no tree stands in front of it (see hidden_by_tree).
 VIEW_SLOPE :: f32(1.25)
-FOREST_TREES :: 175 // trees in the forest (besides the apple trees),
-FOREST_SPACING :: f32(4.6) // each at least this far from the next,
+FOREST_TREES :: 300 // trees in the forest (besides the apple trees),
+FOREST_SPACING :: f32(3.4) // each at least this far from the next,
 FOREST_EDGE :: f32(0.25) // thinning to this share of the trees at its edge
+FOREST_STUMPS :: 36 // mossy stumps and fallen logs in the forest
+STUMP_RADIUS :: f32(0.5)
 // The forest's clearings, and the trail that joins them to the path from
 // home (PATH_ENDS[.Forest]).
 CLEARINGS := [3]Vec2{{-50, -14}, {-71, 8}, {-73, -36}}
@@ -861,6 +905,8 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false, over_fence
 				top = 1.3
 			case .Block:
 				top = 0.5
+			case .Stump:
+				top = FENCE_TOP // he jumps it as he jumps a fence
 			}
 			if feet >= top {
 				continue

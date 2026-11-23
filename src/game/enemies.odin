@@ -943,8 +943,9 @@ use_held_animal :: proc() {
 	case e.ko && MEAT_FROM[e.kind] == 0:
 		answer("Nobody eats fox.")
 	case e.ko:
-		if !station_in_reach(.Fire, p.pos, prosio_radius(p.kg) + 1.2) {
-			answer("The chopping block is by the fire, at the pond.")
+		fire, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2)
+		if !at_fire {
+			answer("The chopping block is by the fire, at the pond (or by my campfire).")
 			return
 		}
 		room := sack_room(.Meat)
@@ -961,7 +962,7 @@ use_held_animal :: proc() {
 			sack_add(.Meat, math.round(RAW_KCAL[.Meat] * fresh), fresh)
 		}
 		p.sack_sel = .Meat
-		block := g.stations[.Fire].pos + FIRE_BLOCK.xz
+		block := g.stations[fire].pos + FIRE_BLOCK.xz
 		burst({block.x, 0.7, block.y}, 12, 3, COLOR_STAR, 0.08)
 		leave(e)
 		p.carry = .Nothing

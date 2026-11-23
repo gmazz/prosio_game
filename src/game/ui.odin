@@ -66,8 +66,10 @@ prompt_text :: proc() -> cstring {
 			action = "Too heavy to lift over the fence: it needs a gate     {Grab}: let go" 
 		case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_FROM[g.enemies[p.carry_index].kind] > 0:
 			// A body: it wants chopping up, at the block by the fire.
-			if station_in_reach(.Fire, p.pos, prosio_radius(p.kg) + 1.2) {
+			if _, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2); at_fire {
 				action = ui_format_name("{Action}: chop it into meat     %s", let_go)
+			} else if g.camp_up {
+				action = ui_format_name(too_heavy ? "Drag it to a fire to chop it     %s" : "Drag it to a fire to chop it     {Bump}: bash with it     %s", let_go)
 			} else {
 				action = ui_format_name(too_heavy ? "Drag it to the fire by the pond     %s" : "Drag it to the fire by the pond     {Bump}: bash with it     %s", let_go)
 			}
@@ -110,6 +112,8 @@ prompt_text :: proc() -> cstring {
 			action = o.ready ? "{Action}: take it out of the oven" : (o.baking ? "Baking... wait for the ding!" : "{Action}: bake something")
 		case .Fire:
 			action = o.ready ? "{Action}: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "{Action}: cook something")
+		case .Camp:
+			action = o.ready ? "{Action}: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "{Action}: cook something     {Grab}: pack it up")
 		case .Churn:
 			action = o.ready ? "{Action}: take it from the stool" : (o.baking ? "Churning... nearly there!" : "{Action}: churn some milk")
 		case .Bench:
@@ -162,6 +166,8 @@ prompt_text :: proc() -> cstring {
 		action = "{Eat}: stand the scarecrow up here"
 	} else if p.sack_sel == .Larder && p.sack[.Larder] > 0 && larder_in_reach() < 0 {
 		action = "{Eat}: stand the larder up here"
+	} else if p.sack_sel == .Campfire && p.sack[.Campfire] > 0 && !g.camp_up {
+		action = "{Eat}: set up my campfire here"
 	} else if what, _, which := built_in_reach(); what != .Nothing {
 		switch {
 		case what == .Larder:
@@ -199,7 +205,7 @@ draw_ui :: proc() {
 
 	// Signs in the world.
 	for o, at in g.stations {
-		if !on_screen(o.pos, 4) {
+		if !station_standing(at) || !on_screen(o.pos, 4) {
 			continue
 		}
 		top := Vec3{o.pos.x, at == .Oven ? 2.9 : 2.5, o.pos.y}

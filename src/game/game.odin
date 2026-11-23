@@ -60,6 +60,8 @@ Game :: struct {
 	particle_next: int,
 	thrown:        [MAX_THROWN]Thrown_Rock,
 	stations:      [Station_Kind]Station, // the oven, the fire and the churn
+	camp_up:       bool, // his campfire is set up (at stations[.Camp].pos)
+	camp_round, camp_block: int, // its stones and its stump among the rounds (-1: never set up)
 	fish:          [MAX_FISH]Fish,
 	pests:         [MAX_PESTS]Pest,
 	hives:         [MAX_HIVES]Hive,
@@ -190,7 +192,7 @@ new_game :: proc() {
 		if f := add_food(.Spear, g.prosio.pos + {-1.2, 2.4}); f != nil {
 			f.fallen, f.life, f.size = true, 1e9, 1
 		}
-		for it in ([?]Item{.Wood, .Fence, .Rod, .Spear, .Gate}) { // (14 litres: the sack holds 60)
+		for it in ([?]Item{.Wood, .Fence, .Rod, .Spear, .Gate, .Campfire}) { // (22 litres: the sack holds 60)
 			sack_add(it, 0)
 		}
 		g.prosio.sack_sel = .Fence
@@ -518,6 +520,7 @@ draw_things :: proc() {
 	draw_world()
 	draw_oven()
 	draw_fire()
+	draw_fire(.Camp)
 	draw_churn()
 	draw_mill()
 	draw_bench()

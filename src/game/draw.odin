@@ -14,7 +14,12 @@ IMPACT_LEG_SPLAY :: f32(0.24)
 
 COLOR_SKY :: Color{159, 181, 157, 255}
 COLOR_OUTSIDE :: Color{93, 130, 105, 255}
-COLOR_TUFT :: Color{94, 132, 85, 255}
+COLOR_TUFT :: Color{76, 126, 58, 255}
+COLOR_FERN :: Color{58, 106, 54, 255}
+GRASS_SIZE :: f32(1.25) // how big a clump of grass is drawn, against its model (0.4 m tall)
+SHRUB_SIZE :: f32(0.6) // a low bush under the forest trees (1.2 m tall as modelled)
+LOG_LENGTH :: f32(1.9) // a fallen log, from end to end
+FERN_SIZE :: f32(0.95) // and a fern
 COLOR_FENCE :: Color{174, 145, 99, 255}
 COLOR_SKIN :: Color{249, 181, 160, 255}
 COLOR_SKIN_DARK :: Color{222, 136, 127, 255}
@@ -103,17 +108,25 @@ draw_ground :: proc() {
 	set_surface(.Meadow)
 	draw_shape(.Terrain, translate({0, 0.01, 0}) * scale({w.x, 1, w.y}), COLOR_WHITE)
 	set_surface(.Solid)
+	// (Grass, ferns and bushes are drawn with the leaf surface, swaying, set
+	// once for them all; flowers are drawn after.)
+	set_surface(.Leaf)
+	set_sway(0.05)
 	for d in g.decor[:g.decor_count] {
-		if !on_screen(d.pos) {
+		if d.kind == .Flower || !on_screen(d.pos) {
 			continue
 		}
 		m := translate({d.pos.x, 0, d.pos.y}) * rot_y(f32(d.variant) * 1.7)
-		switch d.kind {
-		case .Tuft:
-			for i in 0 ..< 3 {
-				blade := m * rot_y(f32(i) * 2.1) * translate({0.06, 0, 0}) * rot_z(-0.3)
-				cone(blade, {0, 0, 0}, 0.05, 0.2 + 0.05 * f32((d.variant + i) % 3), COLOR_TUFT)
-			}
+		draw_plant(d, m)
+	}
+	set_sway(0)
+	set_surface(.Solid)
+	for d in g.decor[:g.decor_count] {
+		if d.kind != .Flower || !on_screen(d.pos) {
+			continue
+		}
+		m := translate({d.pos.x, 0, d.pos.y}) * rot_y(f32(d.variant) * 1.7)
+		#partial switch d.kind {
 		case .Flower:
 			tube(m, {0, 0, 0}, 0.02, 0.26, COLOR_TUFT)
 			ball(m, {0, 0.28, 0}, {0.1, 0.06, 0.1}, FLOWER_COLORS[d.variant % len(FLOWER_COLORS)])
@@ -152,8 +165,7 @@ draw_world :: proc() {
 		case .Bush:
 			draw_bush(r, i)
 		case .Rock:
-			m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(i) * 2.3)
-			draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
+			draw_rock(translate({r.pos.x, r.r * 0.5, r.pos.y}), r.r, i)
 		case .Hive:
 			draw_hive(r, i)
 		case .Salt_Rock:
@@ -174,6 +186,8 @@ draw_world :: proc() {
 			if r.r > 0 {
 				draw_larder(translate({r.pos.x, 0, r.pos.y}))
 			}
+		case .Stump:
+			draw_stump(r, i)
 		case .Oven, .Mill, .Fire, .Churn, .Block, .Bench:
 		// Drawn by draw_oven, draw_mill, draw_fire, draw_churn and draw_bench.
 		}
@@ -1379,7 +1393,7 @@ SALT_PINK :: Color{250, 196, 212, 255}
 // and big pink crystals standing up out of it when there is some to take.
 draw_salt_rock :: proc(r: Round, index: int) {
 	m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(index) * 1.3)
-	draw_rock(m * translate({0, r.r * 0.34, 0}), r.r)
+	draw_rock(m * translate({0, r.r * 0.5, 0}), r.r, index)
 	set_surface(.Solid)
 	// The crust, in patches over the top.
 	for k in 0 ..< 5 {
@@ -1393,5 +1407,44 @@ draw_salt_rock :: proc(r: Round, index: int) {
 		draw_shape(.Cube, c * translate({0, 0.34, 0}) * rot_z(0.15 * side) * scale({0.34, 0.74, 0.34}), SALT_PINK)
 		draw_shape(.Cube, c * translate({0.26, 0.2, 0.1}) * rot_z(-0.35) * scale({0.22, 0.44, 0.22}), shade(SALT_PINK, 0.92))
 		draw_shape(.Cube, c * translate({-0.22, 0.16, 0.13}) * rot_z(0.4) * scale({0.18, 0.34, 0.18}), COLOR_WHITE)
+	}
+}
+
+// A mossy stump or a fallen log, drawn from its model: a stump as wide as
+// it stands in the way, a log LOG_LENGTH long, turned its own way.
+draw_stump :: proc(r: Round, index: int) {
+	STUMPS := [3]Tree_Model_Kind{.Stump1, .Stump2, .Log1}
+	model := STUMPS[r.variant % 3]
+	md := &TREE_MODELS[model]
+	size := model == .Log1 ? LOG_LENGTH / 2 / md.radius : r.r * 1.25 / md.radius
+	m := translate({r.pos.x, 0, r.pos.y}) * rot_y(f32(index) * 2.1) * scale({size, size, size})
+	set_surface(.Bark)
+	draw_tree_part(model, .Bark, m, md.bark_color)
+	set_surface(.Solid)
+	if md.leaves > 0 {
+		draw_tree_part(model, .Leaves, m, shade(COLOR_FERN, 1.1))
+	}
+}
+
+// A clump of grass, a fern or a low bush, from its model; the caller has
+// set the leaf surface and the sway.
+draw_plant :: proc(d: Decor, m: Mat4) {
+	#partial switch d.kind {
+	case .Tuft:
+		// A clump of grass: mostly short, now and then a tall one, a
+		// shade lighter or darker, swaying in the wind.
+		model, size := Tree_Model_Kind.Grass1, GRASS_SIZE
+		if d.variant % 5 == 0 {
+			model, size = d.variant % 2 == 0 ? .Grass2 : .Grass3, GRASS_SIZE * 0.55
+		}
+		size *= 0.8 + 0.4 * tree_random(d.variant, 7)
+		draw_tree_part(model, .Leaves, m * scale({size, size, size}), shade(COLOR_TUFT, 0.9 + 0.25 * tree_random(d.variant, 8)))
+	case .Shrub:
+		size := SHRUB_SIZE * (0.8 + 0.4 * tree_random(d.variant, 7))
+		draw_tree_part(d.variant % 2 == 0 ? .Bush1 : .Bush2, .Leaves, m * scale({size, size, size}), shade(COLOR_FERN, 0.95 + 0.25 * tree_random(d.variant, 8)))
+	case .Fern:
+		FERNS := [3]Tree_Model_Kind{.Fern1, .Fern2, .Fern3}
+		size := FERN_SIZE * (0.8 + 0.4 * tree_random(d.variant, 7))
+		draw_tree_part(FERNS[d.variant % 3], .Leaves, m * scale({size, size, size}), shade(COLOR_FERN, 0.85 + 0.3 * tree_random(d.variant, 8)))
 	}
 }

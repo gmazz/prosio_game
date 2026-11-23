@@ -50,6 +50,7 @@ SPOIL_HALF := [Item]f32 {
 	.Spear         = 0,
 	.Gate          = 0,
 	.Larder        = 0,
+	.Campfire      = 0,
 }
 ROTTEN :: f32(0.3) // below this freshness it is thrown away
 STALE :: f32(0.75) // and below this it is said to be going off

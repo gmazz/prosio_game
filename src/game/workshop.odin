@@ -42,6 +42,7 @@ PLAN_ABOUT := #partial [Item]cstring {
 	.Spear     = "Hold {Grab}: throw it. {Action} picks it up again.",
 	.Gate      = "{Eat} puts it up in a fence. {Action} opens it.",
 	.Larder    = "{Eat} stands it up. Food keeps 5 times longer.",
+	.Campfire  = "{Eat} sets it up: cook and chop meat anywhere.",
 }
 
 // What the sack screen says of each thing in it that is not food.
@@ -54,6 +55,7 @@ THING_ABOUT := #partial [Item]cstring {
 	.Spear     = "Choose it, then hold {Grab} and let go. {Action} picks it up again",
 	.Gate      = "{Eat} puts it up like a fence. {Action} opens and shuts it, even holding an animal",
 	.Larder    = "{Eat} stands it up. {Action} opens it: food keeps 5 times longer in it",
+	.Campfire  = "{Eat} sets it up: a fire to cook eggs, fish and meat at, and to chop meat. {Grab} packs it up again",
 }
 
 // Fences stand on the lines of a grid of squares FENCE_LEN across, which
@@ -316,6 +318,19 @@ put_up :: proc(item: Item) {
 		} else {
 			say(g.fence_count == 1 ? "Knock, knock! My first piece of fence!" : "Knock, knock! Another piece of fence!", 1.2)
 		}
+	} else if item == .Campfire {
+		if g.camp_up {
+			answer("My campfire is already set up! {Grab} at it packs it up.")
+			return
+		}
+		at = p.pos + facing_dir(p.facing) * (prosio_radius(p.kg) + STATION_RADIUS[.Camp] + 0.4)
+		probe := at
+		if hit, _ := collide_static(&probe, CAMP_ROOM, 0); hit || in_pond(at) || beyond_edge(at) > -CAMP_ROOM {
+			answer("Not here: I need a clear spot for my campfire!")
+			return
+		}
+		set_up_camp(at)
+		say("There! My own campfire. {Action}: cook something!", 1.6)
 	} else if item == .Larder {
 		at = p.pos + facing_dir(p.facing) * (prosio_radius(p.kg) + LARDER_RADIUS + 0.3)
 		probe := at
@@ -368,6 +383,7 @@ Built :: enum {
 	Fence,
 	Scarecrow,
 	Larder,
+	Campfire,
 }
 
 // The scarecrow he is standing at, or failing that the piece of fence in
@@ -389,6 +405,9 @@ built_in_reach :: proc() -> (what: Built, fence: Fence_At, round: int) {
 		if l.used && length2(l.pos - p.pos) - pr - LARDER_RADIUS < BUILT_REACH + 0.2 && what == .Nothing {
 			what, round = .Larder, i // (round: here, which larder)
 		}
+	}
+	if what == .Nothing && g.camp_up && length2(g.stations[.Camp].pos - p.pos) - pr - STATION_RADIUS[.Camp] < BUILT_REACH + 0.4 {
+		what = .Campfire
 	}
 	if what != .Nothing || g.fence_count == 0 {
 		return
@@ -445,6 +464,20 @@ take_down :: proc() -> bool {
 		remove_larder(l)
 		sack_add(.Larder, 0)
 		say("Up it comes. Heavy!", 1.2)
+	case .Campfire:
+		o := &g.stations[.Camp]
+		if o.baking || o.ready {
+			answer(o.ready ? "Take what is cooked off it first!" : "Not while it is cooking!")
+			return true
+		}
+		if sack_room(.Campfire) < 1 {
+			answer("No room in my sack for the campfire!")
+			return true
+		}
+		at = o.pos
+		pack_up_camp()
+		sack_add(.Campfire, 0)
+		say("The fire is out. Into the sack!", 1.2)
 	case .Scarecrow:
 		if sack_room(.Scarecrow) < 1 {
 			answer("No room in my sack for more scarecrows!")
@@ -837,4 +870,35 @@ crosses_fence :: proc(a, b: Vec2) -> bool {
 		}
 	}
 	return false
+}
+
+// His campfire: one, wherever he sets it up (not in the pond, nor out in
+// the fog), with a ring of stones and a spit, and a stump beside it to chop
+// meat on. While it stands it is a cooking fire like the one by the pond
+// (the station Camp: the same dishes, his same skill at the grill). F packs
+// it up again, once nothing is cooking on it.
+CAMP_ROOM :: f32(1.3) // how much clear ground round it it needs
+
+set_up_camp :: proc(at: Vec2) {
+	g.camp_up = true
+	g.stations[.Camp].pos = at
+	block := at + FIRE_BLOCK.xz
+	// Its stones and its stump stand in the way, like the fire's. (The
+	// same two places are used again each time it is set up.)
+	if g.camp_round < 0 || g.camp_round >= g.round_count {
+		g.camp_round = add_round(at, STATION_RADIUS[.Camp], .Fire)
+		g.camp_block = add_round(block, BLOCK_RADIUS, .Block)
+	} else {
+		g.rounds[g.camp_round].pos, g.rounds[g.camp_round].r = at, STATION_RADIUS[.Camp]
+		g.rounds[g.camp_block].pos, g.rounds[g.camp_block].r = block, BLOCK_RADIUS
+	}
+}
+
+pack_up_camp :: proc() {
+	g.camp_up = false
+	if g.camp_round >= 0 && g.camp_round < g.round_count {
+		g.rounds[g.camp_round].r = 0
+		g.rounds[g.camp_block].r = 0
+	}
+	g.stations[.Camp].baking, g.stations[.Camp].ready = false, false
 }

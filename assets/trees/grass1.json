@@ -1,0 +1,22 @@
+{
+ "name": "grass1",
+ "source": "Grass_Short.blend",
+ "bark": 0,
+ "leaves": 576,
+ "height": 0.4045765409246087,
+ "crown_low": 0.0,
+ "crown_high": 0.40457653999328613,
+ "crown_r": 0.23823478130356512,
+ "spots": [],
+ "bark_color": [
+  0,
+  0,
+  0
+ ],
+ "leaf_color": [
+  83,
+  109,
+  69
+ ],
+ "radius": 0.23823478130356512
+}

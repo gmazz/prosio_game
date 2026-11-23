@@ -1,0 +1,22 @@
+{
+ "name": "rock5",
+ "source": "Rock_7.blend",
+ "bark": 282,
+ "leaves": 0,
+ "height": 0.8493811786174774,
+ "crown_low": 0,
+ "crown_high": 0.8493811786174774,
+ "crown_r": 0,
+ "spots": [],
+ "bark_color": [
+  135,
+  139,
+  150
+ ],
+ "leaf_color": [
+  0,
+  0,
+  0
+ ],
+ "radius": 0.6056132646829956
+}

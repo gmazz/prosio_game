@@ -310,7 +310,7 @@ save_fallen :: proc() {
 // carries, wears and knows, what he has seen of the meadow, and what he has
 // built in it: his fences, his scarecrows, and the animals in his pens. The
 // rest of the meadow starts afresh each time.
-SAVE_VERSION :: u32(6)
+SAVE_VERSION :: u32(7)
 MAX_PENNED :: 12 // penned animals kept
 
 Fence_Saved :: struct {
@@ -352,6 +352,80 @@ Save :: struct {
 	penned:          [MAX_PENNED]Penned_Saved,
 	sack_fresh:      [Item]f32,
 	larders:         [MAX_LARDERS]Larder_Saved,
+	camp_up:         bool, // his campfire, if it is set up, and where
+	camp_pos:        Vec2,
+}
+
+// Version 6 was the same from before the campfire, with one thing fewer in
+// the sack (ITEMS_6 of them), and no campfire.
+ITEMS_6 :: 33
+Larder_Saved_6 :: struct {
+	used:  bool,
+	pos:   Vec2,
+	stock: [ITEMS_6]int,
+	kcal:  [ITEMS_6]f32,
+	fresh: [ITEMS_6]f32,
+}
+Save_6 :: struct {
+	version:         u32,
+	size:            u32,
+	fat:             f32,
+	trait:           [Trait]f32,
+	need:            [Need]f32,
+	sack:            [ITEMS_6]int,
+	sack_kcal:       [ITEMS_6]f32,
+	sack_sel:        u8,
+	outfit:          Outfit,
+	seen:            [MAP_W * MAP_H]bool,
+	seen_region:     [Region_Kind]bool,
+	knows:           [ITEMS_6]bool,
+	fence_count:     i32,
+	fences:          [MAX_FENCES]Fence_Saved,
+	scarecrow_count: i32,
+	scarecrows:      [MAX_SCARECROWS]Vec2,
+	penned_count:    i32,
+	penned:          [MAX_PENNED]Penned_Saved,
+	sack_fresh:      [ITEMS_6]f32,
+	larders:         [MAX_LARDERS]Larder_Saved_6,
+}
+
+from_save_6 :: proc(old: ^Save_6, save: ^Save) {
+	save^ = {
+		version         = SAVE_VERSION,
+		size            = size_of(Save),
+		fat             = old.fat,
+		trait           = old.trait,
+		need            = old.need,
+		sack_sel        = Item(min(int(old.sack_sel), ITEMS_6 - 1)),
+		outfit          = old.outfit,
+		seen            = old.seen,
+		seen_region     = old.seen_region,
+		fence_count     = old.fence_count,
+		fences          = old.fences,
+		scarecrow_count = old.scarecrow_count,
+		scarecrows      = old.scarecrows,
+		penned_count    = old.penned_count,
+		penned          = old.penned,
+	}
+	for i in 0 ..< ITEMS_6 {
+		save.sack[Item(i)] = old.sack[i]
+		save.sack_kcal[Item(i)] = old.sack_kcal[i]
+		save.sack_fresh[Item(i)] = old.sack_fresh[i]
+		save.knows[Item(i)] = old.knows[i]
+	}
+	for r in RECIPES {
+		if int(r.dish) >= ITEMS_6 {
+			save.knows[r.dish] = true // a plan that came later: he knows it, as he knows them all
+		}
+	}
+	for l, k in old.larders {
+		save.larders[k].used, save.larders[k].pos = l.used, l.pos
+		for i in 0 ..< ITEMS_6 {
+			save.larders[k].stock[Item(i)] = l.stock[i]
+			save.larders[k].kcal[Item(i)] = l.kcal[i]
+			save.larders[k].fresh[Item(i)] = l.fresh[i]
+		}
+	}
 }
 
 // The saves of earlier versions, each carried over to the next: the same
@@ -459,13 +533,13 @@ from_save_4 :: proc(old: ^Save_4, save: ^Save_5) {
 // The things of version 5 kept their numbers too. His one cooking skill
 // becomes all three of the kitchen's skills; and he knows the plans that
 // are new.
-from_save_5 :: proc(old: ^Save_5, save: ^Save) {
+from_save_5 :: proc(old: ^Save_5, save: ^Save_6) {
 	save^ = {
-		version         = SAVE_VERSION,
-		size            = size_of(Save),
+		version         = 6,
+		size            = size_of(Save_6),
 		fat             = old.fat,
 		need            = old.need,
-		sack_sel        = Item(min(int(old.sack_sel), ITEMS_5 - 1)),
+		sack_sel        = u8(min(int(old.sack_sel), ITEMS_5 - 1)),
 		outfit          = old.outfit,
 		seen            = old.seen,
 		seen_region     = old.seen_region,
@@ -484,14 +558,14 @@ from_save_5 :: proc(old: ^Save_5, save: ^Save) {
 		}
 	}
 	for count, i in old.sack {
-		save.sack[Item(i)] = count
-		save.sack_kcal[Item(i)] = old.sack_kcal[i]
-		save.sack_fresh[Item(i)] = count > 0 ? 1 : 0 // (food did not go off then)
-		save.knows[Item(i)] = old.knows[i]
+		save.sack[i] = count
+		save.sack_kcal[i] = old.sack_kcal[i]
+		save.sack_fresh[i] = count > 0 ? 1 : 0 // (food did not go off then)
+		save.knows[i] = old.knows[i]
 	}
 	for r in RECIPES {
-		if int(r.dish) >= ITEMS_5 {
-			save.knows[r.dish] = true
+		if int(r.dish) >= ITEMS_5 && int(r.dish) < ITEMS_6 {
+			save.knows[int(r.dish)] = true
 		}
 	}
 }
@@ -500,6 +574,7 @@ has_save: bool
 save_t: f32 // until the next save
 // The save is put together and read here, not on the stack: it is big.
 save_buffer: Save
+old_save_6: Save_6
 old_save_5: Save_5
 old_save_4: Save_4
 old_save_3: Save_3
@@ -528,6 +603,7 @@ save_game :: proc() {
 	for l, i in g.larders {
 		save.larders[i] = {l.used, l.pos, l.stock, l.kcal, l.fresh}
 	}
+	save.camp_up, save.camp_pos = g.camp_up, g.stations[.Camp].pos
 	for way in Fence_Way {
 		for there, i in g.fences[way] {
 			if there && save.fence_count < MAX_FENCES {
@@ -572,7 +648,8 @@ load_game :: proc() -> bool {
 		}
 		from_save_3(&old_save_3, &old_save_4)
 		from_save_4(&old_save_4, &old_save_5)
-		from_save_5(&old_save_5, save)
+		from_save_5(&old_save_5, &old_save_6)
+		from_save_6(&old_save_6, save)
 		n = size_of(Save)
 	} else if n == size_of(Save_4) && save.version == 4 {
 		copy(([^]u8)(&old_save_4)[:size_of(Save_4)], bytes[:size_of(Save_4)])
@@ -580,14 +657,23 @@ load_game :: proc() -> bool {
 			return false
 		}
 		from_save_4(&old_save_4, &old_save_5)
-		from_save_5(&old_save_5, save)
+		from_save_5(&old_save_5, &old_save_6)
+		from_save_6(&old_save_6, save)
 		n = size_of(Save)
 	} else if n == size_of(Save_5) && save.version == 5 {
 		copy(([^]u8)(&old_save_5)[:size_of(Save_5)], bytes[:size_of(Save_5)])
 		if old_save_5.size != size_of(Save_5) {
 			return false
 		}
-		from_save_5(&old_save_5, save)
+		from_save_5(&old_save_5, &old_save_6)
+		from_save_6(&old_save_6, save)
+		n = size_of(Save)
+	} else if n == size_of(Save_6) && save.version == 6 {
+		copy(([^]u8)(&old_save_6)[:size_of(Save_6)], bytes[:size_of(Save_6)])
+		if old_save_6.size != size_of(Save_6) {
+			return false
+		}
+		from_save_6(&old_save_6, save)
 		n = size_of(Save)
 	}
 	if n != size_of(Save) || save.version != SAVE_VERSION || save.size != size_of(Save) {
@@ -642,6 +728,9 @@ load_game :: proc() -> bool {
 				}
 			}
 		}
+	}
+	if save.camp_up && !math.is_nan(save.camp_pos.x) && beyond_edge(save.camp_pos) < 0 {
+		set_up_camp(save.camp_pos)
 	}
 	fetched: [MAX_ENEMIES]bool
 	for pen in save.penned[:clamp(save.penned_count, 0, MAX_PENNED)] {

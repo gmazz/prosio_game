@@ -70,6 +70,7 @@ Item :: enum u8 {
 	Spear,
 	Gate, // a piece of fence that opens
 	Larder, // a cupboard for food, stood up with Q (see larder.odin)
+	Campfire, // a ring of stones and a spit, set up with Q: a cooking fire of his own (see workshop.odin)
 }
 FIRST_DISH :: Item.Apple_Pie
 FIRST_TOOL :: Item.Wood
@@ -118,6 +119,7 @@ ITEM_NAME := [Item]cstring {
 	.Spear         = "SPEAR",
 	.Gate          = "GATE",
 	.Larder        = "LARDER",
+	.Campfire      = "CAMPFIRE KIT",
 }
 
 // What one of each thing weighs (kg) and how much room it takes (litres).
@@ -155,6 +157,7 @@ ITEM_KG := [Item]f32 {
 	.Spear         = 1,
 	.Gate          = 4,
 	.Larder        = 6,
+	.Campfire      = 5,
 }
 ITEM_LITRES := [Item]f32 {
 	.Apple         = 0.3,
@@ -190,6 +193,7 @@ ITEM_LITRES := [Item]f32 {
 	.Spear         = 2,
 	.Gate          = 5,
 	.Larder        = 15,
+	.Campfire      = 8,
 }
 
 // What is in the sack weighs, and the room it takes.
@@ -314,6 +318,7 @@ EAT_TEXT := [Item]cstring {
 	.Spear         = "My spear! Hold {Grab} to throw it.",
 	.Gate          = "A gate! {Eat} puts it up in a fence.",
 	.Larder        = "A larder! {Eat} stands it up.",
+	.Campfire      = "My campfire kit! {Eat} sets it up.",
 }
 
 Ingredient :: struct {
@@ -327,37 +332,40 @@ Station_Kind :: enum {
 	Fire, // by the pond
 	Churn, // in the goat hills
 	Bench, // the workbench at home, where things are built of wood
+	Camp, // his own campfire, wherever he set it up: cooks what the fire does (see camp_up)
 }
 
-STATION_NAME := [Station_Kind]cstring{.Oven = "THE OVEN", .Fire = "THE COOKING FIRE", .Churn = "THE CHURN", .Bench = "THE WORKBENCH"}
-STATION_LABEL := [Station_Kind]cstring{.Oven = "OVEN", .Fire = "FIRE", .Churn = "CHURN", .Bench = "WORKBENCH"}
+STATION_NAME := [Station_Kind]cstring{.Oven = "THE OVEN", .Fire = "THE COOKING FIRE", .Churn = "THE CHURN", .Bench = "THE WORKBENCH", .Camp = "MY CAMPFIRE"}
+STATION_LABEL := [Station_Kind]cstring{.Oven = "OVEN", .Fire = "FIRE", .Churn = "CHURN", .Bench = "WORKBENCH", .Camp = "CAMPFIRE"}
 STATION_ABOUT := [Station_Kind]cstring {
 	.Oven  = "The better the baker, the richer the bake",
 	.Fire  = "The better the cook, the richer the dish",
 	.Churn = "The better the dairy pig, the more butter and cheese",
 	.Bench = "Wood from the forest, made into useful things.",
+	.Camp  = "The better the cook, the richer the dish",
 }
-STATION_BUSY := [Station_Kind]cstring{.Oven = "BAKING... %d", .Fire = "COOKING... %d", .Churn = "CHURNING... %d", .Bench = "BUILDING... %d"}
-STATION_TIME := [Station_Kind]f32{.Oven = 6, .Fire = 4, .Churn = 5, .Bench = 3} // seconds to make a batch
+STATION_BUSY := [Station_Kind]cstring{.Oven = "BAKING... %d", .Fire = "COOKING... %d", .Churn = "CHURNING... %d", .Bench = "BUILDING... %d", .Camp = "COOKING... %d"}
+STATION_TIME := [Station_Kind]f32{.Oven = 6, .Fire = 4, .Churn = 5, .Bench = 3, .Camp = 4} // seconds to make a batch
 // How much richer what is made here is than what went in: for a beginner,
 // and at the most, for a master. The skill that takes him from one to the
 // other, and what he is called on the way.
-COOK_RANGE := [Station_Kind][2]f32{.Oven = {1.15, 1.8}, .Fire = {1, 1.5}, .Churn = {1, 1.25}, .Bench = {1, 1}}
-STATION_SKILL := [Station_Kind]Trait{.Oven = .Baking, .Fire = .Grilling, .Churn = .Dairy, .Bench = .Hooves}
+COOK_RANGE := [Station_Kind][2]f32{.Oven = {1.15, 1.8}, .Fire = {1, 1.5}, .Churn = {1, 1.25}, .Bench = {1, 1}, .Camp = {1, 1.5}}
+STATION_SKILL := [Station_Kind]Trait{.Oven = .Baking, .Fire = .Grilling, .Churn = .Dairy, .Bench = .Hooves, .Camp = .Grilling}
 COOK_TITLE := [Station_Kind][4]cstring {
 	.Oven  = {"Beginner baker", "Apprentice baker", "Baker", "Master baker"},
 	.Fire  = {"Beginner cook", "Apprentice cook", "Cook", "Master of the grill"},
+	.Camp  = {"Beginner cook", "Apprentice cook", "Cook", "Master of the grill"},
 	.Churn = {"Beginner dairy pig", "Apprentice dairy pig", "Dairy pig", "Master cheesemaker"},
 	.Bench = {},
 }
-STATION_RADIUS := [Station_Kind]f32{.Oven = OVEN_RADIUS, .Fire = 0.8, .Churn = 0.55, .Bench = BENCH_RADIUS}
-STATION_ROUND := [Station_Kind]Round_Kind{.Oven = .Oven, .Fire = .Fire, .Churn = .Churn, .Bench = .Bench}
+STATION_RADIUS := [Station_Kind]f32{.Oven = OVEN_RADIUS, .Fire = 0.8, .Churn = 0.55, .Bench = BENCH_RADIUS, .Camp = 0.8}
+STATION_ROUND := [Station_Kind]Round_Kind{.Oven = .Oven, .Fire = .Fire, .Churn = .Churn, .Bench = .Bench, .Camp = .Fire}
 // What he says as he starts something there, while it is not done, when it
 // is, and as he takes it.
-STATION_START := [Station_Kind]cstring{.Oven = "Into the oven it goes!", .Fire = "On the fire it goes!", .Churn = "Round and round goes the churn!", .Bench = "Saw, saw... knock, knock!"}
-STATION_WAIT := [Station_Kind]cstring{.Oven = "Still baking... it smells so good!", .Fire = "Still sizzling... not yet!", .Churn = "Still churning... round and round!", .Bench = "Not finished... one more nail!"}
-STATION_DONE := [Station_Kind]cstring{.Oven = "Ding! The oven is ready!", .Fire = "Sizzle! It's cooked!", .Churn = "The churn is done!", .Bench = "There! All built!"}
-STATION_TAKE := [Station_Kind]cstring{.Oven = "Into the sack, still warm!", .Fire = "Into the sack, still warm!", .Churn = "Into the sack, fresh from the churn!", .Bench = "Into the sack! I made that!"}
+STATION_START := [Station_Kind]cstring{.Oven = "Into the oven it goes!", .Fire = "On the fire it goes!", .Churn = "Round and round goes the churn!", .Bench = "Saw, saw... knock, knock!", .Camp = "On my campfire it goes!"}
+STATION_WAIT := [Station_Kind]cstring{.Oven = "Still baking... it smells so good!", .Fire = "Still sizzling... not yet!", .Churn = "Still churning... round and round!", .Bench = "Not finished... one more nail!", .Camp = "Still sizzling... not yet!"}
+STATION_DONE := [Station_Kind]cstring{.Oven = "Ding! The oven is ready!", .Fire = "Sizzle! It's cooked!", .Churn = "The churn is done!", .Bench = "There! All built!", .Camp = "Sizzle! It's cooked!"}
+STATION_TAKE := [Station_Kind]cstring{.Oven = "Into the sack, still warm!", .Fire = "Into the sack, still warm!", .Churn = "Into the sack, fresh from the churn!", .Bench = "Into the sack! I made that!", .Camp = "Into the sack, still warm!"}
 
 Recipe :: struct {
 	at:    Station_Kind,
@@ -386,6 +394,7 @@ RECIPES := [?]Recipe {
 	{.Bench, .Spear, {{.Wood, 2}, {.Pebble, 1}, {}, {}}},
 	{.Bench, .Gate, {{.Wood, 3}, {}, {}, {}}},
 	{.Bench, .Larder, {{.Wood, 4}, {.Salt, 2}, {}, {}}},
+	{.Bench, .Campfire, {{.Wood, 4}, {.Pebble, 4}, {}, {}}},
 }
 
 // An oven, a fire or a churn: it makes one kind of thing at a time, one or
@@ -423,7 +432,7 @@ recipe_for :: proc(dish: Item) -> ^Recipe {
 station_recipes :: proc(at: Station_Kind, buf: ^[len(RECIPES)]^Recipe) -> []^Recipe {
 	n := 0
 	for &r in RECIPES {
-		if r.at == at && g.prosio.knows[r.dish] {
+		if (r.at == at || (at == .Camp && r.at == .Fire)) && g.prosio.knows[r.dish] {
 			buf[n] = &r
 			n += 1
 		}
@@ -643,7 +652,7 @@ eat_from_sack :: proc() {
 		answer("My sack is empty! {Action} picks food up.")
 		return
 	}
-	if item == .Fence || item == .Scarecrow || item == .Gate || item == .Larder {
+	if item == .Fence || item == .Scarecrow || item == .Gate || item == .Larder || item == .Campfire {
 		put_up(item)
 		return
 	}
@@ -661,13 +670,30 @@ eat_from_sack :: proc() {
 }
 
 station_in_reach :: proc(at: Station_Kind, pos: Vec2, r: f32) -> bool {
-	return length2(g.stations[at].pos - pos) < STATION_RADIUS[at] + r + 0.7
+	return station_standing(at) && length2(g.stations[at].pos - pos) < STATION_RADIUS[at] + r + 0.7
+}
+
+// Every station stands where it was built, but his campfire only while it
+// is set up.
+station_standing :: proc(at: Station_Kind) -> bool {
+	return at != .Camp || g.camp_up
+}
+
+// A fire he can cook and chop meat at within reach: the cooking fire by
+// the pond, or his campfire.
+fire_in_reach :: proc(pos: Vec2, r: f32) -> (at: Station_Kind, ok: bool) {
+	for kind in ([2]Station_Kind{.Fire, .Camp}) {
+		if station_in_reach(kind, pos, r) {
+			return kind, true
+		}
+	}
+	return .Fire, false
 }
 
 // The station he is standing at, if any.
 station_near :: proc(pos: Vec2, r: f32) -> (at: Station_Kind, ok: bool) {
 	for kind in Station_Kind {
-		if station_in_reach(kind, pos, r) {
+		if station_standing(kind) && station_in_reach(kind, pos, r) {
 			return kind, true
 		}
 	}
@@ -774,7 +800,7 @@ update_stations :: proc(dt: f32) {
 	for &o, at in g.stations {
 		// The fire always smokes a little; the oven only while it bakes.
 		o.smoke_t -= dt
-		if o.smoke_t <= 0 && (at == .Fire || (at == .Oven && o.baking)) {
+		if o.smoke_t <= 0 && (at == .Fire || (at == .Camp && g.camp_up) || (at == .Oven && o.baking)) {
 			o.smoke_t = o.baking ? 0.12 : 0.5
 			from := at == .Oven ? Vec3{o.pos.x - 0.4, 2.15, o.pos.y - 0.35} : Vec3{o.pos.x, 0.9, o.pos.y}
 			vel := Vec3{random_range(-0.2, 0.2) + 0.25, random_range(0.9, 1.4), random_range(-0.2, 0.2)}
@@ -851,10 +877,11 @@ STEEL :: Color{190, 196, 204, 255}
 
 // The cooking fire, by the pond: a ring of stones round the fire, a spit
 // over it on two forked sticks, and a chopping block with a cleaver, where
-// what he has hunted is cut into meat.
-draw_fire :: proc() {
-	o := &g.stations[.Fire]
-	if !on_screen(o.pos, 3) {
+// what he has hunted is cut into meat. His campfire, where he set it up, is
+// drawn the same.
+draw_fire :: proc(at: Station_Kind = .Fire) {
+	o := &g.stations[at]
+	if !station_standing(at) || !on_screen(o.pos, 3) {
 		return
 	}
 	m := translate({o.pos.x, 0, o.pos.y})
@@ -1402,6 +1429,20 @@ ICONS := [Item][12]string {
 		"kTTkkkkkkTTk",
 		"kttk....kttk",
 		"kkkk....kkkk",
+	},
+	.Campfire = {
+		"............",
+		".....kk.....",
+		"....kok.....",
+		"...koyok....",
+		"...koyyok...",
+		"..koyyyok...",
+		"..kbbybbk...",
+		".kkbbbbbkk..",
+		"keEkEkEkEek.",
+		"kEeEeEeEeEk.",
+		".kkkkkkkkk..",
+		"............",
 	},
 	.Larder = {
 		"....kkkk....",

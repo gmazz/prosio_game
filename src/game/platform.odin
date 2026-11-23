@@ -237,6 +237,7 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	uniforms.hills = rl.GetShaderLocation(material.shader, "hills")
 	uniforms.pond = rl.GetShaderLocation(material.shader, "pond")
 	uniforms.world_half = rl.GetShaderLocation(material.shader, "worldHalf")
+	outline_location = rl.GetShaderLocation(material.shader, "outlineExpansion")
 	uniforms.fog = rl.GetShaderLocation(material.shader, "fog")
 	init_quad_meshes()
 	init_tree_meshes()
@@ -572,7 +573,7 @@ tree_meshes: [Tree_Model_Kind][Tree_Part]rl.Mesh
 @(private = "file")
 tree_hulls: [Tree_Model_Kind][Tree_Part]rl.Mesh
 @(private = "file")
-tree_hull_at: [TREE_MAX_VERTS][3]f32
+outline_location: i32 // the shader's outlineExpansion: how far it pushes corners out along their normals
 
 init_tree_meshes :: proc() {
 	for model, k in TREE_MODELS {
@@ -589,7 +590,20 @@ init_tree_meshes :: proc() {
 			rl.UpdateMeshBuffer(mesh, 0, mesh.vertices, i32(count * 3 * size_of(f32)), 0)
 			rl.UpdateMeshBuffer(mesh, 2, mesh.normals, i32(count * 3 * size_of(f32)), 0)
 			tree_meshes[k][part] = mesh
-			tree_hulls[k][part] = quad_new_mesh(count)
+			// Its outline: the same corners, with the smooth normals the
+			// shader pushes them out along (see outlineExpansion in
+			// scene.vert), so nothing is redone on the CPU each frame.
+			hull := quad_new_mesh(count)
+			for i in 0 ..< count {
+				v := model.mesh[first + i]
+				for c in 0 ..< 3 {
+					hull.vertices[i * 3 + c] = v[c]
+					hull.normals[i * 3 + c] = v[6 + c]
+				}
+			}
+			rl.UpdateMeshBuffer(hull, 0, hull.vertices, i32(count * 3 * size_of(f32)), 0)
+			rl.UpdateMeshBuffer(hull, 2, hull.normals, i32(count * 3 * size_of(f32)), 0)
+			tree_hulls[k][part] = hull
 		}
 	}
 }
@@ -603,13 +617,13 @@ draw_tree_part :: proc(model: Tree_Model_Kind, part: Tree_Part, m: Mat4, color: 
 		return
 	}
 	if outlines_enabled && outline_width > 0 {
-		n := tree_hull(model, part, m, outline_width, tree_hull_at[:])
-		hull := tree_hulls[model][part]
-		rl.UpdateMeshBuffer(hull, 0, &tree_hull_at[0], i32(n * size_of([3]f32)), 0)
+		width, zero := outline_width, f32(0)
+		rl.SetShaderValue(material.shader, outline_location, &width, .FLOAT)
 		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(OUTLINE_COLOR)
 		rlgl.SetCullFace(.FRONT)
-		rl.DrawMesh(hull, material, rl.Matrix(IDENTITY))
+		rl.DrawMesh(tree_hulls[model][part], material, rl.Matrix(m))
 		rlgl.SetCullFace(.BACK)
+		rl.SetShaderValue(material.shader, outline_location, &zero, .FLOAT)
 	}
 	material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(color)
 	rl.DrawMesh(mesh, material, rl.Matrix(m))
