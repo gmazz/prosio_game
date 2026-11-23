@@ -1,0 +1,8 @@
+Cute Pixel, by zK4rim.
+
+The author's terms (https://www.dafont.com/cutepixel.font): "This font 100%
+free for personal and commercial use", "Any credits is appreciated".
+Donations: https://www.paypal.me/zK4rim
+
+Used in Prosio unmodified: the game reads this file as it is and draws its
+letters on their pixel grid when it starts.

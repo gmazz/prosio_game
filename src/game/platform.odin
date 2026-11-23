@@ -241,6 +241,7 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	uniforms.fog = rl.GetShaderLocation(material.shader, "fog")
 	init_quad_meshes()
 	init_tree_meshes()
+	init_font()
 }
 
 // How much a tapered limb narrows from one end to the other.
@@ -873,11 +874,13 @@ ui_round_rect :: proc(x, y, w, h: f32, color: Color, roundness: f32 = 0.5) {
 // Texts naming buttons in braces ("{Action}: pick it") are written out for
 // the keys or the controller (see expand_keys).
 ui_text :: proc(text: cstring, x, y, size: f32, color: Color) {
-	rl.DrawText(expand_keys(text), i32(x), i32(y), i32(size), rl.Color(color))
+	k := font_scale(size)
+	rl.DrawTextEx(pixel_font, expand_keys(text), {snap(x), snap(y)}, f32(pixel_font.baseSize) * k, 0, rl.Color(color))
 }
 
 ui_text_width :: proc(text: cstring, size: f32) -> f32 {
-	return f32(rl.MeasureText(expand_keys(text), i32(size)))
+	k := font_scale(size)
+	return rl.MeasureTextEx(pixel_font, expand_keys(text), f32(pixel_font.baseSize) * k, 0).x
 }
 
 // Formats a number into a short text, e.g. ui_format("%d kg", 80). Button
@@ -1037,4 +1040,121 @@ draw_fox_meshes :: proc(frames: ^[Fox_Joint]Mat4, hide_eyes: bool) {
 		if flash > 0 {set_hit_flash(flash)}
 	}
 	draw_groups(frames, hide_eyes, false)
+}
+
+// The game's letters, from a font file in assets/fonts, turned into a true
+// pixel font when the game starts. Each letter is drawn
+// large from the font file, then sampled once for each pixel of the font's
+// own grid (FONT_GRID design units a pixel, starting at FONT_ORIGIN), so
+// every letter is made of whole pixels; text is then drawn a whole number of
+// screen pixels to each of them (see font_scale), never smoothed, so it
+// stays crisp at every size.
+// The letters are Cute Pixel (by zK4rim, free for personal and commercial
+// use: see assets/fonts/CutePixel-LICENSE.txt), used as the file is.
+// -define:FONT=pixelify draws them in Pixelify Sans instead (SIL Open Font
+// License), made bold.
+FONT_NAME :: #config(FONT, "cutepixel")
+when FONT_NAME == "pixelify" {
+	@(private = "file")
+	FONT_FILE :: #load("../../assets/fonts/PixelifySans.ttf")
+	FONT_GRID :: f32(91.43) // design units to one pixel of the font (its capitals are 7 tall)
+	FONT_ORIGIN :: [2]f32{60, -12} // where its grid starts, in design units
+	FONT_EM :: f32(1200) // its ascent and descent together, in design units
+	FONT_ASCENT :: f32(920)
+	FONT_SIZE :: f32(11) // the text size (as the game asks for it) drawn one screen pixel to each pixel of the font
+	FONT_BOLD :: i32(1) // how many pixels wider each stroke is made than the font's regular weight
+} else {
+	@(private = "file")
+	FONT_FILE :: #load("../../assets/fonts/CutePixel.ttf")
+	FONT_GRID :: f32(64) // design units to one pixel of the font
+	FONT_ORIGIN :: [2]f32{0, 0} // where its grid starts, in design units
+	FONT_EM :: f32(1024) // its ascent and descent together: a line is 16 of its pixels
+	FONT_ASCENT :: f32(768)
+	FONT_SIZE :: f32(11) // the text size (as the game asks for it) drawn one screen pixel to each pixel of the font: from 14 it is drawn one and a half to each
+	FONT_BOLD :: i32(0)
+}
+pixel_font: rl.Font
+
+// How many screen pixels to each pixel of the font, for text of this size:
+// in whole pixels of the display (on a fine screen with two to each of the
+// game's, that is in half steps), so it is never smoothed.
+font_scale :: proc(size: f32) -> f32 {
+	dpi := max(rl.GetWindowScaleDPI().x, 1)
+	return max(1, math.round(size / FONT_SIZE * dpi) / dpi)
+}
+
+// How tall a line of text of this size is, from its top to the next line's.
+text_height :: proc(size: f32) -> f32 {
+	return f32(pixel_font.baseSize) * font_scale(size)
+}
+
+// A place on the screen, on a whole pixel of the display.
+@(private = "file")
+snap :: proc(v: f32) -> f32 {
+	dpi := max(rl.GetWindowScaleDPI().x, 1)
+	return math.round(v * dpi) / dpi
+}
+
+init_font :: proc() {
+	// (The letters only, with no picture of them all together: the browser's
+	// memory is small.)
+	HI :: 96 // the size the letters are first drawn at, to be sampled (about 7 pixels to each of the font's)
+	COUNT :: 95 // the printable ASCII letters
+	loaded: i32
+	big_glyphs := rl.LoadFontData(raw_data(FONT_FILE), i32(len(FONT_FILE)), HI, nil, COUNT, .DEFAULT, &loaded)
+	defer rl.UnloadFontData(big_glyphs, loaded)
+	per := f32(HI) / FONT_EM // pixels of the large letters to a design unit
+	count := int(loaded)
+	glyphs := ([^]rl.GlyphInfo)(rl.MemAlloc(u32(count * size_of(rl.GlyphInfo))))
+	for i in 0 ..< count {
+		big := big_glyphs[i]
+		w, h := f32(big.image.width), f32(big.image.height)
+		// The cells of the grid this letter's picture covers.
+		left := (f32(big.offsetX) / per - FONT_ORIGIN.x) / FONT_GRID
+		right := ((f32(big.offsetX) + w) / per - FONT_ORIGIN.x) / FONT_GRID
+		top := ((FONT_ASCENT - f32(big.offsetY) / per) - FONT_ORIGIN.y) / FONT_GRID
+		bottom := ((FONT_ASCENT - (f32(big.offsetY) + h) / per) - FONT_ORIGIN.y) / FONT_GRID
+		c0, c1 := i32(math.floor(left)), i32(math.ceil(right))
+		r0, r1 := i32(math.floor(bottom)), i32(math.ceil(top))
+		cols, rows := max(c1 - c0, 1), max(r1 - r0, 1)
+		image := rl.GenImageColor(cols + FONT_BOLD, rows, rl.BLANK)
+		if w > 0 && h > 0 {
+			for r in r0 ..< r1 {
+				for c in c0 ..< c1 {
+					// The middle of the cell, in the large picture.
+					x := (FONT_ORIGIN.x + FONT_GRID * (f32(c) + 0.5)) * per - f32(big.offsetX)
+					y := (FONT_ASCENT - (FONT_ORIGIN.y + FONT_GRID * (f32(r) + 0.5))) * per - f32(big.offsetY)
+					if x < 0 || y < 0 || x >= w || y >= h {
+						continue
+					}
+					if rl.GetImageColor(big.image, i32(x), i32(y)).r > 127 { // (a grey picture: its grey is the ink)
+						for b in i32(0) ..= FONT_BOLD { // (bold: each stroke a pixel wider)
+							rl.ImageDrawPixel(&image, c - c0 + b, r1 - 1 - r, rl.WHITE)
+						}
+					}
+				}
+			}
+		}
+		rl.ImageFormat(&image, .UNCOMPRESSED_GRAYSCALE) // (as the atlas below reads them)
+		glyphs[i] = {
+			value    = big.value,
+			offsetX  = c0 + i32(math.round(FONT_ORIGIN.x / FONT_GRID)),
+			offsetY  = i32(math.round((FONT_ASCENT - FONT_ORIGIN.y) / FONT_GRID)) - r1,
+			advanceX = i32(math.round(f32(big.advanceX) / per / FONT_GRID)) + (big.value == ' ' ? 0 : FONT_BOLD),
+			image    = image,
+		}
+	}
+	size := i32(math.round(FONT_EM / FONT_GRID))
+	recs: [^]rl.Rectangle
+	atlas := rl.GenImageFontAtlas(glyphs, &recs, i32(count), size, 1, 0)
+	pixel_font = {
+		baseSize    = size,
+		glyphCount  = i32(count),
+		glyphPadding = 0,
+		texture     = rl.LoadTextureFromImage(atlas),
+		recs        = recs,
+		glyphs      = glyphs,
+	}
+	rl.UnloadImage(atlas)
+	rl.SetTextureFilter(pixel_font.texture, .POINT)
 }

@@ -15,9 +15,13 @@ UI_BRUISE :: Color{132, 84, 160, 255}
 REGION_ABOUT_TIME :: f32(5) // seconds the line about a part of the meadow shows after he gets there
 CONTROLS :: "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}"
 
-// Text with a dark edge so it reads on any background.
+// Text with a dark edge all round, a pixel of the font wide, so it reads on
+// any background.
 label :: proc(text: cstring, x, y, size: f32, color: Color = UI_WHITE) {
-	o := max(size / 12, 1)
+	o := font_scale(size) // one pixel of the font
+	for d in ([4][2]f32{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
+		ui_text(text, x + d.x * o, y + d.y * o, size, UI_DARK)
+	}
 	ui_text(text, x + o, y + o, size, UI_DARK)
 	ui_text(text, x, y, size, color)
 }
@@ -368,5 +372,5 @@ draw_menu :: proc() {
 	label_centred("Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 6", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
 	// What every button does (in the game only the line about what the
 	// buttons would do just there shows).
-	label_centred(CONTROLS, sw / 2, sh - 70 * s, 16 * s)
+	label_centred(CONTROLS, sw / 2, sh - 70 * s, 13 * s)
 }

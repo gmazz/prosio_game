@@ -600,9 +600,9 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 	}
 
 	info := ry + row_h + 16 * s
-	label("Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses;", x, info, 14 * s, {200, 200, 200, 255})
-	label("A, ENTER or SPACE chooses. Clicking a stick to sprint keeps", x, info + 18 * s, 14 * s, {200, 200, 200, 255})
-	label("him running until he stops; any other sprint button is held.", x, info + 36 * s, 14 * s, {200, 200, 200, 255})
+	label("Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses;", x, info, 13 * s, {200, 200, 200, 255})
+	label("A, ENTER or SPACE chooses. Clicking a stick to sprint keeps", x, info + 18 * s, 13 * s, {200, 200, 200, 255})
+	label("him running until he stops; any other sprint button is held.", x, info + 36 * s, 13 * s, {200, 200, 200, 255})
 
 	line: cstring
 	switch {

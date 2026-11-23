@@ -359,7 +359,7 @@ draw_bag :: proc() {
 	switch bag_tab {
 	case .Sack:
 		draw_bag_sack(x + 20 * s, top, w - 40 * s, s)
-		label_centred("ARROWS: choose   {Action}: eat, or choose to use   {Sack}: other panel   {Bag}: close", x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
+		label_centred("ARROWS: choose   {Action}: eat, or choose to use   {Sack}: other panel   {Bag}: close", x + w / 2, y + h - 36 * s, 13 * s, UI_YELLOW)
 	case .Outfit:
 		draw_bag_outfit(x + 20 * s, top, w - 40 * s, s)
 		label_centred("UP/DOWN: row    LEFT/RIGHT: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
@@ -371,7 +371,7 @@ draw_bag :: proc() {
 		label_centred("{Sack}: other panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	case .Controls:
 		draw_controls_panel(x + 20 * s, top, w - 40 * s, s)
-		label_centred("ARROWS: choose    {Confirm}: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred("ARROWS: choose    {Confirm}: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
 	}
 }
 
@@ -644,7 +644,7 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 	// What he weighs, as the sum of his parts: the bar, and each part's
 	// kilograms under it.
 	label(weight_text("HE WEIGHS %d.%d kg"), x, y, 22 * s)
-	label("the sum of:", x + 248 * s, y + 5 * s, 15 * s, GREY)
+	label("the sum of:", x + w - ui_text_width("the sum of:", 13 * s), y + 5 * s, 13 * s, GREY)
 	draw_weight_stack(x, y + 30 * s, w, 14 * s, s)
 	for part in Part {
 		i := int(part)
@@ -666,11 +666,11 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 	for t in Trait {
 		if t == .Arms {
 			label("MUSCLE", x, ry, 15 * s, UI_ORANGE)
-			ry += 19 * s
+			ry += text_height(15 * s)
 		}
 		if t == .Lungs {
 			label("SKILLS", x, ry, 15 * s, UI_ORANGE)
-			ry += 19 * s
+			ry += text_height(15 * s)
 		}
 		level := p.trait[t]
 		if is_mental(t) {
@@ -678,21 +678,21 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			// no trend to show, only what he is called and what it is worth.
 			if t == .Baking {
 				label("IN THE KITCHEN (never forgotten)", x, ry, 15 * s, UI_ORANGE)
-				ry += 19 * s
+				ry += text_height(15 * s)
 			}
 			at := t == .Baking ? Station_Kind.Oven : (t == .Grilling ? Station_Kind.Fire : Station_Kind.Churn)
 			short := bar_w * 0.55
-			label(TRAIT_NAME[t], x, ry, 18 * s)
+			label(TRAIT_NAME[t], x, ry, 15 * s)
 			ui_rect(bar_x - 2 * s, ry + 2 * s, short + 4 * s, 13 * s, UI_DARK)
 			ui_rect(bar_x, ry + 4 * s, short, 9 * s, {96, 110, 120, 255})
 			ui_rect(bar_x, ry + 4 * s, short * level, 9 * s, NEED_POWER)
 			bonus := i32(math.round((cook_bonus(at) - 1) * 100))
 			most := i32(math.round((COOK_RANGE[at][1] - 1) * 100))
-			label(ui_format_title("%s: +%d%% (of +%d%%)", cook_title(at), bonus, most), bar_x + short + 12 * s, ry + 1 * s, 15 * s, UI_YELLOW)
-			ry += 22 * s
+			label(ui_format_title("%s: +%d%% (of +%d%%)", cook_title(at), bonus, most), bar_x + short + 12 * s, ry + 1 * s, 13 * s, UI_YELLOW)
+			ry += text_height(15 * s) + 3 * s
 			continue
 		}
-		label(TRAIT_NAME[t], x, ry, 18 * s)
+		label(TRAIT_NAME[t], x, ry, 15 * s)
 		ui_rect(bar_x - 2 * s, ry + 2 * s, bar_w + 4 * s, 13 * s, UI_DARK)
 		if is_muscle(t) {
 			// Wasted at the left, ordinary at the mark, built to the right.
@@ -705,15 +705,18 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			at := level >= 0 ? ordinary + bar_w * 0.75 * level : ordinary + bar_w * 0.25 * level
 			ui_rect(at - 1.5 * s, ry + 1 * s, 3 * s, 15 * s, UI_WHITE)
 			kg := muscle_kg(t)
-			label(ui_format2("%d.%d kg", i32(kg), i32(kg * 10) % 10), bar_x + bar_w + 10 * s, ry, 16 * s)
+			label(ui_format2("%d.%d kg", i32(kg), i32(kg * 10) % 10), bar_x + bar_w + 10 * s, ry, 13 * s)
 		} else {
 			ui_rect(bar_x, ry + 4 * s, bar_w, 9 * s, {96, 110, 120, 255})
 			ui_rect(bar_x, ry + 4 * s, bar_w * level, 9 * s, NEED_POWER)
 		}
 		trend_word(p.trend[t], x + w - 66 * s, ry + 1 * s, 15 * s)
-		label(TRAIT_GROWS[t], x + 10 * s, ry + 19 * s, 12 * s, GREY)
-		label(TRAIT_GIVES[t], x + 10 * s, ry + 32 * s, 12 * s, UI_YELLOW)
-		ry += 46 * s
+		// What makes it grow, and what it is good for, each on a line of its
+		// own under it (spaced by the font's own lines).
+		name_h, note_h := text_height(15 * s), text_height(12 * s)
+		label(TRAIT_GROWS[t], x + 10 * s, ry + name_h, 12 * s, GREY)
+		label(TRAIT_GIVES[t], x + 10 * s, ry + name_h + note_h, 12 * s, UI_YELLOW)
+		ry += name_h + 2 * note_h + 3 * s
 	}
 }
 

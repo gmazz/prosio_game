@@ -1679,12 +1679,12 @@ draw_cook_menu :: proc() {
 		draw_icon(r.dish, px + 38 * s, y + 4 * s, 38 * s)
 		label(ITEM_NAME[r.dish], px + 94 * s, y, 22 * s, most > 0 ? UI_WHITE : Color{200, 180, 170, 255})
 		if r.at == .Bench {
-			label(PLAN_ABOUT[r.dish], px + 94 * s, y + 28 * s, 15 * s, UI_YELLOW)
+			label(PLAN_ABOUT[r.dish], px + 94 * s, y + 28 * s, 14 * s, UI_YELLOW)
 		} else {
 			label(ui_format("%d kcal", i32(recipe_kcal(r))), px + 94 * s, y + 26 * s, 18 * s, UI_YELLOW)
 		}
 		if cook_bonus(r.at) != 1 {
-			label(ui_format("(raw %d)", i32(recipe_kcal(r) / cook_bonus(r.at))), px + 198 * s, y + 28 * s, 15 * s, {220, 200, 180, 255})
+			label(ui_format("(raw %d)", i32(recipe_kcal(r) / cook_bonus(r.at))), px + 198 * s, y + 28 * s, 14 * s, {220, 200, 180, 255})
 		}
 		// What it needs, for as many as are chosen.
 		times := chosen ? cook_count : 1
