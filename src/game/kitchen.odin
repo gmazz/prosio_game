@@ -1549,8 +1549,13 @@ icon_color :: proc(c: u8) -> (Color, bool) {
 }
 
 draw_icon :: proc(item: Item, x, y, size: f32) {
+	draw_pixels(ICONS[item], x, y, size)
+}
+
+// A 12 by 12 picture, a letter a pixel (see icon_color), size across.
+draw_pixels :: proc(rows: [12]string, x, y, size: f32) {
 	px := size / 12
-	for row, j in ICONS[item] {
+	for row, j in rows {
 		for i in 0 ..< min(len(row), 12) {
 			if c, ok := icon_color(row[i]); ok {
 				ui_rect(x + f32(i) * px, y + f32(j) * px, px + 0.5, px + 0.5, c)
@@ -1579,17 +1584,16 @@ draw_sack :: proc(x, y, s: f32) {
 	scrolling := n > SACK_SLOTS
 	slots := clamp(n, 1, SACK_SLOTS)
 
-	// Wide enough for the longest name with its calories.
+	// Wide enough for the longest name.
 	widest: f32
 	for it in Item {
-		w := ui_text_width(ITEM_NAME[it], text) + 10 * s + ui_text_width(ui_format("%d kcal", i32(item_kcal(it))), text)
-		widest = max(widest, w)
+		widest = max(widest, ui_text_width(ITEM_NAME[it], text))
 	}
 	boxes := f32(slots) * size + f32(slots - 1) * gap + (scrolling ? 2 * arrow : 0)
 	width := max(widest, boxes) + 2 * pad
 	height := pad + text + 6 * s + size + text + pad
 	if n > 0 {
-		height += text + 4 * s // how full and how heavy it is
+		height += 10 * s // how full it is
 	}
 	ui_round_rect(x, y, width, height, UI_PANEL, 0.2)
 	centre := x + width / 2
@@ -1598,16 +1602,9 @@ draw_sack :: proc(x, y, s: f32) {
 		return
 	}
 
-	name := ITEM_NAME[p.sack_sel]
-	if is_food(p.sack_sel) {
-		kcal := ui_format("%d kcal", i32(sack_piece_kcal(p.sack_sel)))
-		name_w := ui_text_width(name, text)
-		left := centre - (name_w + 10 * s + ui_text_width(kcal, text)) / 2
-		label(name, left, y + pad, text)
-		label(kcal, left + name_w + 10 * s, y + pad, text, UI_YELLOW)
-	} else {
-		label_centred(name, centre, y + pad, text) // not food: no calories to show
-	}
+	// The name of what is chosen (its calories are on the SACK page of the
+	// M menu).
+	label_centred(ITEM_NAME[p.sack_sel], centre, y + pad, text)
 
 	at := 0
 	for it, i in owned {
@@ -1633,20 +1630,13 @@ draw_sack :: proc(x, y, s: f32) {
 		label_centred(ui_format("%d", i32(p.sack[it])), bx + size / 2, top + size + 3 * s, text * 0.9, chosen ? UI_YELLOW : UI_WHITE)
 		bx += size + gap
 	}
-	// How full it is, and how heavy, both in per cent (the litres and
-	// kilograms stay inside the game): the room taken, and the load as a
-	// share of his own weight.
-	full := sack_full()
-	load := i32(math.round(sack_kg() / g.prosio.kg * 100))
-	room := ui_format("%d%% full", i32(math.round(full * 100)))
-	room_w := ui_text_width(room, text * 0.9)
-	weight := ui_format("load %d%%", load)
-	both := room_w + 16 * s + ui_text_width(weight, text * 0.9)
-	line := top + size + text + 6 * s
-	GREY :: Color{220, 220, 220, 255}
-	label(room, centre - both / 2, line, text * 0.9, full >= 0.99 ? UI_ORANGE : GREY)
-	weight_color := sack_kg() / g.prosio.kg > LOAD_HEAVY ? UI_ORANGE : GREY
-	label(ui_format("load %d%%", load), centre - both / 2 + room_w + 16 * s, line, text * 0.9, weight_color)
+	// How full it is: a bar along the bottom, orange when full or when the
+	// load is heavy for him.
+	full := clamp(sack_full(), 0, 1)
+	heavy := full >= 0.99 || sack_kg() / g.prosio.kg > LOAD_HEAVY
+	bar_y := top + size + text + 6 * s
+	ui_rect(x + pad, bar_y, width - 2 * pad, 6 * s, UI_DARK)
+	ui_rect(x + pad + 1 * s, bar_y + 1 * s, (width - 2 * pad - 2 * s) * full, 4 * s, heavy ? UI_ORANGE : Color{200, 200, 200, 255})
 }
 
 // A station's menu: what can be made there, what it needs and what it is

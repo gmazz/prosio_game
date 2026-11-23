@@ -779,167 +779,195 @@ draw_weight_stack :: proc(x, y, w, h, s: f32) {
 	}
 }
 
-// One row of the panel: a square of the part's colour, its name, a bar in
-// that colour (with ticks where its states change), what it weighs, and what
-// it is doing to him.
-draw_part_row :: proc(x, y, s: f32, color: Color, name: cstring, fill: f32, ticks: []f32, kg: cstring, note: cstring, note_color: Color, blink := false) {
-	text := 13 * s
-	bar_x, bar_w, bar_h := x + 126 * s, 90 * s, 8 * s
-	ui_rect(x, y + 3 * s, 8 * s, 8 * s, color)
-	label(name, x + 13 * s, y, text, blink ? UI_RED : UI_WHITE)
-	ui_rect(bar_x - 1.5 * s, y + 1.5 * s, bar_w + 3 * s, bar_h + 3 * s, UI_DARK)
-	ui_rect(bar_x, y + 3 * s, bar_w, bar_h, {70, 76, 84, 255})
-	ui_rect(bar_x, y + 3 * s, bar_w * clamp(fill, 0, 1), bar_h, color)
-	for tick in ticks {
-		ui_rect(bar_x + bar_w * tick - 0.5 * s, y + 3 * s, 1 * s, bar_h, UI_DARK)
-	}
-	if kg != nil {
-		label(kg, bar_x + bar_w + 8 * s, y, text)
-	}
-	if note != nil {
-		label(note, bar_x + bar_w + 66 * s, y, text, note_color)
-	}
-}
+// The panel at the top left, made for a child: a picture for each of his
+// six needs with a bar under it (how full it is: orange and blinking when he
+// lacks it, red when it has run out, purple when it is too much), and his
+// stamina. A heart blinks beside it when he is dangerously fat. What he
+// weighs, and the kilograms of each part, are on the BODY page of the M
+// menu; what he needs he says himself (see STATE_TEXT). Returns how wide and
+// how tall it is.
+HUD_ICON :: f32(30) // how big a need's picture is, at 1280 by 720
+HUD_NEEDS :: [6]Need{.Carbs, .Protein, .Fibre, .Vitamins, .Electrolytes, .Water}
 
-// The panel at the top left: what he weighs, as the sum of what he is made
-// of; then each part by itself with its kilograms; the two needs that weigh
-// nothing; his stamina; and a line of advice when he lacks something.
-// Returns how wide and how tall it is.
 draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	p := &g.prosio
-	pad := 9 * s
-	row := 17 * s
-	text := 13 * s
-	width = 384 * s
-	height = 270 * s
-	ui_round_rect(x - pad, y - pad + 2 * s, width + pad, height, UI_PANEL, 0.08)
-
-	// The weight, and the parts it is the sum of.
-	label(weight_text("WEIGHS %d.%d kg"), x, y, 17 * s)
-	if p.carry == .Rock {
-		// What he carries counts as his weight when he jumps and lands.
-		label(ui_format("+%d", i32(p.carry_kg + 0.5)), x + 170 * s, y + 1 * s, 15 * s, UI_YELLOW)
-	}
-	label("= the sum of:", x + width - pad - ui_text_width("= the sum of:", text), y + 3 * s, text, {200, 200, 200, 255})
-	draw_weight_stack(x, y + 24 * s, width - pad - 2 * s, 12 * s, s)
-	ry := y + 46 * s
-
-	// Fat, with where lean, chubby and huge begin, and danger at both ends.
-	zone: cstring = "CHUBBY"
-	zone_color := UI_YELLOW
-	switch {
-	case starving():
-		zone, zone_color = "STARVING!", UI_RED
-	case p.fat < FAT_DANGER:
-		zone, zone_color = "ON CARBS ONLY", UI_ORANGE
-	case p.fat < FAT_LEAN:
-		zone, zone_color = "LEAN", UI_GREEN
-	case p.fat > FAT_MAX - FAT_DANGER:
-		zone, zone_color = "TOO FAT!", UI_RED
-	case p.fat >= FAT_HUGE:
-		zone, zone_color = "HUGE", UI_ORANGE
-	}
-	fat_ticks := [?]f32{FAT_DANGER / FAT_MAX, FAT_LEAN / FAT_MAX, FAT_HUGE / FAT_MAX, 1 - FAT_DANGER / FAT_MAX}
-	draw_part_row(x, ry, s, PART_COLOR[.Fat], "FAT", p.fat / FAT_MAX, fat_ticks[:], kg_text(p.fat), zone, zone_color)
-	ry += row
-
-	// Muscle: arms and legs together, from wasted to the most they can be,
-	// with a tick at the ordinary.
-	least := ARMS_KG[0] + LEGS_KG[0]
-	most := ARMS_KG[2] + LEGS_KG[2]
-	ordinary := ARMS_KG[1] + LEGS_KG[1]
-	muscle := part_kg(.Muscle)
-	built: cstring = nil
-	built_color := NEED_POWER
-	if muscle > ordinary + 2 {
-		built = "STRONG"
-	} else if muscle < ordinary - 1 {
-		built, built_color = "WASTED", UI_ORANGE
-	}
-	muscle_ticks := [?]f32{(ordinary - least) / (most - least)}
-	draw_part_row(x, ry, s, PART_COLOR[.Muscle], "MUSCLE", (muscle - least) / (most - least), muscle_ticks[:], kg_text(muscle), built, built_color)
-	ry += row
-
-	// The stores and the two weightless needs: each with ticks where
-	// lacking, full and too much begin.
-	advice: Need
-	advised, urgent, over := false, false, false
-	need_ticks := [?]f32{NEED_LOW / 100, NEED_HIGH / 100, NEED_OVER / 100}
-	water_ticks := [?]f32{WATER_LOW / 100}
-	for n in Need {
-		if n == .Vitamins {
-			ry += 5 * s
-			label("AND, WEIGHING NOTHING:", x, ry, 11 * s, {200, 200, 200, 255})
-			ry += 14 * s
-		}
+	pad := 10 * s
+	icon := HUD_ICON * s
+	gap := 12 * s
+	bar_h := 6 * s
+	width = 6 * icon + 5 * gap
+	stamina_y := y + icon + 5 * s + bar_h + 10 * s
+	height = stamina_y + 14 * s - y
+	ui_round_rect(x - pad, y - pad, width + 2 * pad, height + 2 * pad, UI_PANEL, 0.15)
+	blink := math.mod(g.time, 0.6) < 0.3
+	for n, k in HUD_NEEDS {
+		ix := x + f32(k) * (icon + gap)
 		state := need_state(n)
-		danger := state == .Empty && DEADLY[n]
-		blink := danger && math.mod(g.time, 0.5) < 0.25
-		note: cstring = nil
-		note_color := UI_ORANGE
-		switch state {
-		case .Fine:
-		case .Low, .Empty:
-			note = LOW_NAME[n]
-			if danger {
-				// Counting down to the end.
-				note = ui_format("DANGER! %d", i32(math.ceil(TOO_LONG - p.extreme_t[n])))
-				note_color = blink ? UI_WHITE : UI_RED
-				advice, advised, urgent = n, true, true
-			} else if !advised {
-				advice, advised = n, true
-			}
-		case .High:
-			note, note_color = HIGH_NAME[n], NEED_POWER
-			if n == .Fibre && p.trait[.Gut] >= GUT_CONTROL {
-				note = "GASSY ({Gas})"
-			}
+		bar := NEED_BAR[n]
+		#partial switch state {
+		case .Low:
+			bar = UI_ORANGE
+		case .Empty:
+			bar = UI_RED
 		case .Over:
-			note, note_color = TOO_MUCH_NAME[n], NEED_SILLY
-			over = true
+			bar = NEED_SILLY
 		}
-		weighs := STORE_KG[n] > 0
-		color := PART_COLOR[.Water]
-		#partial switch n {
-		case .Carbs:
-			color = PART_COLOR[.Carbs]
-		case .Protein:
-			color = PART_COLOR[.Protein]
-		case .Fibre:
-			color = PART_COLOR[.Fibre]
-		case .Vitamins:
-			color = VITAMIN_COLOR
-		case .Electrolytes:
-			color = SALT_COLOR
+		if state == .Empty || (state == .Low && blink) {
+			ui_round_rect(ix - 4 * s, y - 4 * s, icon + 8 * s, icon + 8 * s, bar, 0.3)
 		}
-		draw_part_row(x, ry, s, color, NEED_NAME[n], p.need[n] / 100, n == .Water ? water_ticks[:] : need_ticks[:], weighs ? kg_text(store_kg(n)) : nil, note, note_color, blink)
-		ry += row
+		draw_pixels(NEED_ICONS[n], ix, y, icon)
+		by := y + icon + 5 * s
+		ui_rect(ix, by, icon, bar_h, UI_DARK)
+		ui_rect(ix + 1 * s, by + 1 * s, (icon - 2 * s) * clamp(p.need[n] / 100, 0, 1), bar_h - 2 * s, bar)
 	}
 
-	// Stamina. The notch shows how much one bump costs right now.
-	ry += 6 * s
-	label("STAMINA", x, ry, text)
-	bar_x, bar_w := x + 126 * s, width - pad - 128 * s
-	ui_rect(bar_x - 2 * s, ry + 1 * s, bar_w + 4 * s, 10 * s + 4 * s, UI_DARK)
-	ui_rect(bar_x, ry + 3 * s, bar_w * p.stamina / STAMINA_MAX, 10 * s, (p.winded || p.stamina < 25) ? UI_RED : UI_BLUE)
-	ui_rect(bar_x + bar_w * dash_cost() / STAMINA_MAX - 1 * s, ry + 3 * s, 2 * s, 10 * s, UI_DARK)
+	// Stamina, with his bruises taking the top off it.
+	draw_pixels(BOLT_ICON, x, stamina_y - 2 * s, 16 * s)
+	bar_x := x + 22 * s
+	bar_w := width - 22 * s
+	too_fat := p.fat > FAT_MAX - FAT_DANGER
+	if too_fat {
+		bar_w -= 24 * s
+		if blink {
+			draw_pixels(HEART_ICON, x + width - 18 * s, stamina_y - 3 * s, 18 * s)
+		}
+	}
+	ui_rect(bar_x, stamina_y, bar_w, 12 * s, UI_DARK)
+	ui_rect(bar_x + 2 * s, stamina_y + 2 * s, (bar_w - 4 * s) * clamp(p.stamina / STAMINA_MAX, 0, 1), 8 * s, (p.winded || p.stamina < 25) ? UI_RED : UI_BLUE)
 	if p.bruises > 0.5 {
-		// Bruises: the top of the bar is out of reach until they mend.
-		bw := bar_w * p.bruises / STAMINA_MAX
-		ui_rect(bar_x + bar_w - bw, ry + 3 * s, bw, 10 * s, UI_BRUISE)
-		if ui_text_width("BRUISED", 10 * s) + 6 * s < bw {
-			label("BRUISED", bar_x + bar_w - bw + 3 * s, ry + 3 * s, 10 * s, UI_WHITE)
-		}
-	}
-	ry += 22 * s
-
-	// What to do about it: what to eat for the thing he lacks most.
-	if starving() {
-		label("EAT: anything! Nothing left to burn.", x, ry, text, UI_RED)
-	} else if advised {
-		label(ui_format_name("EAT: %s", NEED_EAT[advice]), x, ry, text, urgent ? UI_RED : UI_ORANGE)
-	} else if over {
-		label("Too much? It soon passes.", x, ry, text, NEED_SILLY)
+		bw := (bar_w - 4 * s) * clamp(p.bruises / STAMINA_MAX, 0, 1)
+		ui_rect(bar_x + bar_w - 2 * s - bw, stamina_y + 2 * s, bw, 8 * s, UI_BRUISE)
 	}
 	return
+}
+
+// Each need's bar, when all is well.
+NEED_BAR := [Need]Color {
+	.Carbs        = {240, 160, 60, 255},
+	.Protein      = {232, 120, 150, 255},
+	.Fibre        = {110, 190, 80, 255},
+	.Water        = {90, 160, 240, 255},
+	.Vitamins     = {246, 206, 70, 255},
+	.Electrolytes = {220, 220, 220, 255},
+}
+
+// Pictures for his needs on the screen, a letter a pixel (see icon_color):
+// general signs, not any one food, so that they mean the same whatever he
+// eats: a flame for energy, a dumbbell for muscle, a leaf for greens, a
+// sparkle for vitamins, a crystal of salt, a drop of water.
+NEED_ICONS := [Need][12]string {
+	.Carbs = {
+		".....k......",
+		"....kok.....",
+		"....kook....",
+		"...kooyok...",
+		"..kooyyok.k.",
+		"..koyyyyokok",
+		".koyyyyyyook",
+		".koyywwyyyok",
+		".kooywwwyyok",
+		"..kooywyyok.",
+		"...kooooook.",
+		"....kkkkkk..",
+	},
+	.Protein = { // a dumbbell: what builds muscle
+		"............",
+		"............",
+		".kkk....kkk.",
+		"kEeEk..kEeEk",
+		"kEeEkkkkEeEk",
+		"kEeEeeeeEeEk",
+		"kEeEkkkkEeEk",
+		"kEeEk..kEeEk",
+		".kkk....kkk.",
+		"............",
+		"............",
+		"............",
+	},
+	.Fibre = {
+		"........kkkk",
+		"......kkggGk",
+		"....kkggglGk",
+		"...kggggglk.",
+		"..kgggglggk.",
+		"..kgggGlggk.",
+		"..kggGlgggk.",
+		"..kgGlgggk..",
+		"..kGlggkk...",
+		".kkkkkk.....",
+		"kG..........",
+		"k...........",
+	},
+	.Vitamins = {
+		".....kk.....",
+		".....kyk....",
+		"....kyyk....",
+		"....kyyyk...",
+		"kkkkyywyykkk",
+		"kyyyywwwyyyk",
+		"kkkyyywyyykk",
+		"...kyyyyk...",
+		"....kyyk....",
+		"....kyyk....",
+		".....kyk....",
+		".....kk.....",
+	},
+	.Electrolytes = { // a crystal of salt
+		".....kk.....",
+		"...kkwwkk...",
+		".kkwwwwwwkk.",
+		"kwwwwwwwwwwk",
+		"kccwwwwwwEEk",
+		"kccccwwEEEEk",
+		"kcccccEEEEEk",
+		"kcccccEEEEEk",
+		"kcccccEEEEEk",
+		".kkcccEEEkk.",
+		"...kkcEkk...",
+		".....kk.....",
+	},
+	.Water = {
+		".....kk.....",
+		".....kk.....",
+		"....kuuk....",
+		"....kuuk....",
+		"...kuuuuk...",
+		"..kuwuuuuk..",
+		"..kuwuuuuk..",
+		".kuwuuuuuuk.",
+		".kuuuuuuuuk.",
+		".kuuuuuuuuk.",
+		"..kuuuuuuk..",
+		"...kkkkkk...",
+	},
+}
+
+// Stamina: a lightning bolt. Too fat: a heart, in danger.
+BOLT_ICON := [12]string {
+	"......kkkk..",
+	".....kyyyk..",
+	"....kyyyk...",
+	"...kyyyk....",
+	"..kyyyykkkk.",
+	".kyyyyyyyyk.",
+	".kkkkyyyyk..",
+	"....kyyyk...",
+	"...kyyyk....",
+	"..kyyk......",
+	".kyk........",
+	".kk.........",
+}
+HEART_ICON := [12]string {
+	"............",
+	".kkk...kkk..",
+	"kRrrk.krrrk.",
+	"kRrwrkrrrrk.",
+	"kRrrrrrrrrk.",
+	"kRrrrrrrrrk.",
+	".kRrrrrrrk..",
+	"..kRrrrrk...",
+	"...kRrrk....",
+	"....kRk.....",
+	".....k......",
+	"............",
 }

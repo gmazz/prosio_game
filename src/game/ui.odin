@@ -12,6 +12,7 @@ UI_ORANGE :: Color{244, 150, 60, 255}
 UI_BLUE :: Color{80, 170, 240, 255}
 UI_BRUISE :: Color{132, 84, 160, 255}
 
+REGION_ABOUT_TIME :: f32(5) // seconds the line about a part of the meadow shows after he gets there
 CONTROLS :: "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}"
 
 // Text with a dark edge so it reads on any background.
@@ -244,23 +245,23 @@ draw_ui :: proc() {
 	panel_w, _ := draw_body_panel(x, y, s)
 	draw_sack(x + panel_w + 12 * s, 14 * s - 9 * s + 2 * s, s)
 
-	// Where he is: the part of the meadow and what is found there.
+	// Where he is: the part of the meadow, and, for a few seconds after he
+	// gets there, what is found there.
 	if g.in_region {
 		r := REGIONS[g.region]
 		fade := clamp(g.region_t * 2, 0, 1)
 		name_color := UI_YELLOW
 		name_color.a = u8(255 * fade)
 		about_color := UI_WHITE
-		about_color.a = u8(255 * fade)
+		about_color.a = u8(255 * fade * clamp(REGION_ABOUT_TIME - g.region_t, 0, 1))
 		label(r.name, sw - ui_text_width(r.name, 22 * s) - 20 * s, 16 * s, 22 * s, name_color)
 		label(r.about, sw - ui_text_width(r.about, 16 * s) - 20 * s, 44 * s, 16 * s, about_color)
 	}
 
 	// What the action buttons do right now.
 	if action := prompt_text(); action != nil {
-		label_centred(action, sw / 2, sh - 64 * s, 20 * s, UI_YELLOW)
+		label_centred(action, sw / 2, sh - 46 * s, 20 * s, UI_YELLOW)
 	}
-	label_centred(CONTROLS, sw / 2, sh - 34 * s, 16 * s)
 
 	if p.fail != .None && p.fail_t > 0.8 {
 		ui_rect(0, 0, sw, sh, {0, 0, 0, 110})
@@ -365,8 +366,7 @@ draw_menu :: proc() {
 	}
 
 	label_centred("Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 6", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
-	if scene == .Menu {
-		// While paused, the game's own controls line is already showing.
-		label_centred(CONTROLS, sw / 2, sh - 70 * s, 16 * s)
-	}
+	// What every button does (in the game only the line about what the
+	// buttons would do just there shows).
+	label_centred(CONTROLS, sw / 2, sh - 70 * s, 16 * s)
 }
