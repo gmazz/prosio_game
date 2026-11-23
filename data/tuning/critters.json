@@ -1,0 +1,48 @@
+{
+  "_about": "The small creatures: fish in the pond, the rabbits and crows that raid the crops, and the bees.",
+  "fish": {
+    "MAX_FISH": {
+      "untyped": 6,
+      "about": "Fish swim about the pond. They are shy of a pig on the move, but one that stands still on the bank makes them curious, and they drift over: then F grabs the nearest, if it is within reach."
+    },
+    "FISH_BACK": {"Vec2": [240, 480], "const": true, "about": "seconds until another fish takes a caught one's place"},
+    "FISH_REACH": {"f32": 1.25, "about": "how far beyond himself he can grab one"},
+    "FISH_FRIGHT": {"Vec2": [12, 22], "const": true, "about": "seconds a grab into the water keeps the fish away"},
+    "FISH_SHY": {"f32": 4.5, "about": "fish this near a moving Prosio dart away"},
+    "FISH_CURIOUS": {"f32": 7, "about": "fish this near a still one drift towards him"}
+  },
+  "pests": {
+    "_about": "Rabbits after the cabbages, crows after the wheat.",
+    "MAX_PESTS": {"untyped": 4},
+    "PEST_AWAY": {"Vec2": [50, 150], "const": true, "about": "seconds between raids"},
+    "PEST_SPEED": {"[Pest_Kind]f32": {"Rabbit": 3.2, "Crow": 5}},
+    "PEST_FLEE": {"[Pest_Kind]f32": {"Rabbit": 7.5, "Crow": 8}},
+    "PEST_SCARE": {"[Pest_Kind]f32": {"Rabbit": 4.5, "Crow": 6}, "about": "how near Prosio can get"},
+    "PEST_CROP": {"[Pest_Kind]Food_Kind": {"Rabbit": "Cabbage", "Crow": "Wheat"}},
+    "RIPE_ENOUGH": {"f32": 0.6, "about": "they leave anything smaller alone"},
+    "NIBBLE": {"f32": 0.7, "about": "how much of a crop's growth one raid eats"},
+    "NIBBLE_TIME": {"f32": 14, "about": "and how long that takes"},
+    "CROW_HEIGHT": {"f32": 4},
+    "STONE_SCARE": {
+      "f32": 2.5,
+      "about": "A stone passing or landing this near sends a rabbit or a crow off, and it stays away STONED_AWAY times as long as it would have."
+    },
+    "STONED_AWAY": {"f32": 2.5},
+    "PEST_HEARD": {"f32": 50, "about": "from this far off he hears one start on his crops"}
+  },
+  "bees": {
+    "MAX_HIVES": {
+      "untyped": 3,
+      "about": "Bees. Each hive in the bee meadow has a swarm that minds its own business until Prosio comes close: then it is after him, stinging, until he has been out of its reach for a while. His wind sends bees back into the hive and keeps them quiet for a time, and with enough fat on him the stings hardly hurt."
+    },
+    "MAX_HONEY": {"untyped": 2, "about": "combs in one hive"},
+    "HONEY_REGROW": {"Vec2": [240, 480], "const": true, "about": "seconds until the bees have made another"},
+    "HIVE_RADIUS": {"f32": 0.42},
+    "HIVE_GUARD": {"f32": 3.6, "about": "nearer the hive than this, and they come out"},
+    "BEE_SPEED": {"f32": 6.2, "about": "faster than he walks, slower than a lean sprint"},
+    "BEE_ANGRY": {"f32": 5, "about": "seconds they stay after him once he is clear"},
+    "BEE_LEASH": {"f32": 32, "about": "they give up this far from the hive"},
+    "STING_EVERY": {"f32": 0.7},
+    "GAS_CALM": {"f32": 14, "about": "seconds his wind keeps a hive quiet"}
+  }
+}

@@ -824,7 +824,7 @@ For example, Prosio grabs a turkey from the crowd on frame 12, walks off draggin
 
 ## Tuning
 
-Numbers that shape the game are moving out of the code into the data files in `data/tuning/`, one file to a subject (so far: `diet.json`, `prosio.json`). Each value there has its name in capitals, its type, the value, and a line saying what it is:
+Numbers that shape the game are moving out of the code into the data files in `data/tuning/`, one file to a subject (so far: `diet.json`, `prosio.json`, `world.json`, `critters.json`). Each value there has its name in capitals, its type, the value, and a line saying what it is:
 
 ```json
 "NEED_LOW": {"f32": 15, "about": "below this he lacks it"}

@@ -5,16 +5,6 @@ import "core:math"
 // Small creatures that are not fought: the fish in the pond, the rabbits
 // and crows that eat the crops, and the bees that guard their honey.
 
-// Fish swim about the pond. They are shy of a pig on the move, but one that
-// stands still on the bank makes them curious, and they drift over: then F
-// grabs the nearest, if it is within reach.
-MAX_FISH :: 6
-FISH_BACK :: Vec2{240, 480} // seconds until another fish takes a caught one's place
-FISH_REACH :: f32(1.25) // how far beyond himself he can grab one
-FISH_FRIGHT :: Vec2{12, 22} // seconds a grab into the water keeps the fish away
-FISH_SHY :: f32(4.5) // fish this near a moving Prosio dart away
-FISH_CURIOUS :: f32(7) // fish this near a still one drift towards him
-
 Fish :: struct {
 	pos:    Vec2,
 	facing: f32,
@@ -203,17 +193,6 @@ Pest :: struct {
 	stoned: bool, // driven off with a stone: it stays away longer
 }
 
-MAX_PESTS :: 4
-PEST_AWAY :: Vec2{50, 150} // seconds between raids
-PEST_SPEED := [Pest_Kind]f32{.Rabbit = 3.2, .Crow = 5}
-PEST_FLEE := [Pest_Kind]f32{.Rabbit = 7.5, .Crow = 8}
-PEST_SCARE := [Pest_Kind]f32{.Rabbit = 4.5, .Crow = 6} // how near Prosio can get
-PEST_CROP := [Pest_Kind]Food_Kind{.Rabbit = .Cabbage, .Crow = .Wheat}
-RIPE_ENOUGH :: f32(0.6) // they leave anything smaller alone
-NIBBLE :: f32(0.7) // how much of a crop's growth one raid eats
-NIBBLE_TIME :: f32(14) // and how long that takes
-CROW_HEIGHT :: f32(4)
-
 spawn_pests :: proc() {
 	homes := [MAX_PESTS]Vec2{{-23, 58.5}, {-8.5, 55.5}, {64, 14}, {43, 30}}
 	for &c, i in g.pests {
@@ -247,12 +226,6 @@ pest_target :: proc(c: ^Pest) -> int {
 	}
 	return best
 }
-
-// A stone passing or landing this near sends a rabbit or a crow off, and it
-// stays away STONED_AWAY times as long as it would have.
-STONE_SCARE :: f32(2.5)
-STONED_AWAY :: f32(2.5)
-PEST_HEARD :: f32(50) // from this far off he hears one start on his crops
 
 scare_pests_near :: proc(pos: Vec2, y: f32) {
 	for &c in g.pests {
@@ -402,22 +375,6 @@ draw_pests :: proc() {
 		}
 	}
 }
-
-// Bees. Each hive in the bee meadow has a swarm that minds its own business
-// until Prosio comes close: then it is after him, stinging, until he has
-// been out of its reach for a while. His wind sends bees back into the hive
-// and keeps them quiet for a time, and with enough fat on him the stings
-// hardly hurt.
-MAX_HIVES :: 3
-MAX_HONEY :: 2 // combs in one hive
-HONEY_REGROW :: Vec2{240, 480} // seconds until the bees have made another
-HIVE_RADIUS :: f32(0.42)
-HIVE_GUARD :: f32(3.6) // nearer the hive than this, and they come out
-BEE_SPEED :: f32(6.2) // faster than he walks, slower than a lean sprint
-BEE_ANGRY :: f32(5) // seconds they stay after him once he is clear
-BEE_LEASH :: f32(32) // they give up this far from the hive
-STING_EVERY :: f32(0.7)
-GAS_CALM :: f32(14) // seconds his wind keeps a hive quiet
 
 Hive :: struct {
 	round:   int, // the hive itself, in the world's round things

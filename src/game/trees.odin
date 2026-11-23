@@ -32,28 +32,6 @@ Tree_Part :: enum {
 	Leaves,
 }
 
-// Each kind's height (metres, before a tree's own size), how wide its crown
-// is (its radius), and its two models.
-TREE_HEIGHT := [Tree_Species]f32{.Broadleaf = 5.4, .Apple = 4.6, .Blossom = 5.2, .Pine = 5.8}
-TREE_CROWN := [Tree_Species]f32{.Broadleaf = 2.0, .Apple = 1.7, .Blossom = 1.9, .Pine = 1.35}
-TREE_PICK := [Tree_Species][]Tree_Model_Kind {
-	.Broadleaf = {.Broad1, .Broad2, .Broad3, .Broad4, .Common1, .Common2, .Birch1, .Birch2},
-	.Apple     = {.Round1, .Round2},
-	.Blossom   = {.Round3, .Broad1},
-	.Pine      = {.Pine1, .Pine2, .Pine3, .Pine4, .Pine5},
-}
-TREE_WIDTH :: f32(0.12) // how much wider or narrower a tree may be than its kind,
-TREE_LEAN :: f32(0.06) // how far it may lean (radians),
-TREE_SHADE :: f32(0.1) // and how much lighter or darker its leaves may be
-
-// Leaves for each kind (a tree's own shade is laid over them).
-TREE_LEAVES := [Tree_Species]Color {
-	.Broadleaf = {92, 150, 72, 255},
-	.Apple     = {120, 170, 78, 255},
-	.Blossom   = {236, 158, 178, 255},
-	.Pine      = {58, 112, 80, 255},
-}
-
 // A number from 0 to 1 that belongs to one tree and one purpose.
 tree_random :: proc(index: int, purpose: f32) -> f32 {
 	return math.mod(f32(index) * 0.6180339 + purpose * 0.3713 + f32(index % 7) * 0.113, 1)

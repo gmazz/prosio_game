@@ -1,0 +1,142 @@
+package game
+
+// Made by tools/gen_data from data/tuning/world.json: do not edit; edit that file.
+
+import "core:math"
+
+_ :: math
+
+// The meadow: its size and layout, the fog round it, what grows and how fast, the forest and its trees, and how much room the game keeps for things.
+
+// ---- meadow ----
+// Where everything is, in metres; home is at 0, 0.
+
+GRAVITY :: f32(25)
+// The meadow reaches this far from the centre, inside a fence. Prosio's home with its oven is in the middle; each kind of food grows in its own part of the meadow (see REGIONS), so he has to go out and fetch it.
+WORLD_HALF :: Vec2{100, 70}
+HOME :: Vec2{0, 0}
+// The pond: the only water to drink. It is round, and too deep to walk into.
+POND :: Vec2{-26, -48}
+POND_RADIUS :: f32(7.5)
+// Paths from home out to each region, as straight segments; they wander a little when drawn.
+PATH_ENDS := [Region_Kind]Vec2{.Home = HOME, .Forest = {-30, -8}, .Fields = {36, 18}, .Garden = {-10, 34}, .Turkeys = {10, -29}, .Hills = {50, -30}, .Pond = {-21, -39}, .Bees = {-38, 46}}
+// What Prosio has seen of the meadow, for the map: it is in squares of MAP_CELL, and everything within SIGHT of him is uncovered as he goes.
+MAP_CELL :: f32(2.5)
+// 2 * WORLD_HALF.x / MAP_CELL
+MAP_W :: 80
+// 2 * WORLD_HALF.y / MAP_CELL
+MAP_H :: 56
+SIGHT :: f32(15) // further with plenty of vitamins, less without (see diet.odin)
+
+// ---- fog ----
+// Beyond the edge of the meadow lies a thick dark fog: it starts FOG_START metres past the edge and is solid FOG_THICK metres further. Nobody walks into it, but an animal thrown far enough flies into it and is lost: it comes back later at home, like any other that is gone.
+FOG_START :: f32(-2.5)
+FOG_THICK :: f32(6)
+FOG_LOST :: f32(3) // how far past the edge a flying animal is lost (or as soon as it comes down beyond it)
+
+// ---- growing ----
+// What grows, how much of it there is, and how fast it comes back.
+
+// Food is scarce. Of each kind there is never more in the whole meadow than FOOD_BUDGET calories' worth, counted at full size: so ten pumpkins, a dozen sheaves of wheat, forty-odd apples, eighty bunches of berries. That is a ceiling, not a promise. What is picked does not come straight back: after a wait a new one sprouts, small, and grows to its full size, which differs a little from one to the next. Picked early it is worth less.
+FOOD_BUDGET :: f32(4000)
+// mushrooms are so light there would be far too many
+MUSHROOM_BUDGET :: f32(1200)
+// the share of its calories a thing has when it has only just sprouted
+UNRIPE :: f32(0.25)
+// how much one thing's full size can differ from the usual, either way
+SIZE_SPREAD :: f32(0.15)
+// bunches on one bush
+MAX_BERRIES :: 2
+// seconds until a picked bush starts another bunch
+BERRY_REGROW :: Vec2{60, 160}
+// seconds for berries to ripen
+BERRY_GROW :: f32(120)
+// apples on one tree, with those lying under it
+MAX_APPLES :: 3
+// seconds between a tree's new apples
+APPLE_REGROW :: Vec2{120, 300}
+// seconds for apples to ripen on the tree
+APPLE_GROW :: f32(200)
+// seconds a fallen apple lies there before it rots away
+APPLE_LIFE :: f32(90)
+// seconds a laid egg lies there before it is gone
+EGG_LIFE :: f32(240)
+// eggs lying about at once, all over the meadow: well under the budget
+MAX_EGGS :: 10
+// Seconds until a new one sprouts where one was picked (somewhere in this range), and then to grow to full size. apples are not replanted: new ones grow on the trees the turkeys lay new ones only he puts spears there
+FOOD_REGROW := [Food_Kind]Vec2{.Apple = {}, .Mushroom = {90, 240}, .Pumpkin = {240, 540}, .Wheat = {240, 540}, .Egg = {}, .Cabbage = {200, 480}, .Nuts = {150, 400}, .Wood = {120, 300}, .Spear = {}}
+// a branch falls whole
+FOOD_GROW := [Food_Kind]f32{.Apple = 0, .Mushroom = 100, .Pumpkin = 300, .Wheat = 260, .Egg = 0, .Cabbage = 240, .Nuts = 180, .Wood = 0, .Spear = 0}
+// How big each is on the ground. Only a pumpkin is big enough to bump into.
+FOOD_SIZE := [Food_Kind]f32{.Apple = 0.12, .Mushroom = 0.14, .Pumpkin = 0.34, .Wheat = 0.22, .Egg = 0.1, .Cabbage = 0.26, .Nuts = 0.16, .Wood = 0.3, .Spear = 0.3}
+
+// ---- salt_and_pebbles ----
+// big rocks in the goat hills with rock salt growing on them (salt is no energy, so it has no budget)
+SALT_ROCKS :: 4
+// lumps on one of them
+MAX_SALT :: 2
+// seconds until another lump has grown
+SALT_REGROW :: Vec2{300, 600}
+SALT_ROCK_RADIUS :: f32(1.0)
+// Patches of pebbles for throwing: some in the goat hills, by the pond, and one each near home, the turkeys and the fields.
+PEBBLE_PATCHES := [Region_Kind]int{.Home = 1, .Forest = 1, .Fields = 1, .Garden = 0, .Turkeys = 1, .Hills = 3, .Pond = 2, .Bees = 0}
+// in one patch
+MAX_PEBBLES :: 6
+// taken at one stoop
+PEBBLE_HANDFUL :: 3
+// seconds until another has worked its way up
+PEBBLE_REGROW :: Vec2{30, 70}
+PEBBLE_PATCH_RADIUS :: f32(0.45)
+
+// ---- forest ----
+// Shaking a tree: standing right at it (no further than TREE_SHAKE_REACH from its trunk) and facing it (within TREE_SHAKE_ANGLE either side) he takes hold of it with both hooves and shakes it, as hard as his arms are strong (see strength in body.odin). The crown shakes that much, and that many apples come down.
+
+// Where trees may stand. The camera always looks from the south, and from above (rising VIEW_SLOPE metres back for every metre up): so a tree's leaves hide a strip of ground to the north of its trunk, from under their lowest to beyond their highest, as wide as its crown (see tree_cover). A tall tree hides ground ten metres behind it. Two rules come of that: nothing is planted where it would stand in front of something that has to stay in view: a path, a field, a building, a hive, a salt rock, a berry bush, food on the ground (see hides_something); and what is put down after the trees (bushes, mushrooms, nuts, salt) goes only where no tree stands in front of it (see hidden_by_tree).
+VIEW_SLOPE :: f32(1.25)
+// trees in the forest (besides the apple trees),
+FOREST_TREES :: 300
+// each at least this far from the next,
+FOREST_SPACING :: f32(3.4)
+// thinning to this share of the trees at its edge
+FOREST_EDGE :: f32(0.25)
+// mossy stumps and fallen logs in the forest
+FOREST_STUMPS :: 36
+STUMP_RADIUS :: f32(0.5)
+// The forest's clearings, and the trail that joins them to the path from home (PATH_ENDS[.Forest]).
+CLEARINGS := [3]Vec2{{-50, -14}, {-71, 8}, {-73, -36}}
+CLEARING_RADIUS :: f32(8)
+TRAILS := [3][2]Vec2{{{-30, -8}, {-50, -14}}, {{-50, -14}, {-71, 8}}, {{-50, -14}, {-73, -36}}}
+// metres between him and the trunk
+TREE_SHAKE_REACH :: f32(0.6)
+// 30 degrees either side of where he faces
+TREE_SHAKE_ANGLE :: f32(math.PI / 6)
+// seconds he shakes it
+TREE_SHAKE_TIME :: f32(0.9)
+// apples that come down for arms of ordinary strength
+TREE_SHAKE_APPLES :: f32(2)
+
+// ---- trees ----
+// Trees drawn from models: each kind's height and crown width (metres, before a tree's own size), which models it takes, how much one tree differs from the next, and its leaves.
+
+// Each kind's height (metres, before a tree's own size), how wide its crown is (its radius), and its two models.
+TREE_HEIGHT := [Tree_Species]f32{.Broadleaf = 5.4, .Apple = 4.6, .Blossom = 5.2, .Pine = 5.8}
+TREE_CROWN := [Tree_Species]f32{.Broadleaf = 2.0, .Apple = 1.7, .Blossom = 1.9, .Pine = 1.35}
+TREE_PICK := [Tree_Species][]Tree_Model_Kind{.Broadleaf = {.Broad1, .Broad2, .Broad3, .Broad4, .Common1, .Common2, .Birch1, .Birch2}, .Apple = {.Round1, .Round2}, .Blossom = {.Round3, .Broad1}, .Pine = {.Pine1, .Pine2, .Pine3, .Pine4, .Pine5}}
+// how much wider or narrower a tree may be than its kind,
+TREE_WIDTH :: f32(0.12)
+// how far it may lean (radians),
+TREE_LEAN :: f32(0.06)
+// and how much lighter or darker its leaves may be
+TREE_SHADE :: f32(0.1)
+// Leaves for each kind (a tree's own shade is laid over them).
+TREE_LEAVES := [Tree_Species]Color{.Broadleaf = {92, 150, 72, 255}, .Apple = {120, 170, 78, 255}, .Blossom = {236, 158, 178, 255}, .Pine = {58, 112, 80, 255}}
+
+// ---- limits ----
+// How many of each thing the game keeps room for (it allocates nothing while playing). Raise one only if the meadow needs more.
+
+MAX_ROUNDS :: 640
+MAX_FOODS :: 360
+MAX_PARTICLES :: 256
+MAX_DECOR :: 5000
+MAX_FIELDS :: 8
+
