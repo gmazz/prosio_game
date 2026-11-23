@@ -19,7 +19,7 @@
     "FENCE_H": {"untyped": 70},
     "FENCE_POINTS": {"untyped": "(FENCE_W + 1) * (FENCE_H + 1)"},
     "MAX_FENCES": {"untyped": 240, "about": "pieces standing at once (as many as are saved)"},
-    "FENCE_TOP": {"f32": "0.4) // anything with its feet higher than this is over it; a jump this high takes him over (at 80 kg he jumps 0.45 m"},
+    "FENCE_TOP": {"f32": 0.4, "about": "anything with its feet higher than this is over it; a jump this high takes him over (at 80 kg he jumps 0.45 m)"},
     "FENCE_THICK": {"f32": 0.1},
     "FENCE_AHEAD": {"f32": 0.7, "about": "a piece goes on the line of the grid nearest to the spot this far in front of him (never under his feet),"},
     "FENCE_REACH": {"f32": 1.05, "about": "so it is never further from that spot than this; and F takes down a piece that near it"},

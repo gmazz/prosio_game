@@ -87,7 +87,8 @@ SALTY_THIRST :: f32(2.5)
 CRAMP_AFTER :: f32(2.5)
 // and the share of his jump he still has
 CRAMP_JUMP :: f32(0.6)
-BULK_BURN :: f32(1.4) // full of protein: how much more everything burns (how much faster muscle builds is BULK in body.odin)
+// full of protein: how much more everything burns (how much faster muscle builds is BULK in prosio.json, muscle)
+BULK_BURN :: f32(1.4)
 // thirsty: his stamina only comes back this far
 THIRSTY_STAMINA :: f32(50)
 

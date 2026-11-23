@@ -26,13 +26,15 @@ MAP_CELL :: f32(2.5)
 MAP_W :: 80
 // 2 * WORLD_HALF.y / MAP_CELL
 MAP_H :: 56
-SIGHT :: f32(15) // further with plenty of vitamins, less without (see diet.odin)
+// further with plenty of vitamins, less without (see EAGLE_SIGHT and DIM_SIGHT in diet.json)
+SIGHT :: f32(15)
 
 // ---- fog ----
 // Beyond the edge of the meadow lies a thick dark fog: it starts FOG_START metres past the edge and is solid FOG_THICK metres further. Nobody walks into it, but an animal thrown far enough flies into it and is lost: it comes back later at home, like any other that is gone.
 FOG_START :: f32(-2.5)
 FOG_THICK :: f32(6)
-FOG_LOST :: f32(3) // how far past the edge a flying animal is lost (or as soon as it comes down beyond it)
+// how far past the edge a flying animal is lost (or as soon as it comes down beyond it)
+FOG_LOST :: f32(3)
 
 // ---- growing ----
 // What grows, how much of it there is, and how fast it comes back.
@@ -89,7 +91,7 @@ PEBBLE_REGROW :: Vec2{30, 70}
 PEBBLE_PATCH_RADIUS :: f32(0.45)
 
 // ---- forest ----
-// Shaking a tree: standing right at it (no further than TREE_SHAKE_REACH from its trunk) and facing it (within TREE_SHAKE_ANGLE either side) he takes hold of it with both hooves and shakes it, as hard as his arms are strong (see strength in body.odin). The crown shakes that much, and that many apples come down.
+// Shaking a tree: standing right at it (no further than TREE_SHAKE_REACH from its trunk) and facing it (within TREE_SHAKE_ANGLE either side) he takes hold of it with both hooves and shakes it, as hard as his arms are strong (STRONG and NOODLE_ARMS in prosio.json, skills). The crown shakes that much, and that many apples come down.
 
 // Where trees may stand. The camera always looks from the south, and from above (rising VIEW_SLOPE metres back for every metre up): so a tree's leaves hide a strip of ground to the north of its trunk, from under their lowest to beyond their highest, as wide as its crown (see tree_cover). A tall tree hides ground ten metres behind it. Two rules come of that: nothing is planted where it would stand in front of something that has to stay in view: a path, a field, a building, a hive, a salt rock, a berry bush, food on the ground (see hides_something); and what is put down after the trees (bushes, mushrooms, nuts, salt) goes only where no tree stands in front of it (see hidden_by_tree).
 VIEW_SLOPE :: f32(1.25)
@@ -143,8 +145,10 @@ MAX_FIELDS :: 8
 // ---- plants ----
 // How big the grass clumps, ferns, low bushes and fallen logs are drawn.
 
-GRASS_SIZE :: f32(1.25) // how big a clump of grass is drawn, against its model (0.4 m tall)
-SHRUB_SIZE :: f32(0.6) // a low bush under the forest trees (1.2 m tall as modelled)
+// how big a clump of grass is drawn, against its model (0.4 m tall)
+GRASS_SIZE :: f32(1.25)
+// a low bush under the forest trees (1.2 m tall as modelled)
+SHRUB_SIZE :: f32(0.6)
 // a fallen log, from end to end
 LOG_LENGTH :: f32(1.9)
 // and a fern

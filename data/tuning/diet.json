@@ -53,7 +53,7 @@
     "SALTY_THIRST": {"f32": 2.5, "about": "salty: how much faster he gets thirsty"},
     "CRAMP_AFTER": {"f32": 2.5, "about": "lacking electrolytes: seconds of sprinting that bring on a cramp,"},
     "CRAMP_JUMP": {"f32": 0.6, "about": "and the share of his jump he still has"},
-    "BULK_BURN": {"f32": "1.4) // full of protein: how much more everything burns (how much faster muscle builds is BULK in body.odin"},
+    "BULK_BURN": {"f32": 1.4, "about": "full of protein: how much more everything burns (how much faster muscle builds is BULK in prosio.json, muscle)"},
     "THIRSTY_STAMINA": {"f32": 50, "about": "thirsty: his stamina only comes back this far"}
   },
   "too_much": {

@@ -5,7 +5,7 @@ package game
 // Prosio himself: his fat, his size, what he burns, his bruises, and how his muscles and skills grow and fade.
 
 // ---- fat ----
-// Prosio's fat, in kilograms. (His weight is this and the rest of him, added up in diet.odin.) Running out of it and of his carbs as well, or carrying too much fat, is a fail.
+// Prosio's fat, in kilograms. (His weight is this and the rest of him, added up from his parts.) Running out of it and of his carbs as well, or carrying too much fat, is a fail.
 
 // heart gives up
 FAT_MAX :: f32(100)
@@ -30,8 +30,26 @@ STAMINA_MAX :: f32(100)
 DASH_TIME :: f32(0.28)
 // stooping to pick something up and putting it in the sack
 PICK_TIME :: f32(0.5)
-// Ordinary legs put the same energy into every jump, so height = energy / weight: a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3. Strong legs put in more (see LEG_SPRING in body.odin).
+// Ordinary legs put the same energy into every jump, so height = energy / weight: a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3. Strong legs put in more (see LEG_SPRING in the skills section).
 JUMP_ENERGY :: f32(36)
+
+// ---- lean_to_fat ----
+// Everything here gets worse with fat, and the gap is deliberately wide: each pair is his value when lean (no fat) and with all the fat he can carry (FAT_MAX); in between it goes smoothly from one to the other. Strong legs and good lungs make up for some of it (see the skills section).
+
+// how fast he walks, m/s (curving: most of the slowing comes early)
+WALK_SPEED :: Vec2{7.2, 2.6}
+// how many times faster he sprints than he walks
+SPRINT_BOOST :: Vec2{1.7, 1.25}
+// stamina a second of sprinting costs
+SPRINT_DRAIN :: Vec2{9, 42}
+// how fast a bump carries him, m/s
+DASH_SPEED :: Vec2{15, 10.5}
+// stamina a bump costs
+DASH_COST :: Vec2{9, 42}
+// stamina a jump costs
+JUMP_COST :: Vec2{4, 22}
+// stamina that comes back each second (curving like the walk)
+STAMINA_REGEN :: Vec2{50, 8}
 
 // ---- burning ----
 // Everything he does burns some of his weight, a little for everyday things and more for fighting. Walking and running burn in proportion to his weight: these are for an 80 kg Prosio.
@@ -40,7 +58,8 @@ JUMP_ENERGY :: f32(36)
 WALK_BURN :: f32(0.02)
 // kg per second of sprinting
 SPRINT_BURN :: f32(0.06)
-LOAD_EASE :: f32(0.6) // the share of the sack's weight his legs feel (it is on his back, well packed)
+// the share of the sack's weight his legs feel (it is on his back, well packed)
+LOAD_EASE :: f32(0.6)
 // so with 16 kg in the sack his legs train 1.36 times as fast
 LOAD_TRAIN :: f32(3)
 // a sack this share of his weight, and he says so
@@ -58,7 +77,8 @@ BRUISE_FLOOR :: f32(0.25)
 BRUISE_MOST :: STAMINA_MAX * (1 - BRUISE_FLOOR)
 BRUISE := [Enemy_Kind]f32{.Turkey = 3, .Goat = 6, .Billy = 9, .Fox = 0}
 BRUISE_STING :: f32(0.8)
-BRUISE_MEND :: f32(0.2) // points a second, times 0.5 (lacking protein and vitamins) to 2 (plenty of both)
+// points a second, times 0.5 (lacking protein and vitamins) to 2 (plenty of both)
+BRUISE_MEND :: f32(0.2)
 // seconds after a knock before they start to mend
 BRUISE_REST :: f32(5)
 // from this share of the most, he says so
@@ -108,7 +128,8 @@ PICK_WORK :: f32(0.02)
 FISH_WORK :: f32(0.04)
 // hooves: each milking
 MILK_WORK :: f32(0.05)
-COOK_WORK :: f32(0.06) // baking, grilling, dairy: each thing made (half way after 11, nearly all after 50)
+// baking, grilling, dairy: each thing made (half way after 11, nearly all after 50)
+COOK_WORK :: f32(0.06)
 
 // ---- skills ----
 // What each trait is worth at its most (and a muscle at its worst).
@@ -143,10 +164,25 @@ GUT_REACH :: f32(1.5)
 DEFT_PICK :: f32(0.5)
 // and how much further he reaches for a fish or a leg
 DEFT_REACH :: f32(1.4)
-COOK_QUICK :: f32(0.5) // baking, grilling, dairy: the share of the usual time it takes at the most (the calories are in COOK_RANGE in kitchen.odin)
+// baking, grilling, dairy: the share of the usual time it takes at the most (the calories are in COOK_RANGE in food.json, making)
+COOK_QUICK :: f32(0.5)
 
 // ---- waking_up ----
 // Waking up at home after the game was over: his fat is brought back inside these, he has lost this share of the muscle he had built, and his sack is gone. What he has learnt stays.
 WAKE_FAT :: Vec2{25, 70}
 WAKE_MUSCLE_LOSS :: f32(0.35)
+
+// ---- shape ----
+// His shape, in his body's own measurements. Prosio is short and stocky: short legs, a compact body and a big head.
+
+// how far his ears hang over, in radians from straight up: almost straight down
+EAR_DROOP :: f32(2.9)
+// leg length, as a share of the old, longer legs
+LEG_SCALE :: f32(0.86)
+// the body from hips to neck, likewise
+TORSO_SCALE :: f32(0.84)
+// hip height in the body's own measurements
+HIP :: f32(0.47)
+// above his feet
+SHOULDER_HEIGHT :: HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE
 

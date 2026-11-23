@@ -106,7 +106,7 @@
         "Honey": 300
       },
       "partial": true,
-      "about": "Calories in one of each raw thing, full grown and of the usual size (what is actually picked varies: see FOOD_BUDGET in world.odin). A dish's are worked out from what went into it. a bunch a whole head a handful a sheaf, about a cup of flour a lump: all of it electrolytes, none of it energy one piece; a turkey gives two, a goat five a jug a comb"
+      "about": "Calories in one of each raw thing, full grown and of the usual size (what is actually picked varies: see FOOD_BUDGET in world.json, growing). A dish's are worked out from what went into it. a bunch a whole head a handful a sheaf, about a cup of flour a lump: all of it electrolytes, none of it energy one piece; a turkey gives two, a goat five a jug a comb"
     }
   },
   "made_of": {

@@ -117,34 +117,35 @@ prosio_chest :: proc(kg: f32) -> f32 {
 	return min(prosio_radius(kg) / PROSIO_SIZE - 0.12, 0.33 + 0.16 * fatness()) * lerp(1, 1.1, g.prosio.trait[.Lungs]) // (in his own measurements)
 }
 
-// Everything below gets worse with fat, and the gap is deliberately wide.
-// Strong legs make up for some of it, and good lungs for some more.
+// Everything below gets worse with fat (the numbers, lean and fat, are in
+// data/tuning/prosio.json, lean_to_fat). Strong legs make up for some of
+// it, and good lungs for some more.
 walk_speed :: proc() -> f32 {
-	return lerp(7.2, 2.6, math.pow(fatness(), 0.8)) * tone(.Legs, WEAK_LEGS, LEG_SPEED)
+	return lerp(WALK_SPEED.x, WALK_SPEED.y, math.pow(fatness(), 0.8)) * tone(.Legs, WEAK_LEGS, LEG_SPEED)
 }
 
 sprint_boost :: proc() -> f32 {
-	return lerp(1.7, 1.25, fatness())
+	return lerp(SPRINT_BOOST.x, SPRINT_BOOST.y, fatness())
 }
 
 sprint_drain :: proc() -> f32 {
-	return lerp(9, 42, fatness()) * lerp(1, LUNG_DRAIN, g.prosio.trait[.Lungs]) // stamina per second
+	return lerp(SPRINT_DRAIN.x, SPRINT_DRAIN.y, fatness()) * lerp(1, LUNG_DRAIN, g.prosio.trait[.Lungs]) // stamina per second
 }
 
 dash_speed :: proc() -> f32 {
-	return lerp(15, 10.5, fatness())
+	return lerp(DASH_SPEED.x, DASH_SPEED.y, fatness())
 }
 
 dash_cost :: proc() -> f32 {
-	return lerp(9, 42, fatness())
+	return lerp(DASH_COST.x, DASH_COST.y, fatness())
 }
 
 jump_cost :: proc() -> f32 {
-	return lerp(4, 22, fatness())
+	return lerp(JUMP_COST.x, JUMP_COST.y, fatness())
 }
 
 stamina_regen :: proc() -> f32 {
-	return lerp(50, 8, math.pow(fatness(), 0.8)) * lerp(1, LUNG_REGEN, g.prosio.trait[.Lungs]) // stamina per second
+	return lerp(STAMINA_REGEN.x, STAMINA_REGEN.y, math.pow(fatness(), 0.8)) * lerp(1, LUNG_REGEN, g.prosio.trait[.Lungs]) // stamina per second
 }
 
 // How high he jumps weighing this much (with what he carries).

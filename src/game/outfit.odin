@@ -135,16 +135,6 @@ PRESET_NAME := [Preset]cstring {
 	.Chef          = "Chef",
 	.Bare          = "Bare pig",
 }
-PRESETS := [Preset]Outfit {
-	.Explorer      = {},
-	.Metalhead     = {hair = .Long_Black, hat = .None, earrings = .Both, neck = .None, shirt = .Band_Tee, over = .Leather, legs = .Leather, feet = .Black_Boots},
-	.Eighties_Nerd = {hair = .Bowl, hat = .None, glasses = .Nerd, neck = .Bow_Tie, shirt = .Computer_Tee, legs = .Cords, feet = .Sneakers},
-	.Keynote       = {hair = .Grey, hat = .None, glasses = .Round, face = .Stubble, neck = .None, shirt = .Turtleneck, legs = .Jeans, feet = .Trainers},
-	.Aviator       = {hair = .None, hat = .Flying_Cap, glasses = .Sunglasses, face = .Moustache, neck = .Scarf, shirt = .White_Shirt, over = .Trench, legs = .Cords, feet = .Boots},
-	.Space_Pirate  = {hair = .Shaggy, hat = .None, glasses = .Eyepatch, face = .Scar, neck = .None, shirt = .Pirate_Top, over = .Cape, legs = .Leather, feet = .Black_Boots},
-	.Chef          = {hair = .None, hat = .Chef_Hat, face = .Moustache, neck = .Kerchief, shirt = .Chef_Jacket, over = .Apron, legs = .Checks, feet = .Sneakers},
-	.Bare          = {hair = .Tuft, hat = .None, neck = .None, shirt = .None, legs = .None},
-}
 
 // Which whole outfit he has on, if it is exactly one of them.
 worn_preset :: proc() -> (preset: Preset, whole: bool) {
@@ -736,8 +726,6 @@ draw_bag_outfit :: proc(x, y, w, s: f32) {
 	}
 }
 
-LAYER :: f32(0.02) // how much bigger each layer of clothes is than what is under it
-
 Sleeves :: enum {
 	None,
 	Short,
@@ -753,31 +741,10 @@ Shirt_Look :: struct {
 	long:       bool,
 	surface:    Surface,
 }
-SHIRT_LOOK := [Shirt]Shirt_Look {
-	.Jacket       = {COLOR_SHIRT, {175, 115, 60, 255}, .Short, false, .Jacket},
-	.None         = {},
-	.T_Shirt      = {TSHIRT, {172, 58, 50, 255}, .Short, false, .Solid},
-	.Sailor       = {SAILOR, NAVY, .Short, false, .Stripes},
-	.Band_Tee     = {TEE_BLACK, TEE_BLACK, .Short, true, .Solid},
-	.Computer_Tee = {TEE_CREAM, TEE_CREAM, .Short, true, .Solid},
-	.Turtleneck   = {TEE_BLACK, TEE_BLACK, .Long, true, .Solid},
-	.White_Shirt  = {SAILOR, SAILOR, .Long, true, .Solid},
-	.Pirate_Top   = {LEATHER, LEATHER, .Long, true, .Solid},
-	.Chef_Jacket  = {SAILOR, SAILOR, .Long, true, .Solid},
-}
 
 Over_Look :: struct {
 	color:   Color,
 	sleeves: Sleeves,
-}
-OVER_LOOK := [Over]Over_Look {
-	.None    = {},
-	.Gilet   = {GILET, .None},
-	.Coat    = {COAT, .Long},
-	.Leather = {LEATHER, .Long},
-	.Trench  = {TRENCH, .Long},
-	.Cape    = {LEATHER, .None},
-	.Apron   = {SAILOR, .None},
 }
 
 long_trousers :: proc() -> bool {

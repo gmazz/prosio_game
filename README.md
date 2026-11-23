@@ -189,7 +189,7 @@ So a strong pig is hungry: he gets through his carbs in under 20 minutes at rest
 
 Food is not eaten where it is found. `E` next to it and Prosio stoops, picks it up and drops it over his shoulder into the sack on his back. He eats from the sack when he likes: `Z` and `C` choose, `Q` eats.
 
-**The sack holds 60 litres**, of whatever he likes, and is meant to be roomy: the sixteen logs for a whole pen go in at once, or the eight pieces of fence they make, with room for food beside them; fifteen pumpkins fill it. Each thing takes up room and has a weight (a berry bunch 0.1 kg and 0.2 litres, an apple 0.2 kg and 0.3 litres, a log 1 kg and 1.5 litres, a pumpkin 3 kg and 4 litres, a flat-packed piece of fence 3 kg and 4 litres: all in `ITEM_KG` and `ITEM_LITRES` in `kitchen.odin`). On the screen there are no litres or kilograms: a thin bar under the sack says how full it is, orange when it is full or when the load is heavy for him (over 30% of his own weight). The larder's menu shows how full the sack and the larder are in per cent. The numbers below are what the game works with inside. **The weight has no limit but his back**, and he carries it. The sack sits well on his back, so his legs feel only 60% of its weight (a rock in his arms they feel all of):
+**The sack holds 60 litres**, of whatever he likes, and is meant to be roomy: the sixteen logs for a whole pen go in at once, or the eight pieces of fence they make, with room for food beside them; fifteen pumpkins fill it. Each thing takes up room and has a weight (a berry bunch 0.1 kg and 0.2 litres, an apple 0.2 kg and 0.3 litres, a log 1 kg and 1.5 litres, a pumpkin 3 kg and 4 litres, a flat-packed piece of fence 3 kg and 4 litres: all in `ITEM_KG` and `ITEM_LITRES` in `data/tuning/food.json`). On the screen there are no litres or kilograms: a thin bar under the sack says how full it is, orange when it is full or when the load is heavy for him (over 30% of his own weight). The larder's menu shows how full the sack and the larder are in per cent. The numbers below are what the game works with inside. **The weight has no limit but his back**, and he carries it. The sack sits well on his back, so his legs feel only 60% of its weight (a rock in his arms they feel all of):
 
 - It slows him a little: 16 kg in the sack makes him about a tenth slower, a full sack of wood (40 kg) about a quarter.
 - Walking and sprinting burn a little more: an eighth more with 16 kg. Sprinting and jumping cost more stamina, and he jumps less high (all of the sack's weight counts for that, so a heavy sack can stop him clearing a fence).
@@ -824,71 +824,39 @@ For example, Prosio grabs a turkey from the crowd on frame 12, walks off draggin
 
 ## Tuning
 
-Numbers that shape the game are moving out of the code into the data files in `data/tuning/`, one file to a subject (so far: `diet.json`, `prosio.json`, `world.json`, `critters.json`, `food.json`, `building.json`, `handling.json`, `animals.json`, `colours.json`, `screen.json`, `controls.json`). Each value there has its name in capitals, its type, the value, and a line saying what it is:
+Every number that shapes the game is in the data files in `data/tuning/`, one file to a subject, each in sections. Each value has its name in capitals, its type, the value, and a line saying what it is:
 
 ```json
 "NEED_LOW": {"f32": 15, "about": "below this he lacks it"}
+"WALK_SPEED": {"Vec2": [7.2, 2.6], "const": true, "about": "how fast he walks, m/s"}
+"TREE_HEIGHT": {"[Tree_Species]f32": {"Broadleaf": 5.4, "Apple": 4.6, "Blossom": 5.2, "Pine": 5.8}}
 ```
 
-The game never reads these files: `tools/gen_data` (run by the build scripts and `tools/check.sh`) turns each into `src/game/gen_<subject>.odin`, so after editing one, build as usual. A mistake in a file stops the build with its line number, and a misspelled name stops it at the code that uses it. Do not edit the `gen_` files. Inside a table, a word with a capital and small letters is a name from the game's lists (`"Carbs"`), and a key in small letters is a field. The rest are still named constants or one-line functions near the top of their files:
+The game never reads these files: `tools/gen_data` (run by the build scripts and `tools/check.sh`) turns each into `src/game/gen_<subject>.odin`, so after editing one, build as usual. A mistake in a file stops the build with its line number, and a misspelled name stops it at the code that uses it. Do not edit the `gen_` files. Inside a value, a word with a capital and small letters is a name from the game's lists (`"Carbs"`), a key in small letters is a field (`"keys"`), a name in capitals is another value (`"FAT_MAX"`), and a name from a list that is all capitals is written with a dot (`".RT"`, the right trigger). A table may be marked `"partial": true` when it leaves some entries out.
 
-| To change | Look in |
+| File | What is in it (its sections) |
 |---|---|
-| Fat limits and zones | `prosio.odin` (`FAT_*`) |
-| Muscle sizes, how fast traits grow and fade, what each activity trains, what each trait is worth, what waking up costs | `body.odin` (`ARMS_KG`, `LEGS_KG`, `FADE`, `WASTE`, `*_WORK`, `STRONG`, `LEG_SPEED`, `WAKE_*`, ...) |
-| Calories, recipes, baking time | `kitchen.odin` (`RAW_KCAL`, `RECIPES`, `STATION_TIME`, `KCAL_PER_KG`) |
-| Speeds, sprint, stamina costs and recovery, jump energy | `prosio.odin` (`walk_speed`, `dash_cost`, `JUMP_ENERGY`, ...) |
-| How hard bumps and shoves are, enemy weights and grips, how fast each kind goes and a goat charges | `enemies.odin` (`BUMP_GAIN`, `ENEMY_KG`, `ENEMY_GRIP`, `ENEMY_SPEED`, `GOAT_CHARGE`) |
-| Impact thresholds, spin, landing friction, and time to get up | `impact.odin` (`IMPACT_*`) |
-| Throw and bash strength, lift limit, dragging grip, how fast animals go limp, rock weight | `grab.odin` |
-| World size, regions, fields, paths, how many trees and rocks | `world.odin` (`WORLD_HALF`, `REGIONS`, `PATH_ENDS`, `build_world`) |
-| How often turkeys lay, in the wild and in a pen, the chance of a shaken-out egg | `enemies.odin` (`EGG_EVERY`, `PEN_EGG_EVERY`, `SHAKE_EGG`) |
-| How fast each animal swims, how fast it tires or drowns, how low it sits in the water | `enemies.odin` (`SWIM_SPEED`, `DROWN_RATE`, `SWIM_SINK`, `FLOAT_DRIFT`) |
-| What lifts over a fence, and what never goes over | `workshop.odin` (`HOIST_SHARE`, `FENCE_HEAVY`) |
-| What each thing weighs and how much room it takes, how big the sack is, what a load does | `kitchen.odin` (`ITEM_KG`, `ITEM_LITRES`, `SACK_LITRES`, `BATCH_MOST`), `prosio.odin` (`LOAD_EASE`, `LOAD_TRAIN`, `LOAD_HEAVY`) |
-| How fast each food goes off, when it is thrown out, how much longer a larder keeps it and how big it is, how a body goes off | `larder.odin` (`SPOIL_HALF`, `ROTTEN`, `STALE`, `LARDER_KEEPS`, `LARDER_LITRES`, `MAX_LARDERS`, `BODY_FLIES`, `BODY_MEAT_LEAST`) |
-| The cooking bonus at each station for a beginner and a master, and the titles | `kitchen.odin` (`COOK_RANGE`, `COOK_TITLE`, `STATION_SKILL`), `body.odin` (`COOK_WORK`, `COOK_QUICK`) |
-| Animal health: what a blow takes, how sturdy each kind is, how fast it mends | `enemies.odin` (`ENEMY_HEALTH`, `HARD_BLOW`, `ENEMY_STURDY`, `HEAL_RATE`, `HEAL_AFTER`, `HURT_SLOW`); slams in `grab.odin` (`SLAM_BLOW`, `SLAM_MOST`); stomps in `enemies.odin` (`STOMP_K`, `ENEMY_TOUGH`) |
-| When animals are bold or wary, how a hurt flock scatters, how far they follow | `enemies.odin` (`FEARLESS_BELOW`, `RESPECT_ABOVE`, `BOLD_SPEED`, `BOLD_NOTICE`, `WARY_FROM`, `WARY_FULL`, `ALARM_BLOW`, `ALARM_RANGE`, `SCATTER`, `FRIGHT`, `LEASH`, `GIVE_UP`) |
-| Bruises: what each knock leaves, how far they can go, how fast they mend | `prosio.odin` (`BRUISE`, `BRUISE_STING`, `BRUISE_FLOOR`, `BRUISE_MEND`, `BRUISE_REST`, `BRUISE_WARN`) |
-| Putting down and winding up a throw | `grab.odin` (`WIND_TAP`, `WIND_FULL`, `WIND_LEAST`) |
-| How fast rocks and pebbles are thrown, what they do when they hit, how far he can aim | `grab.odin` (`THROW_ENERGY`, `ARM_SPEED`, `PEBBLE_KG`, `PEBBLE_COST`, `STONE_HARD`, `LIGHT_STONE`, `PEBBLE_FRIGHT`, `AIM_RANGE`) |
-| Pebble patches: how many and where, how many each holds, how fast they refill | `world.odin` (`PEBBLE_PATCHES`, `MAX_PEBBLES`, `PEBBLE_HANDFUL`, `PEBBLE_REGROW`) |
-| How near a stone scares a rabbit or a crow, and how much longer it then stays away | `critters.odin` (`STONE_SCARE`, `STONED_AWAY`, `PEST_HEARD`) |
-| How much of each food there can be, and how fast it comes back and grows | `world.odin` (`FOOD_BUDGET`, `MUSHROOM_BUDGET`, `FOOD_REGROW`, `FOOD_GROW`, `APPLE_*`, `BERRY_*`, `UNRIPE`, `SIZE_SPREAD`) |
-| How long the mill takes | `kitchen.odin` (`MILL_TIME`) |
-| How many logs each dish takes, and what each plan takes | `kitchen.odin` (`RECIPES`: the logs are the `.Wood` each recipe needs) |
-| How much wood lies in the forest, how soon another branch falls | `workshop.odin` (`WOOD_LYING`), `world.odin` (`FOOD_REGROW[.Wood]`) |
-| The fence grid, how high a jump clears it, how far ahead a piece goes, how big a pen can be, where the workbench stands | `workshop.odin` (`FENCE_LEN`, `FENCE_TOP`, `FENCE_AHEAD`, `FENCE_REACH`, `PEN_MOST`, `MAX_FENCES`, `BENCH_PLACE`) |
-| How far a scarecrow guards, how far the rod reaches | `workshop.odin` (`SCARECROW_REACH`, `ROD_REACH`) |
-| What a spear does to each animal, what it weighs and costs | `workshop.odin` (`SPEAR_BLOW`, `SPEAR_KG`, `SPEAR_COST`, `SPEAR_STAGGER`) |
-| How big text is drawn: the size that stands for one screen pixel to each pixel of the font (text is drawn a whole number of display pixels to each of the font's); which font | `platform.odin` (`FONT_SIZE`, `FONT_NAME`, chosen with `-define:FONT=`) |
-| The screen's need pictures: how big, and the colour of each bar; the weight bar's bands | `diet.odin` (`HUD_ICON`, `NEED_BAR`, `NEED_ICONS`, `WEIGHT_BANDS`, from `FAT_DANGER`, `FAT_LEAN`, `FAT_HUGE` in `prosio.odin`); how long the line about a part of the meadow shows, `ui.odin` (`REGION_ABOUT_TIME`) |
-| The trees from models: each kind's height, crown width and leaf colour, how much trees vary, which models each kind uses | `trees.odin` (`TREE_HEIGHT`, `TREE_CROWN`, `TREE_LEAVES`, `TREE_WIDTH`, `TREE_LEAN`, `TREE_SHADE`, `TREE_PICK`); the clearings' size in `world.odin` (`CLEARING_RADIUS`); the models themselves in `tools/pack_trees.sh` |
-| Rocks, grass, ferns, bushes, stumps and logs from models: which models, how tall a rock may be, how big and what colour the plants, how long a log, how many | `grab.odin` (`ROCK_PLAIN`, `ROCK_MOSSY`, `ROCK_TALL`), `draw.odin` (`GRASS_SIZE`, `FERN_SIZE`, `SHRUB_SIZE`, `LOG_LENGTH`, `COLOR_TUFT`, `COLOR_FERN`), `world.odin` (`MAX_DECOR`, `FOREST_STUMPS`, `STUMP_RADIUS`) |
-| How many trees the forest has, and how far apart | `world.odin` (`FOREST_TREES`, `FOREST_SPACING`, `FOREST_EDGE`) |
-| The animals from the animal pack: how they are reshaped, their horns and beard, their size; when they run rather than walk, their closed-eye marks | `tools/pack_quadruped.py` (`RECIPES`, then `tools/pack_quadrupeds.sh`), `quadruped.odin` (`QUAD_WALK_FROM`, `QUAD_WALK_FULL`, `QUAD_GALLOP_FROM`, `QUAD_GALLOP_FULL`, `QUAD_GALLOP_SLOWEST`, `QUAD_SHORT_STEP`, `QUAD_LONG_STEP_AT`, `QUAD_HEAD_TURN`, `QUAD_HEAD_SPEED`, `QUAD_GOAT_ACCEL`, `QUAD_TURN`, `QUAD_BACKWARDS`, `QUAD_SLOWEST`, `QUAD_SET_OFF`, `QUAD_STOP`, `QUAD_TURN_STEP`, `QUAD_EYE_SIZE`, `quad_color`) |
-| Grounded drag pose for the goat, billy goat and fox | `quadruped_drag.odin` (`QUAD_DRAG_SETTLE`, `QUAD_DRAG_HIP_*`, `QUAD_DRAG_TAIL_LIFT`) |
-| The keys and controller buttons each action starts with; the stick's dead middle, how far it goes before it counts as a direction in menus, how far a trigger is pulled to count | `controls.odin` (`DEFAULT_BINDINGS`), `platform.odin` (`STICK_DEAD`, `STICK_PRESS`, `TRIGGER_PRESS`) |
-| Shaking a tree: how close, how square on, for how long, how many apples | `world.odin` (`TREE_SHAKE_REACH`, `TREE_SHAKE_ANGLE`, `TREE_SHAKE_TIME`, `TREE_SHAKE_APPLES`) |
-| Salt washed out by a drink; how far off and how long before a goat he hit forgets it | `data/tuning/diet.json` (`DRINK_SALT`, `DRINK_SALT_FLOOR`), `enemies.odin` (`SOUR_SIGHT`, `SOUR_FORGET`) |
-| How a drowned animal sinks | `enemies.odin` (`SINK_WAIT`, `SINK_SPEED`, `SINK_DEPTH`) |
-| The fog round the meadow: where it starts, how thick, how far out a thrown animal is lost | `world.odin` (`FOG_START`, `FOG_THICK`, `FOG_LOST`) |
-| His campfire: what the kit costs, how much clear ground it needs | `kitchen.odin` (`RECIPES`), `workshop.odin` (`CAMP_ROOM`) |
-| How big Prosio is against the animals and the meadow | `prosio.odin` (`PROSIO_SIZE`) |
-| What each food is made of | `diet.odin` (`COMPOSITION`) |
-| How big each store is, where lacking, full and too much begin, how fast stores empty, and how strong every effect is | `data/tuning/diet.json` (sections `stores`, `levels`, `full_and_lacking`, `too_much`) |
-| Where the pond is and how big | `world.odin` (`POND`, `POND_RADIUS`) |
-| Recipes, where each is made, how long each place takes | `kitchen.odin` (`RECIPES`, `STATION_TIME`, `STATION_BONUS`) |
-| Meat from each animal, how long a body lies and how long until another animal comes, milk, how foxes behave | `enemies.odin` (`MEAT_FROM`, `BODY_LIFE`, `RESPAWN`, `MILK_EVERY`, `FOX_NOTICE`, `FOX_REST`) |
-| Fish, rabbits, crows and bees | `critters.odin` (`FISH_*`, `PEST_*`, `NIBBLE`, `HIVE_GUARD`, `BEE_*`, `STING_*`) |
-| Clothes, whole outfits and their colours, how thick a layer is | `outfit.odin` (`PRESETS`, `SHIRT_LOOK`, `OVER_LOOK`, `LAYER`) |
-| Where trees may stand, how many there are in the forest and how far apart, its clearings and trails, how far round him trees turn see-through | `world.odin` (`VIEW_SLOPE`, `FOREST_TREES`, `FOREST_SPACING`, `FOREST_EDGE`, `CLEARINGS`, `CLEARING_RADIUS`, `TRAILS`, `tree_cover`), `draw.odin` (`FOREST_REVEAL`) |
-| Salt rocks | `world.odin` (`SALT_ROCKS`, `MAX_SALT`, `SALT_REGROW`) |
-| What everything burns | `prosio.odin` (`WALK_BURN`, `GATHER_BURN`, `FIGHT_BURN`, `HURT_BURN`, ...) |
-| The sun's direction and how dark shadows are | `platform.odin` (`SUN`, `SHADOW_INK`) and `scene.frag` |
-| Colours | `draw.odin`, `ui.odin` |
-| Keys | `KEYS` in `platform.odin` |
+| `prosio.json` | Prosio himself: his fat and its zones (`fat`); his size, stamina and the time a bump, a stoop and a jump take (`moving`); what gets worse with fat, lean against fat: walking speed, sprint boost and drain, bump speed and cost, jump cost, stamina coming back (`lean_to_fat`); what everything burns, and what a load does (`burning`); bruises (`bruises`); his muscles, how traits fade and waste (`muscle`); what each thing he does trains (`training`); what each trait is worth (`skills`); what waking up costs (`waking_up`); his shape (`shape`) |
+| `diet.json` | His needs: how big each store is (`stores`); where each level starts, where lacking, full and too much begin, how fast levels fall, thirst, drinking and licked salt (`levels`); what full and lacking do (`full_and_lacking`); what too much does (`too_much`) |
+| `food.json` | The sack and its size, calories to a kilogram (`sack`); each thing's weight, room and calories (`things`); what each food is made of (`made_of`); how fast food goes off, and a body (`going_off`); the oven, fire, churn, bench, mill and campfire: time, cooking bonus, skill, size, and every recipe and plan (`making`) |
+| `animals.json` | Turkeys, goats, the billy goat and foxes: weight, size, speed, grip, meat, coming back, how far they follow (`all_animals`); eggs, milk, goats he hit, foxes (`eggs_milk_and_the_fox`); swimming, drowning, sinking (`swimming`); health and blows (`health_and_blows`); bold and wary animals, a frightened flock (`boldness_and_alarm`); the animal-pack goats' and fox's walk, gallop, turning and head (`pack_animals_moving`); their body following a turn, giving way, struggling (`pack_animals_body`); a body dragged along the ground (`dragging`); what a blow does: push, stumble, fall, launch, tumble, get up (`impacts`, `impact_pose`) |
+| `critters.json` | Fish (`fish`); rabbits and crows (`pests`); bees and hives (`bees`) |
+| `handling.json` | Throwing stones and pebbles, aiming, winding up (`throwing`); grabbing, lifting, holding, dragging, rock weight (`holding`); a body skipping along (`skipping`); swinging, slams and bashes (`bashing`); how rocks are drawn (`rocks`) |
+| `building.json` | Wood and the workbench (`wood_and_bench`); the fence grid, jumping over, pens, lifting animals over (`fences`); scarecrow, rod and spear (`scarecrow_rod_spear`); the larder (`larder`); the campfire (`campfire`) |
+| `world.json` | The meadow's size, home, the pond, paths, the map, how far he sees (`meadow`); the fog (`fog`); how much food there is and how fast it grows and comes back, apples, berries, eggs (`growing`); salt rocks and pebble patches (`salt_and_pebbles`); the forest, its clearings and trails, how trees hide things, shaking a tree (`forest`); trees from models: heights, crowns, models, how they vary, leaf colours (`trees`); grass, ferns, bushes and logs (`plants`); how many of each thing the game keeps room for (`limits`) |
+| `outfit.json` | The whole outfits (`outfits`); what each shirt and top is like, and how thick a layer is (`clothes`) |
+| `screen.json` | The camera (`camera`); trees going see-through round him (`forest_view`); the pixel sizes (`pixels`); the need pictures, weight bar and health bars (`panels`); how many sack boxes show (`sack`); the sack page's grid (`menus`); how long the line about a place shows (`places`) |
+| `colours.json` | Every colour, by where it is used |
+| `controls.json` | The keys and Xbox buttons each action starts with, which can be changed (`buttons`); the controller's dead zones (`controller`) |
+
+A few things stay in the code, because they are not numbers to tune but part of how something works, or they must match something else:
+
+- The font and how big text is drawn (`FONT_NAME`, `FONT_SIZE` in `platform.odin`, chosen with `-define:FONT=`): they describe the font file's grid.
+- The sun's direction (`SUN` in `platform.odin`): it must match `scene.frag`.
+- The pixel-art pictures of things and needs (`ICONS` in `kitchen.odin`, `NEED_ICONS` in `diet.odin`).
+- The save file's layout (`SAVE_VERSION` and the old versions in `body.odin`) and the key codes (`controls.odin`).
+- How the animal pack's animals are reshaped (`RECIPES` in `tools/pack_quadruped.py`, then `tools/pack_quadrupeds.sh`) and which tree models are packed (`tools/pack_trees.sh`).
+- The shapes things are drawn from (the many sizes inside the drawing code).
 
 ## Known gaps
 

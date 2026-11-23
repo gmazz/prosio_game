@@ -4,7 +4,7 @@
     "CAMERA_OFFSET": {"Vec3": [0, 8.5, 10.6], "const": true, "about": "Where the camera sits, relative to the point it looks at."}
   },
   "forest_view": {
-    "FOREST_REVEAL": {"f32": "0.9) // in the forest, how much further round him the trees turn see-through (in crowns"}
+    "FOREST_REVEAL": {"f32": 0.9, "about": "in the forest, how much further round him the trees turn see-through (in crowns)"}
   },
   "pixels": {
     "PIXEL_LEVELS": {
@@ -21,7 +21,8 @@
     "WEIGHT_SCALE": {"f32": 160, "about": "the weight bar is this many kg from end to end"},
     "WEIGHT_BANDS": {
       "[5]Weight_Band": [[0, "FAT_DANGER", [226, 70, 70, 255]], ["FAT_DANGER", "FAT_LEAN", [170, 214, 110, 255]], ["FAT_LEAN", "FAT_HUGE", [110, 190, 80, 255]], ["FAT_HUGE", "FAT_MAX - FAT_DANGER", [244, 150, 60, 255]], ["FAT_MAX - FAT_DANGER", "FAT_MAX", [226, 70, 70, 255]]]
-    }
+    },
+    "HEALTH_BAR": {"f32": 0.9, "about": "metres wide"}
   },
   "sack": {
     "SACK_SLOTS": {"untyped": 6, "about": "boxes shown at most; beyond that the sack scrolls round"}

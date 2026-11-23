@@ -22,7 +22,8 @@ FENCE_H :: 70
 FENCE_POINTS :: (FENCE_W + 1) * (FENCE_H + 1)
 // pieces standing at once (as many as are saved)
 MAX_FENCES :: 240
-FENCE_TOP :: f32(0.4) // anything with its feet higher than this is over it; a jump this high takes him over (at 80 kg he jumps 0.45 m)
+// anything with its feet higher than this is over it; a jump this high takes him over (at 80 kg he jumps 0.45 m)
+FENCE_TOP :: f32(0.4)
 FENCE_THICK :: f32(0.1)
 // a piece goes on the line of the grid nearest to the spot this far in front of him (never under his feet),
 FENCE_AHEAD :: f32(0.7)

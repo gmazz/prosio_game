@@ -632,8 +632,6 @@ draw_enemy_marks :: proc(e: Enemy, head: Vec3) {
 	}
 }
 
-HEALTH_BAR :: f32(0.9) // metres wide
-
 // The frame that carries one half of a held animal's body: the model point a
 // goes to the world point wa, the model direction from a to b points from wa
 // to wb, and the model's side (x) lies as close to side as it can.
@@ -918,13 +916,6 @@ draw_smile :: proc(m: Mat4, size: f32) {
 		box(arc, {}, {size * 1.1, size * 0.3, size * 0.3}, ANIMAL_INK)
 	}
 }
-
-// Prosio is short and stocky: short legs, a compact body and a big head.
-EAR_DROOP :: f32(2.9) // how far his ears hang over, in radians from straight up: almost straight down
-LEG_SCALE :: f32(0.86) // leg length, as a share of the old, longer legs
-TORSO_SCALE :: f32(0.84) // the body from hips to neck, likewise
-HIP :: f32(0.47) // hip height in the body's own measurements
-SHOULDER_HEIGHT :: HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE // above his feet
 
 draw_prosio :: proc() {
 	p := &g.prosio

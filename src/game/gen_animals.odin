@@ -55,7 +55,8 @@ DROWN_RATE := [Enemy_Kind]f32{.Turkey = 16, .Goat = 3, .Billy = 5, .Fox = 0}
 SWIM_SINK := [Enemy_Kind]f32{.Turkey = 0.16, .Goat = 0.62, .Billy = 0.75, .Fox = 0.3}
 // seconds a drowned one floats bottoms up,
 SINK_WAIT :: f32(1.5)
-SINK_SPEED :: f32(0.5) // then sinks this fast (m/s)
+// then sinks this fast (m/s)
+SINK_SPEED :: f32(0.5)
 // until it is this deep, and gone
 SINK_DEPTH :: f32(1.4)
 
@@ -111,10 +112,12 @@ QUAD_GALLOP_FULL :: f32(4.2)
 QUAD_GALLOP_SLOWEST :: f32(0.65)
 // going slowly it takes shorter steps: this share of the walk's own, quicker for it,
 QUAD_SHORT_STEP :: f32(0.6)
-QUAD_LONG_STEP_AT :: f32(2.5) // growing to the full step at this speed (m/s)
+// growing to the full step at this speed (m/s)
+QUAD_LONG_STEP_AT :: f32(2.5)
 // how far (radians) a packed animal turns its head to watch him,
 QUAD_HEAD_TURN :: f32(0.9)
-QUAD_HEAD_SPEED :: f32(3.5) // how fast it turns it (radians a second; with him behind it, it looks ahead)
+// how fast it turns it (radians a second; with him behind it, it looks ahead)
+QUAD_HEAD_SPEED :: f32(3.5)
 // how fast it gets up to speed, or stops (m/s each second; the drawn ones 10),
 QUAD_GOAT_ACCEL :: f32(12)
 // how fast it turns (radians a second),
