@@ -1544,6 +1544,10 @@ icon_color :: proc(c: u8) -> (Color, bool) {
 	case 'u': return {110, 170, 230, 255}, true
 	case 'e': return {168, 170, 166, 255}, true
 	case 'E': return {116, 118, 120, 255}, true
+	case 'a': return {204, 76, 30, 255}, true // steak
+	case 'A': return {150, 48, 35, 255}, true // its marbling
+	case 'f': return {248, 178, 130, 255}, true // its side
+	case 'F': return {236, 138, 70, 255}, true // its side in shade
 	}
 	return {}, false
 }

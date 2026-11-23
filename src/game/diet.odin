@@ -781,11 +781,12 @@ draw_weight_stack :: proc(x, y, w, h, s: f32) {
 
 // The panel at the top left, made for a child: a picture for each of his
 // six needs with a bar under it (how full it is: orange and blinking when he
-// lacks it, red when it has run out, purple when it is too much), and his
-// stamina. A heart blinks beside it when he is dangerously fat. What he
-// weighs, and the kilograms of each part, are on the BODY page of the M
-// menu; what he needs he says himself (see STATE_TEXT). Returns how wide and
-// how tall it is.
+// lacks it, red when it has run out, purple when it is too much); his weight,
+// as a mark on a bar of coloured bands (WEIGHT_BANDS: starving, lean, chubby,
+// huge, too fat), with a heart blinking at its end when he is in danger at
+// either end; and his stamina. What he weighs in kilograms, and each part,
+// are on the BODY page of the M menu; what he needs he says himself (see
+// STATE_TEXT). Returns how wide and how tall it is.
 HUD_ICON :: f32(30) // how big a need's picture is, at 1280 by 720
 HUD_NEEDS :: [6]Need{.Carbs, .Protein, .Fibre, .Vitamins, .Electrolytes, .Water}
 
@@ -796,7 +797,8 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	gap := 12 * s
 	bar_h := 6 * s
 	width = 6 * icon + 5 * gap
-	stamina_y := y + icon + 5 * s + bar_h + 10 * s
+	weight_y := y + icon + 5 * s + bar_h + 12 * s
+	stamina_y := weight_y + 22 * s
 	height = stamina_y + 14 * s - y
 	ui_round_rect(x - pad, y - pad, width + 2 * pad, height + 2 * pad, UI_PANEL, 0.15)
 	blink := math.mod(g.time, 0.6) < 0.3
@@ -821,17 +823,25 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 		ui_rect(ix + 1 * s, by + 1 * s, (icon - 2 * s) * clamp(p.need[n] / 100, 0, 1), bar_h - 2 * s, bar)
 	}
 
+	// His weight: where his fat puts him among the bands, with a white mark.
+	draw_pixels(SCALE_ICON, x, weight_y - 2 * s, 16 * s)
+	bar_x := x + 22 * s
+	bar_w := width - 22 * s - 24 * s // (room at the end for the heart)
+	for band in WEIGHT_BANDS {
+		from := bar_x + bar_w * band.from / FAT_MAX
+		to := bar_x + bar_w * band.to / FAT_MAX
+		ui_rect(from, weight_y, to - from, 12 * s, band.color)
+	}
+	mark := bar_x + bar_w * clamp(p.fat / FAT_MAX, 0, 1)
+	ui_rect(mark - 3 * s, weight_y - 3 * s, 6 * s, 18 * s, UI_DARK)
+	ui_rect(mark - 1.5 * s, weight_y - 1.5 * s, 3 * s, 15 * s, UI_WHITE)
+	if (p.fat > FAT_MAX - FAT_DANGER || starving()) && blink {
+		draw_pixels(HEART_ICON, x + width - 18 * s, weight_y - 3 * s, 18 * s)
+	}
+
 	// Stamina, with his bruises taking the top off it.
 	draw_pixels(BOLT_ICON, x, stamina_y - 2 * s, 16 * s)
-	bar_x := x + 22 * s
-	bar_w := width - 22 * s
-	too_fat := p.fat > FAT_MAX - FAT_DANGER
-	if too_fat {
-		bar_w -= 24 * s
-		if blink {
-			draw_pixels(HEART_ICON, x + width - 18 * s, stamina_y - 3 * s, 18 * s)
-		}
-	}
+	bar_w = width - 22 * s
 	ui_rect(bar_x, stamina_y, bar_w, 12 * s, UI_DARK)
 	ui_rect(bar_x + 2 * s, stamina_y + 2 * s, (bar_w - 4 * s) * clamp(p.stamina / STAMINA_MAX, 0, 1), 8 * s, (p.winded || p.stamina < 25) ? UI_RED : UI_BLUE)
 	if p.bruises > 0.5 {
@@ -839,6 +849,20 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 		ui_rect(bar_x + bar_w - 2 * s - bw, stamina_y + 2 * s, bw, 8 * s, UI_BRUISE)
 	}
 	return
+}
+
+// The bands of the weight bar, by his fat (kg, out of FAT_MAX): starving at
+// the thin end, lean, chubby, huge, and too fat for his heart.
+Weight_Band :: struct {
+	from, to: f32,
+	color:    Color,
+}
+WEIGHT_BANDS := [5]Weight_Band {
+	{0, FAT_DANGER, {226, 70, 70, 255}},
+	{FAT_DANGER, FAT_LEAN, {170, 214, 110, 255}},
+	{FAT_LEAN, FAT_HUGE, {110, 190, 80, 255}},
+	{FAT_HUGE, FAT_MAX - FAT_DANGER, {244, 150, 60, 255}},
+	{FAT_MAX - FAT_DANGER, FAT_MAX, {226, 70, 70, 255}},
 }
 
 // Each need's bar, when all is well.
@@ -852,36 +876,36 @@ NEED_BAR := [Need]Color {
 }
 
 // Pictures for his needs on the screen, a letter a pixel (see icon_color):
-// general signs, not any one food, so that they mean the same whatever he
-// eats: a flame for energy, a dumbbell for muscle, a leaf for greens, a
-// sparkle for vitamins, a crystal of salt, a drop of water.
+// a food group each, so a child sees what to eat: a slice of cake for energy
+// (sweet things and bread), a steak for protein (meat, fish, eggs), a leaf
+// for greens, an orange for vitamins (fruit), a salt shaker, a drop of water.
 NEED_ICONS := [Need][12]string {
-	.Carbs = {
-		".....k......",
-		"....kok.....",
-		"....kook....",
-		"...kooyok...",
-		"..kooyyok.k.",
-		"..koyyyyokok",
-		".koyyyyyyook",
-		".koyywwyyyok",
-		".kooywwwyyok",
-		"..kooywyyok.",
-		"...kooooook.",
-		"....kkkkkk..",
+	.Carbs = { // a slice of cake: sweet things, bread, energy
+		"............",
+		"........kk..",
+		".......krrk.",
+		"......kkRrk.",
+		"....kkwwkk..",
+		"..kkwwwwwwk.",
+		"kkwwwwwwwwwk",
+		"kttttttttttk",
+		"kmmmmmmmmmmk",
+		"kttttttttttk",
+		"kTTTTTTTTTTk",
+		".kkkkkkkkkk.",
 	},
-	.Protein = { // a dumbbell: what builds muscle
-		"............",
-		"............",
-		".kkk....kkk.",
-		"kEeEk..kEeEk",
-		"kEeEkkkkEeEk",
-		"kEeEeeeeEeEk",
-		"kEeEkkkkEeEk",
-		"kEeEk..kEeEk",
-		".kkk....kkk.",
-		"............",
-		"............",
+	.Protein = { // a steak, with its fat and bone: meat, fish, eggs
+		"...kkkk.....",
+		"..kaaaakk...",
+		".kaaaaAaak..",
+		"kaAaAaaacak.",
+		"kcaAaAacack.",
+		"kfcaAaaacaak",
+		"kFfcaaaaaack",
+		".kFfccccccFk",
+		"..kFffffFFFk",
+		"...kFFFFFFk.",
+		"....kkkkkk..",
 		"............",
 	},
 	.Fibre = {
@@ -898,33 +922,33 @@ NEED_ICONS := [Need][12]string {
 		"kG..........",
 		"k...........",
 	},
-	.Vitamins = {
-		".....kk.....",
-		".....kyk....",
-		"....kyyk....",
-		"....kyyyk...",
-		"kkkkyywyykkk",
-		"kyyyywwwyyyk",
-		"kkkyyywyyykk",
-		"...kyyyyk...",
-		"....kyyk....",
-		"....kyyk....",
-		".....kyk....",
-		".....kk.....",
+	.Vitamins = { // an orange: fruit and berries
+		"......kk....",
+		".....kGgk...",
+		"....kkGkk...",
+		"..kkooookk..",
+		".kooywoooOk.",
+		"kooywoooooOk",
+		"koooooooooOk",
+		"koooooooooOk",
+		"kOoooooooOOk",
+		".kOOooooOOk.",
+		"..kkOOOOkk..",
+		"....kkkk....",
 	},
-	.Electrolytes = { // a crystal of salt
-		".....kk.....",
-		"...kkwwkk...",
-		".kkwwwwwwkk.",
-		"kwwwwwwwwwwk",
-		"kccwwwwwwEEk",
-		"kccccwwEEEEk",
-		"kcccccEEEEEk",
-		"kcccccEEEEEk",
-		"kcccccEEEEEk",
-		".kkcccEEEkk.",
-		"...kkcEkk...",
-		".....kk.....",
+	.Electrolytes = { // a salt shaker, salt coming out
+		"..w..w...w..",
+		"....w..w....",
+		"...kkkkkk...",
+		"..keekeekk..",
+		"..keeeeeek..",
+		"..kkkkkkkk..",
+		"..kwwwwwck..",
+		"..kwwwwwck..",
+		"..kwwwwwck..",
+		"..kwwwwwck..",
+		"..kwwwwcck..",
+		"..kkkkkkkk..",
 	},
 	.Water = {
 		".....kk.....",
@@ -942,7 +966,22 @@ NEED_ICONS := [Need][12]string {
 	},
 }
 
-// Stamina: a lightning bolt. Too fat: a heart, in danger.
+// Weight: a weight with a handle, "kg" on it. Stamina: a lightning bolt. In danger at
+// either end of the weight bar: a heart.
+SCALE_ICON := [12]string {
+	"....kkkk....",
+	"...kEEEEk...",
+	"...kEkkEk...",
+	"..kkkkkkkk..",
+	"..kEeeeeEk..",
+	".kEeeeeeeEk.",
+	".kEewewweEk.",
+	".kEeweweeEk.",
+	"kEeeweweeeEk",
+	"kEeeeeeeeeEk",
+	"kEEEEEEEEEEk",
+	".kkkkkkkkkk.",
+}
 BOLT_ICON := [12]string {
 	"......kkkk..",
 	".....kyyyk..",
