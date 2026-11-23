@@ -30,29 +30,7 @@ import "core:math"
 // He knows every plan from the start, for now. (Later a plan may have to be
 // found first: see knows in Prosio.)
 
-// What each thing built is for, as the workbench's menu says it.
-PLAN_ABOUT := #partial [Item]cstring {
-	.Fence     = "{Eat} puts it up. Animals stay in... or out.",
-	.Scarecrow = "{Eat} stands it up. Crows keep off the wheat.",
-	.Rod       = "{Grab} at the pond: fish from far, no fright.",
-	.Spear     = "Hold {Grab}: throw it. {Action} picks it up again.",
-	.Gate      = "{Eat} puts it up in a fence. {Action} opens it.",
-	.Larder    = "{Eat} stands it up. Food keeps 5 times longer.",
-	.Campfire  = "{Eat} sets it up: cook and chop meat anywhere.",
-}
 
-// What the sack screen says of each thing in it that is not food.
-THING_ABOUT := #partial [Item]cstring {
-	.Pebble    = "For throwing: choose it, then hold {Grab} and let go",
-	.Wood      = "For the oven, the cooking fire and the workbench",
-	.Fence     = "{Eat} puts it up in front of you. {Grab} takes it down again",
-	.Scarecrow = "{Eat} stands it up. Crows keep off the wheat near it",
-	.Rod       = "Choose it, then {Grab} at the pond: fish from far off",
-	.Spear     = "Choose it, then hold {Grab} and let go. {Action} picks it up again",
-	.Gate      = "{Eat} puts it up like a fence. {Action} opens and shuts it, even holding an animal",
-	.Larder    = "{Eat} stands it up. {Action} opens it: food keeps 5 times longer in it",
-	.Campfire  = "{Eat} sets it up: a fire to cook eggs, fish and meat at, and to chop meat. {Grab} packs it up again",
-}
 
 Fence_Way :: enum u8 {
 	East,
@@ -118,7 +96,7 @@ use_gate :: proc(f: Fence_At) {
 	a, b := fence_ends(f)
 	if gate_state(f) == GATE_SHUT {
 		set_gate(f, GATE_OPEN)
-		say("Creak... open!", 0.9)
+		say(TEXT.gate_open, 0.9)
 	} else {
 		p := &g.prosio
 		blocked := segment_distance(p.pos, a, b) < prosio_radius(p.kg) + FENCE_THICK
@@ -129,11 +107,11 @@ use_gate :: proc(f: Fence_At) {
 			}
 		}
 		if blocked {
-			answer("Something is in the gateway!")
+			answer(TEXT.gateway_blocked)
 			return
 		}
 		set_gate(f, GATE_SHUT)
-		say("Clack! Shut.", 0.9)
+		say(TEXT.gate_shut, 0.9)
 	}
 	burst({(a.x + b.x) / 2, 0.4, (a.y + b.y) / 2}, 4, 1.5, COLOR_PLANK, 0.06)
 }
@@ -157,7 +135,7 @@ hoist_over :: proc() -> bool {
 	e := &g.enemies[p.carry_index]
 	if ENEMY_KG[e.kind] > hoist_most() {
 		drop_carry()
-		answer(ENEMY_KG[e.kind] > FENCE_HEAVY ? "Way too heavy to lift over! It needs a gate." : "Too heavy to lift over... I need stronger arms!")
+		answer(ENEMY_KG[e.kind] > FENCE_HEAVY ? TEXT.fence_way_too_heavy : TEXT.fence_too_heavy)
 		return true
 	}
 	a, b := fence_ends(f)
@@ -180,7 +158,7 @@ hoist_over :: proc() -> bool {
 	p.stamina = max(p.stamina - 5, 0)
 	burn(FIGHT_BURN, .Fighting, true)
 	train(.Arms, SWING_WORK * ENEMY_KG[e.kind] / p.kg)
-	say("Hup! Over you go!", 1)
+	say(TEXT.over_you_go, 1)
 	burst({foot.x, 0.6, foot.y}, 5, 2, COLOR_DUST, 0.08)
 	return true
 }
@@ -264,13 +242,13 @@ fence_clear :: proc(f: Fence_At) -> bool {
 fence_fits :: proc(f: Fence_At) -> (ok: bool, why: cstring) {
 	switch {
 	case !fence_valid(f):
-		return false, "The meadow has its own fence there!"
+		return false, TEXT.meadow_fence_there
 	case fence_there(f):
-		return false, "There is a piece of fence here already! {Grab} takes it down."
+		return false, TEXT.fence_there
 	case g.fence_count >= MAX_FENCES:
-		return false, "That is all the fence the meadow can take!"
+		return false, TEXT.fence_all
 	case !fence_clear(f):
-		return false, "Something is in the way here!"
+		return false, TEXT.in_the_way
 	}
 	return true, nil
 }
@@ -290,47 +268,47 @@ put_up :: proc(item: Item) {
 		at = (a + b) / 2
 		if item == .Gate {
 			set_gate(f, GATE_SHUT)
-			say("Knock, knock! A gate. {Action} opens it.", 1.4)
+			say(TEXT.gate_up, 1.4)
 		} else {
-			say(g.fence_count == 1 ? "Knock, knock! My first piece of fence!" : "Knock, knock! Another piece of fence!", 1.2)
+			say(g.fence_count == 1 ? TEXT.first_fence : TEXT.another_fence, 1.2)
 		}
 	} else if item == .Campfire {
 		if g.camp_up {
-			answer("My campfire is already set up! {Grab} at it packs it up.")
+			answer(TEXT.campfire_already)
 			return
 		}
 		at = p.pos + facing_dir(p.facing) * (prosio_radius(p.kg) + STATION_RADIUS[.Camp] + 0.4)
 		probe := at
 		if hit, _ := collide_static(&probe, CAMP_ROOM, 0); hit || in_pond(at) || beyond_edge(at) > -CAMP_ROOM {
-			answer("Not here: I need a clear spot for my campfire!")
+			answer(TEXT.campfire_no_spot)
 			return
 		}
 		set_up_camp(at)
-		say("There! My own campfire. {Action}: cook something!", 1.6)
+		say(TEXT.campfire_up, 1.6)
 	} else if item == .Larder {
 		at = p.pos + facing_dir(p.facing) * (prosio_radius(p.kg) + LARDER_RADIUS + 0.3)
 		probe := at
 		if hit, _ := collide_static(&probe, LARDER_RADIUS + 0.1, 0); hit {
-			answer("Something is in the way here!")
+			answer(TEXT.in_the_way)
 			return
 		}
 		if !add_larder(at) {
-			answer("That is all the larders the meadow can take!")
+			answer(TEXT.larders_all)
 			return
 		}
-		say("There! A larder. {Action} opens it.", 1.4)
+		say(TEXT.larder_up, 1.4)
 	} else {
 		at = p.pos + facing_dir(p.facing) * (prosio_radius(p.kg) + SCARECROW_RADIUS + 0.4)
 		probe := at
 		if hit, _ := collide_static(&probe, SCARECROW_RADIUS + 0.2, 0); hit {
-			answer("Something is in the way here!")
+			answer(TEXT.in_the_way)
 			return
 		}
 		if !add_scarecrow(at) {
-			answer("That is all the scarecrows the meadow can take!")
+			answer(TEXT.scarecrows_all)
 			return
 		}
-		say("There! Now, crows... BOO!", 1.4)
+		say(TEXT.scarecrow_up, 1.4)
 	}
 	sack_take(item, 1)
 	sack_step(0)
@@ -418,51 +396,51 @@ take_down :: proc() -> bool {
 	case .Fence:
 		item := gate_state(fence) != 0 ? Item.Gate : Item.Fence
 		if sack_room(item) < 1 {
-			answer("No room in my sack for more fence!")
+			answer(TEXT.no_room_fence)
 			return true
 		}
 		set_fence(fence, false)
 		sack_add(item, 0)
 		a, b := fence_ends(fence)
 		at = (a + b) / 2
-		say("Down it comes. Into the sack!", 1.2)
+		say(TEXT.fence_down, 1.2)
 	case .Larder:
 		l := &g.larders[round]
 		if !larder_empty(l) {
-			answer("I must empty the larder first!")
+			answer(TEXT.larder_empty_first)
 			return true
 		}
 		if sack_room(.Larder) < 1 {
-			answer("No room in my sack for the larder!")
+			answer(TEXT.no_room_larder)
 			return true
 		}
 		at = l.pos
 		remove_larder(l)
 		sack_add(.Larder, 0)
-		say("Up it comes. Heavy!", 1.2)
+		say(TEXT.larder_down, 1.2)
 	case .Campfire:
 		o := &g.stations[.Camp]
 		if o.baking || o.ready {
-			answer(o.ready ? "Take what is cooked off it first!" : "Not while it is cooking!")
+			answer(o.ready ? TEXT.campfire_take_off_first : TEXT.campfire_cooking)
 			return true
 		}
 		if sack_room(.Campfire) < 1 {
-			answer("No room in my sack for the campfire!")
+			answer(TEXT.no_room_campfire)
 			return true
 		}
 		at = o.pos
 		pack_up_camp()
 		sack_add(.Campfire, 0)
-		say("The fire is out. Into the sack!", 1.2)
+		say(TEXT.campfire_down, 1.2)
 	case .Scarecrow:
 		if sack_room(.Scarecrow) < 1 {
-			answer("No room in my sack for more scarecrows!")
+			answer(TEXT.no_room_scarecrow)
 			return true
 		}
 		at = g.rounds[round].pos
 		g.rounds[round].r = 0
 		sack_add(.Scarecrow, 0)
-		say("Come along, scarecrow.", 1.2)
+		say(TEXT.scarecrow_down, 1.2)
 	}
 	sack_step(0)
 	burst({at.x, 0.5, at.y}, 6, 2, COLOR_PLANK, 0.07)
@@ -587,7 +565,7 @@ pests_look_again :: proc() {
 		if (c.state == .Coming || c.state == .Eating) && crop_guarded(c.kind, g.foods[c.food].pos) {
 			c.state = .Fleeing
 			c.stoned = true // a fright it remembers
-			say(c.kind == .Crow ? "Ha! The crow is off!" : "Ha! The rabbit cannot get in!", 1.4)
+			say(c.kind == .Crow ? TEXT.crow_off : TEXT.rabbit_kept_out, 1.4)
 		}
 	}
 }
@@ -604,7 +582,7 @@ spear_hits :: proc(t: ^Thrown_Rock, e: ^Enemy, speed: f32) {
 	e.timer = SPEAR_STAGGER
 	pain_stars({e.pos.x, ENEMY_RADIUS[e.kind] * 1.6, e.pos.y}, 8)
 	g.shake = max(g.shake, 0.25)
-	say("THUNK!", 0.6)
+	say(TEXT.thunk, 0.6)
 	spear_lands(t, e.pos + normalize2(t.vel) * (ENEMY_RADIUS[e.kind] + 0.3))
 }
 

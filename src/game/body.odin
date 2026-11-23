@@ -38,40 +38,6 @@ Trait :: enum {
 	Dairy, // at the churn
 }
 
-TRAIT_NAME := [Trait]cstring {
-	.Arms    = "ARMS",
-	.Legs    = "LEGS",
-	.Lungs   = "LUNGS",
-	.Hide    = "HIDE",
-	.Gut     = "GUT",
-	.Hooves  = "HOOVES",
-	.Baking   = "BAKING",
-	.Grilling = "GRILLING",
-	.Dairy    = "DAIRY",
-}
-// What trains each, and what it is good for.
-TRAIT_GROWS := [Trait]cstring {
-	.Arms    = "lifting, dragging, bashing, throwing (with protein)",
-	.Legs    = "running, jumping, long walks (with protein)",
-	.Lungs   = "sprinting",
-	.Hide    = "taking pecks, butts and stings",
-	.Gut     = "eating fibre",
-	.Hooves  = "picking, fishing, milking",
-	.Baking   = "baking at the oven",
-	.Grilling = "cooking at the fire",
-	.Dairy    = "churning",
-}
-TRAIT_GIVES := [Trait]cstring {
-	.Arms    = "he lifts and throws more",
-	.Legs    = "he is faster and jumps higher",
-	.Lungs   = "sprints cost less, breath comes back sooner",
-	.Hide    = "knocks hurt less",
-	.Gut     = "he holds his wind, and lets it go with {Gas}",
-	.Hooves  = "quicker picking, a longer reach",
-	.Baking   = "richer bakes (+15% to +80%), sooner",
-	.Grilling = "richer grills (+0% to +50%), sooner",
-	.Dairy    = "more butter and cheese (+0% to +25%)",
-}
 
 is_muscle :: proc(t: Trait) -> bool {
 	return t == .Arms || t == .Legs
@@ -220,7 +186,7 @@ cook_bonus :: proc(at: Station_Kind) -> f32 {
 cook_title :: proc(at: Station_Kind) -> cstring {
 	level := g.prosio.trait[STATION_SKILL[at]]
 	rank := level < 0.25 ? 0 : (level < 0.5 ? 1 : (level < 0.85 ? 2 : 3))
-	return COOK_TITLE[at][rank]
+	return TEXT.cook_title[at][rank]
 }
 
 cook_time :: proc(at: Station_Kind) -> f32 {
@@ -243,7 +209,7 @@ wake_up :: proc() {
 	p.fat = clamp(old.fat, WAKE_FAT.x, WAKE_FAT.y)
 	p.fat_was = p.fat
 	p.kg = weight_with(p.fat)
-	say("Where... where is my sack?", 2.4)
+	say(TEXT.where_is_sack, 2.4)
 }
 
 // The moment he goes down, what is kept is the pig who will wake up at home.

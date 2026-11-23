@@ -179,7 +179,7 @@ throw_stone :: proc() {
 		return
 	}
 	if p.stamina < cost {
-		answer("Too tired to throw!")
+		answer(TEXT.too_tired_throw)
 		return
 	}
 	for &t in g.thrown {
@@ -200,10 +200,10 @@ throw_stone :: proc() {
 		t = Thrown_Rock{active = true, round = -1, spear = spear, r = spear ? SPEAR_RADIUS : PEBBLE_RADIUS, kg = kg, pos = p.pos + dir * 0.45, vel = dir * speed, y = height, vy = rise}
 		train(.Arms, SWING_WORK * (spear ? 0.3 : 0.1))
 		p.stretch_vel -= 2
-		say(spear ? "Hyah!" : "Fwip!", 0.4)
+		say(spear ? TEXT.throw_spear : TEXT.throw_pebble, 0.4)
 		return
 	}
-	answer("Wait... too many in the air!")
+	answer(TEXT.too_many_in_air)
 }
 HOLD_SIDE :: f32(1) // which hand holds an animal by the leg: +1 is the side his model's +x points to
 
@@ -387,18 +387,18 @@ update_grab :: proc(dt: f32, can_act: bool) {
 				p.wind_t = 0
 				p.aim = aim_towards(facing_dir(p.facing), 0.3, {})
 			} else if !take_down() {
-				answer("Nothing to grab here.")
+				answer(TEXT.nothing_to_grab)
 			}
 			return
 		}
 		ratio := target.kg / p.kg
 		if target.kind == .Rock && ratio > ROCK_LIMIT * strength() {
-			answer("Way too heavy to lift!")
+			answer(TEXT.way_too_heavy_lift)
 			return
 		}
 		cost := 6 + 25 * min(ratio, 1)
 		if p.stamina < cost {
-			answer("Too tired to grab that!")
+			answer(TEXT.too_tired_grab)
 			return
 		}
 		p.stamina -= cost
@@ -424,13 +424,13 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			start_hold(e)
 			switch {
 			case held_up(e.kind):
-				say("Got you by the legs!", 1)
+				say(TEXT.got_legs, 1)
 			case e.kind == .Fox:
-				say("Got you by the tail!", 1)
+				say(TEXT.got_tail, 1)
 			case ratio > LIFT_LIMIT * strength():
-				say("Got your hind legs! Uh-oh...", 1)
+				say(TEXT.got_hind_legs_uh_oh, 1)
 			case:
-				say("Got your hind legs!", 1)
+				say(TEXT.got_hind_legs, 1)
 			}
 		case .Rock:
 			p.lift_total = clamp(LIFT_TIME * ratio, 0.08, 1.2)
@@ -439,7 +439,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			towards = rd.pos - p.pos
 			p.carry_r = rd.r
 			rd.r = 0 // it is in his hands now, not on the ground
-			say(ratio > 0.9 ? "Hnnngh... so heavy!" : "Up it goes!", 1)
+			say(ratio > 0.9 ? TEXT.lift_heavy : TEXT.lift, 1)
 		case .Nothing:
 		}
 		p.lift_t = p.lift_total
@@ -466,7 +466,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		if p.stamina <= 0 {
 			p.stamina = 0
 			drop_carry()
-			say("Too heavy! I can't hold on!", 1.4)
+			say(TEXT.cannot_hold, 1.4)
 			return
 		}
 		// A struggling animal pulls free in the end: a heavy one sooner.
@@ -478,9 +478,9 @@ update_grab :: proc(dt: f32, can_act: bool) {
 				p.safe_t = max(p.safe_t, 0.8)
 				if heavy {
 					p.dazed_t = 0.5 // it yanks him off his feet
-					say("Whoa! It got away!", 1.2)
+					say(TEXT.got_away, 1.2)
 				} else {
-					say("It wriggled free!", 1.2)
+					say(TEXT.wriggled_free, 1.2)
 				}
 				return
 			}
@@ -502,17 +502,17 @@ update_grab :: proc(dt: f32, can_act: bool) {
 				return
 			}
 			drop_carry()
-			say("Down you go.", 0.9)
+			say(TEXT.put_down, 0.9)
 			return
 		case .Throw:
 			switch {
 			case too_heavy:
 				drop_carry()
-				say("Way too heavy to throw!", 1.2)
+				say(TEXT.way_too_heavy_throw, 1.2)
 				return
 			case p.stamina < throw_cost():
 				drop_carry()
-				say("Too tired to throw it... down it goes.", 1.4)
+				say(TEXT.too_tired_put_down, 1.4)
 				return
 			case:
 				begin_swing(true)
@@ -536,7 +536,7 @@ update_grab :: proc(dt: f32, can_act: bool) {
 		if p.stamina <= 0 {
 			p.stamina = 0
 			drop_carry()
-			say("Too heavy! I can't hold on!", 1.4)
+			say(TEXT.cannot_hold, 1.4)
 			return
 		}
 		if p.lift_t > 0 {
@@ -657,7 +657,7 @@ begin_swing :: proc(throw: bool) {
 	ratio := p.carry_kg / p.kg
 	cost := throw ? throw_cost() : bash_cost()
 	if p.stamina < cost {
-		answer("Too tired to swing it!")
+		answer(TEXT.too_tired_swing)
 		return
 	}
 	p.stamina -= cost
@@ -681,7 +681,7 @@ begin_swing :: proc(throw: bool) {
 		p.swing_total *= 0.8
 		p.swing_via = {0, 1, -0.3}
 		p.swing_to = linalg.normalize(Vec3{0, 0.35, 1})
-		say("Aaand...", 0.5)
+		say(TEXT.wind_up, 0.5)
 		return
 	}
 	// A bash is one swing of a pendulum across his front: from the side his
@@ -698,7 +698,7 @@ begin_swing :: proc(throw: bool) {
 	// Shaken about, a turkey sometimes lets go of an egg.
 	if e.kind == .Turkey && random() < SHAKE_EGG && drop_egg(e.chain[1].xz, e.chain[1].y) {
 		burst(e.chain[1], 4, 2, TURKEY_TIP, 0.07)
-		say("An egg fell out!", 1.2)
+		say(TEXT.egg_fell_out, 1.2)
 	}
 }
 
@@ -716,7 +716,7 @@ heave :: proc(dt: f32) {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
 	if p.stamina < 10 {
-		answer("Too tired!")
+		answer(TEXT.too_tired)
 		return
 	}
 	p.stamina -= 10
@@ -726,7 +726,7 @@ heave :: proc(dt: f32) {
 	e.chain_old[1].y -= lift * dt
 	p.lunge_t = 0.35
 	burst({p.pos.x, p.height + 1.6 * PROSIO_SIZE, p.pos.y}, 4, 2.5, COLOR_SWEAT, 0.06)
-	say("Hnnnngh! Way too heavy!", 1)
+	say(TEXT.heave_too_heavy, 1)
 }
 
 // Keeps a held animal moving: its body swings, falls and drags on its own,
@@ -905,7 +905,7 @@ update_drag :: proc(dt: f32) {
 				slam(e, point^, speed)
 				hit_something = true
 				g.shake = max(g.shake, 0.3)
-				say("BONK!", 0.6)
+				say(TEXT.bonk_loud, 0.6)
 			}
 		}
 		if point.y < p.height + 1.6 * PROSIO_SIZE {
@@ -999,8 +999,7 @@ slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 	e.limp = min(max(e.limp, 0) + 0.8 + speed * 0.12, LIMP_MOST)
 	hurt_enemy(e, min(SLAM_BLOW.x + SLAM_BLOW.y * speed, SLAM_MOST))
 	if speed > 6 {
-		WORDS := [?]cstring{"WHACK!", "THUD!", "SPLAT!", "BONK!", "WHUMP!"}
-		say(WORDS[int(random() * len(WORDS)) % len(WORDS)], 0.5)
+		say(TEXT.bash_words[int(random() * len(TEXT.bash_words)) % len(TEXT.bash_words)], 0.5)
 	}
 }
 
@@ -1042,7 +1041,7 @@ bash_hits :: proc(e: ^Enemy, dt: f32) {
 			slam(e, point, speed * 0.6)
 			pain_stars({o.pos.x, ro * 1.8, o.pos.y}, passed)
 			g.shake = max(g.shake, min(passed * other / 500, 0.6))
-			say(passed > 8 ? "BASH!" : "Bonk!", 0.6)
+			say(passed > 8 ? TEXT.bash : TEXT.bonk, 0.6)
 		}
 		for &rd, i in g.rounds[:g.round_count] {
 			if rd.kind != .Rock || rd.r <= 0 || length2(rd.pos - point.xz) >= r * 0.6 + rd.r || point.y > rd.r * 2 {
@@ -1095,7 +1094,7 @@ throw_animal :: proc() {
 	p.stretch_vel -= 3
 	burn(FIGHT_BURN, .Fighting, true)
 	g.shake = max(g.shake, min(speed * kg / 600, 0.6))
-	say(speed > 11 ? "HAI-YA!" : "Hup!", 0.9)
+	say(speed > 11 ? TEXT.haiya : TEXT.hup, 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
 }
 
@@ -1145,7 +1144,7 @@ throw_rock :: proc() {
 	p.carry_kg = 0
 	p.stretch_vel -= 3
 	burn(FIGHT_BURN, .Fighting, true)
-	say(speed > 9 ? "HAI-YA!" : "Oof!", 0.9)
+	say(speed > 9 ? TEXT.haiya : TEXT.oof, 0.9)
 	burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2.5, COLOR_DUST, 0.12)
 }
 

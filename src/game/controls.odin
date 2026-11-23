@@ -60,7 +60,10 @@ Pad :: enum u8 {
 	Stick_Right,
 }
 
-PAD_NAME := [Pad]string {
+// How the controls file names each controller button. These never change
+// with the language (a file written in one must read in another): the names
+// shown are TEXT.pad_name.
+PAD_CODE := [Pad]string {
 	.None        = "-",
 	.A           = "A",
 	.B           = "B",
@@ -91,25 +94,6 @@ Binding :: struct {
 
 bindings := DEFAULT_BINDINGS
 
-CONTROL_NAME := [Button]string {
-	.Left      = "Left",
-	.Right     = "Right",
-	.Up        = "Up",
-	.Down      = "Down",
-	.Jump      = "Jump",
-	.Sprint    = "Sprint",
-	.Bump      = "Bump (belly charge)",
-	.Action    = "Pick up, use, drink",
-	.Grab      = "Grab, throw",
-	.Eat       = "Eat, put up",
-	.Sack_Prev = "Sack: back",
-	.Sack_Next = "Sack: on",
-	.Bag       = "This menu",
-	.Gas       = "Let his wind go",
-	.Restart   = "Wake up",
-	.Menu      = "Pause",
-	.Confirm   = "Choose",
-}
 
 // The word each button goes by in a saved file and in texts on the screen.
 BUTTON_WORD := [Button]string {
@@ -165,39 +149,38 @@ key_name :: proc(k: Key) -> string {
 		i := int(k - Key('0'))
 		return DIGITS[i:i + 1]
 	case k >= KEY_KP_0 && k <= KEY_KP_0 + 9:
-		NUMPAD := [10]string{"PAD 0", "PAD 1", "PAD 2", "PAD 3", "PAD 4", "PAD 5", "PAD 6", "PAD 7", "PAD 8", "PAD 9"}
-		return NUMPAD[k - KEY_KP_0]
+		return string(fill(TEXT.key_numpad, {"n", int(k - KEY_KP_0)}))
 	case k >= 290 && k <= 301:
 		F := [12]string{"F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"}
 		return F[k - 290]
 	}
 	switch k {
 	case KEY_NONE:        return "-"
-	case KEY_SPACE:       return "SPACE"
-	case KEY_ESCAPE:      return "ESC"
-	case KEY_ENTER:       return "ENTER"
-	case 258:             return "TAB"
-	case KEY_BACKSPACE:   return "BACKSPACE"
-	case 260:             return "INSERT"
-	case 261:             return "DELETE"
-	case KEY_RIGHT:       return "RIGHT"
-	case KEY_LEFT:        return "LEFT"
-	case KEY_DOWN:        return "DOWN"
-	case KEY_UP:          return "UP"
-	case 266:             return "PAGE UP"
-	case 267:             return "PAGE DOWN"
-	case 268:             return "HOME"
-	case 269:             return "END"
-	case 280:             return "CAPS LOCK"
-	case KEY_KP_ENTER:    return "PAD ENTER"
-	case KEY_LEFT_SHIFT:  return "SHIFT"
-	case 341:             return "CTRL"
-	case 342:             return "ALT"
-	case 343:             return "LEFT CMD"
-	case KEY_RIGHT_SHIFT: return "RIGHT SHIFT"
-	case 345:             return "RIGHT CTRL"
-	case 346:             return "RIGHT ALT"
-	case 347:             return "RIGHT CMD"
+	case KEY_SPACE:       return string(TEXT.key_space)
+	case KEY_ESCAPE:      return string(TEXT.key_esc)
+	case KEY_ENTER:       return string(TEXT.key_enter)
+	case 258:             return string(TEXT.key_tab)
+	case KEY_BACKSPACE:   return string(TEXT.key_backspace)
+	case 260:             return string(TEXT.key_insert)
+	case 261:             return string(TEXT.key_delete)
+	case KEY_RIGHT:       return string(TEXT.key_right)
+	case KEY_LEFT:        return string(TEXT.key_left)
+	case KEY_DOWN:        return string(TEXT.key_down)
+	case KEY_UP:          return string(TEXT.key_up)
+	case 266:             return string(TEXT.key_page_up)
+	case 267:             return string(TEXT.key_page_down)
+	case 268:             return string(TEXT.key_home)
+	case 269:             return string(TEXT.key_end)
+	case 280:             return string(TEXT.key_caps_lock)
+	case KEY_KP_ENTER:    return string(TEXT.key_pad_enter)
+	case KEY_LEFT_SHIFT:  return string(TEXT.key_shift)
+	case 341:             return string(TEXT.key_ctrl)
+	case 342:             return string(TEXT.key_alt)
+	case 343:             return string(TEXT.key_left_cmd)
+	case KEY_RIGHT_SHIFT: return string(TEXT.key_right_shift)
+	case 345:             return string(TEXT.key_right_ctrl)
+	case 346:             return string(TEXT.key_right_alt)
+	case 347:             return string(TEXT.key_right_cmd)
 	case 39:              return "'"
 	case 44:              return ","
 	case 45:              return "-"
@@ -218,9 +201,9 @@ key_name :: proc(k: Key) -> string {
 button_word :: proc(b: Button) -> string {
 	if pad_in_use {
 		if b == .Sprint && (bindings[b].pad == .L_Stick || bindings[b].pad == .R_Stick) {
-			return bindings[b].pad == .L_Stick ? "click L-STICK" : "click R-STICK"
+			return string(bindings[b].pad == .L_Stick ? TEXT.click_l_stick : TEXT.click_r_stick)
 		}
-		return PAD_NAME[bindings[b].pad]
+		return string(TEXT.pad_name[bindings[b].pad])
 	}
 	return key_name(bindings[b].keys[0])
 }
@@ -271,7 +254,7 @@ put_text :: proc(buf: ^[512]u8, n: ^int, s: string) {
 put_word :: proc(buf: ^[512]u8, n: ^int, word: string) -> bool {
 	switch word {
 	case "Move":
-		put_text(buf, n, pad_in_use ? "L-STICK" : "WASD")
+		put_text(buf, n, string(pad_in_use ? TEXT.move_pad : TEXT.move_keys))
 		return true
 	case "Sack":
 		put_text(buf, n, button_word(.Sack_Prev))
@@ -279,10 +262,10 @@ put_word :: proc(buf: ^[512]u8, n: ^int, word: string) -> bool {
 		put_text(buf, n, button_word(.Sack_Next))
 		return true
 	case "Aim":
-		put_text(buf, n, pad_in_use ? "stick" : "arrows")
+		put_text(buf, n, string(pad_in_use ? TEXT.aim_pad : TEXT.aim_keys))
 		return true
 	case "Close":
-		put_text(buf, n, pad_in_use ? PAD_NAME[bindings[.Grab].pad] : "ESC")
+		put_text(buf, n, pad_in_use ? string(TEXT.pad_name[bindings[.Grab].pad]) : key_name(KEY_ESCAPE))
 		return true
 	}
 	for b in Button {
@@ -296,18 +279,18 @@ put_word :: proc(buf: ^[512]u8, n: ^int, word: string) -> bool {
 
 // Gives an action a key (slot 0 or 1). An action that had that key already
 // swaps: it gets the one this action had. Says why not, if it cannot be.
-assign_key :: proc(b: Button, slot: int, k: Key) -> (ok: bool, why: string) {
+assign_key :: proc(b: Button, slot: int, k: Key) -> (ok: bool, why: cstring) {
 	if key_reserved(k) {
-		return false, "That key is kept for moving, pausing or the pixel size."
+		return false, TEXT.key_kept
 	}
 	old := bindings[b].keys[slot]
 	if k == old {
-		return true, ""
+		return true, nil
 	}
 	if bindings[b].keys[1 - slot] == k {
 		bindings[b].keys[1 - slot], bindings[b].keys[slot] = old, k
 		tidy_keys(b)
-		return true, ""
+		return true, nil
 	}
 	for c in REMAPPABLE {
 		if c == b {
@@ -315,7 +298,7 @@ assign_key :: proc(b: Button, slot: int, k: Key) -> (ok: bool, why: string) {
 		}
 		for t in 0 ..< 2 {
 			if bindings[c].keys[t] == k && old == KEY_NONE && bindings[c].keys[1 - t] == KEY_NONE {
-				return false, "That is the only key of another action: give it another key first."
+				return false, TEXT.only_key
 			}
 		}
 	}
@@ -332,7 +315,7 @@ assign_key :: proc(b: Button, slot: int, k: Key) -> (ok: bool, why: string) {
 	}
 	bindings[b].keys[slot] = k
 	tidy_keys(b)
-	return true, ""
+	return true, nil
 }
 
 // An action with only a second key has it as its first.
@@ -349,9 +332,9 @@ clear_second_key :: proc(b: Button) {
 }
 
 // Gives an action a controller button; an action that had it swaps.
-assign_pad :: proc(b: Button, p: Pad) -> (ok: bool, why: string) {
+assign_pad :: proc(b: Button, p: Pad) -> (ok: bool, why: cstring) {
 	if p not_in PAD_ASSIGNABLE {
-		return false, "The D-pad moves him and MENU pauses: choose another button."
+		return false, TEXT.pad_kept
 	}
 	old := bindings[b].pad
 	for c in REMAPPABLE {
@@ -360,7 +343,7 @@ assign_pad :: proc(b: Button, p: Pad) -> (ok: bool, why: string) {
 		}
 	}
 	bindings[b].pad = p
-	return true, ""
+	return true, nil
 }
 
 reset_controls :: proc() {
@@ -389,7 +372,7 @@ encode_controls :: proc(out: []u8) -> int {
 			put(out, &n, strconv.write_int(number[:], i64(k), 10))
 		}
 		put(out, &n, " ")
-		put(out, &n, PAD_NAME[bindings[b].pad])
+		put(out, &n, PAD_CODE[bindings[b].pad])
 		put(out, &n, "\n")
 	}
 	return n
@@ -422,7 +405,7 @@ decode_controls :: proc(data: []u8) {
 		k1, ok1 := strconv.parse_int(fields[2])
 		pad, pad_found := Pad.None, false
 		for p in Pad {
-			if PAD_NAME[p] == fields[3] && p in PAD_ASSIGNABLE {
+			if PAD_CODE[p] == fields[3] && p in PAD_ASSIGNABLE {
 				pad, pad_found = p, true
 			}
 		}
@@ -456,7 +439,7 @@ controls_row: int // 0 to len(REMAPPABLE): the last is "back to the defaults"
 controls_col: int // 0 the controller, 1 the key, 2 the other key
 controls_waiting: bool
 controls_wait_t: f32
-controls_note: string
+controls_note: cstring
 controls_note_t: f32
 
 update_controls_panel :: proc(dt: f32) {
@@ -472,7 +455,7 @@ update_controls_panel :: proc(dt: f32) {
 			controls_waiting = false
 		case controls_col == 0 && pad != .None:
 			ok, why := assign_pad(b, pad)
-			note(ok ? "" : why)
+			note(ok ? nil : why)
 			controls_waiting = false
 		case controls_col > 0 && key == KEY_BACKSPACE:
 			if controls_col == 2 || bindings[b].keys[1] != KEY_NONE {
@@ -481,12 +464,12 @@ update_controls_panel :: proc(dt: f32) {
 				}
 				clear_second_key(b)
 			} else {
-				note("Every action keeps one key at least.")
+				note(TEXT.one_key_at_least)
 			}
 			controls_waiting = false
 		case controls_col > 0 && key != KEY_NONE:
 			ok, why := assign_key(b, controls_col - 1, key)
-			note(ok ? "" : why)
+			note(ok ? nil : why)
 			controls_waiting = false
 		}
 		if !controls_waiting {
@@ -502,7 +485,7 @@ update_controls_panel :: proc(dt: f32) {
 		if controls_row == len(REMAPPABLE) {
 			reset_controls()
 			save_controls()
-			note("Back to the buttons it started with.")
+			note(TEXT.back_to_defaults_done)
 		} else {
 			controls_waiting = true
 			controls_wait_t = CONTROLS_WAIT
@@ -511,7 +494,7 @@ update_controls_panel :: proc(dt: f32) {
 }
 
 @(private = "file")
-note :: proc(text: string) {
+note :: proc(text: cstring) {
 	controls_note = text
 	controls_note_t = 3
 }
@@ -521,9 +504,8 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 	row_h := 30 * s
 	col_x := [3]f32{x + 215 * s, x + 318 * s, x + 400 * s}
 	col_w := [3]f32{96 * s, 76 * s, 76 * s}
-	header := [3]cstring{"XBOX", "KEY", "OR KEY"}
 	for c in 0 ..< 3 {
-		label(header[c], col_x[c] + 6 * s, y, 14 * s, {200, 200, 200, 255})
+		label(TEXT.controls_header[c], col_x[c] + 6 * s, y, 14 * s, {200, 200, 200, 255})
 	}
 	top := y + 24 * s
 	for b, i in REMAPPABLE {
@@ -534,7 +516,7 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 			text: string
 			switch c {
 			case 0:
-				text = PAD_NAME[bindings[b].pad]
+				text = string(TEXT.pad_name[bindings[b].pad])
 			case 1, 2:
 				text = key_name(bindings[b].keys[c - 1])
 				if c == 2 && bindings[b].keys[1] == KEY_NONE {
@@ -560,7 +542,7 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 	}
 	// The last row: back to the defaults.
 	ry := top + f32(len(REMAPPABLE)) * row_h + 8 * s
-	reset: cstring = "BACK TO THE DEFAULTS"
+	reset := TEXT.back_to_defaults
 	rw := ui_text_width(reset, 18 * s) + 28 * s
 	if controls_row == len(REMAPPABLE) {
 		ui_round_rect(x, ry, rw, row_h, {250, 172, 182, 235}, 0.4)
@@ -570,18 +552,18 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 	}
 
 	info := ry + row_h + 16 * s
-	label("Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses;", x, info, 13 * s, {200, 200, 200, 255})
-	label("A, ENTER or SPACE chooses. Clicking a stick to sprint keeps", x, info + 18 * s, 13 * s, {200, 200, 200, 255})
-	label("him running until he stops; any other sprint button is held.", x, info + 36 * s, 13 * s, {200, 200, 200, 255})
+	for line, i in TEXT.controls_always {
+		label(line, x, info + f32(i) * 18 * s, 13 * s, {200, 200, 200, 255})
+	}
 
 	line: cstring
 	switch {
 	case controls_waiting && controls_col == 0:
-		line = "Press a button on the controller   (MENU or ESC: cancel)"
+		line = TEXT.press_button
 	case controls_waiting:
-		line = "Press a key   (BACKSPACE: none   ESC: cancel)"
-	case controls_note_t > 0 && controls_note != "":
-		line = short_cstring(controls_note)
+		line = TEXT.press_key
+	case controls_note_t > 0 && controls_note != nil:
+		line = controls_note
 	}
 	if line != nil {
 		label(line, x, info + 62 * s, 15 * s, controls_waiting ? UI_YELLOW : UI_ORANGE)
@@ -589,7 +571,7 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 }
 
 control_cname :: proc(b: Button) -> cstring {
-	return short_cstring(CONTROL_NAME[b])
+	return TEXT.control_name[b]
 }
 
 // A short string as a cstring for drawing, in one of a few small buffers.

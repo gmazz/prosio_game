@@ -23,6 +23,7 @@ This is a proof of concept: one meadow, no goal yet beyond keeping Prosio fed an
 - [Asset workshop, integration plan and agent handoff](docs/asset-integration.md)
 - [Testing without playing](#testing-without-playing)
 - [Tuning](#tuning)
+- [Text](#text)
 - [Known gaps](#known-gaps)
 
 ## Playing
@@ -649,6 +650,7 @@ Everything is built in code from simple shapes; the game loads no image files.
 ```
 data/
   tuning/            the numbers that shape the game, a JSON file to a subject
+  text/              every word the game shows, a JSON file to a language
 tools/gen_data/      turns data/ into src/game/gen_*.odin at build time
 src/
   game/              the game itself
@@ -696,6 +698,7 @@ src/
     ui.odin          bars, prompts, speech bubbles, menus
     controls.odin    which keys and controller buttons do what, the
                      button names in texts, and the Controls panel
+    text.odin        filling numbers and names into texts (fill)
     pad_darwin.odin  the controller on a Mac, through Apple's framework
     pad_other.odin   (elsewhere raylib reads it, in platform.odin)
     util.odin        small maths helpers and a random number generator
@@ -857,6 +860,28 @@ A few things stay in the code, because they are not numbers to tune but part of 
 - The save file's layout (`SAVE_VERSION` and the old versions in `body.odin`) and the key codes (`controls.odin`).
 - How the animal pack's animals are reshaped (`RECIPES` in `tools/pack_quadruped.py`, then `tools/pack_quadrupeds.sh`) and which tree models are packed (`tools/pack_trees.sh`).
 - The shapes things are drawn from (the many sizes inside the drawing code).
+
+## Text
+
+Every word the game shows is in `data/text/en.json`: what Prosio says, the line at the bottom of the screen, the menus and pages, the names of things, places, clothes, buttons and keys. The code holds none of it (a rule in `tools/check.sh` fails if a sentence is written in it), so the game can be put into another language by writing one file. The file is in sections, by subject, and each text has a name in small letters, by which the code reads it (`TEXT.sack_full`, `TEXT.item_name[.Apple]`):
+
+```json
+"sack_full": "My sack is full!",
+"fox_ate": {"text": "Oh no! The fox ate my {thing}!", "about": "{thing}: the name of what it ate (things.item_name)"},
+"bash_words": ["WHACK!", "THUD!", "SPLAT!", "BONK!", "WHUMP!"],
+"item_name": {"_of": "Item", "Apple": "APPLE", "Berries": "BERRIES", ...}
+```
+
+A text is a string; a string with a note (`"text"` and `"about"`), saying where it shows or what fills it in; a list; or a table, with a text for each name of one of the game's lists (`"_of"`). A table that only some things have a text in is marked `"_some": true` (only some things say something as he gathers them). Names are once to a file, whatever their section. As with the tuning files, `tools/gen_data` makes them into `src/game/gen_text.odin` when the game is built, and a mistake stops the build with its line.
+
+Names in braces are filled in as the text is shown:
+
+- **With a capital, a button**: `{Action}`, `{Grab}`, `{Eat}` and the other actions' words (`BUTTON_WORD` in `controls.odin`), and `{Move}`, `{Aim}`, `{Sack}` and `{Close}`, become the key or controller button that does it just now ("E: pick it", "A: pick it"). A rule checks that every one named is a button the game has.
+- **In small letters, a number or a name the game puts in**: `{kcal}`, `{kg}`, `{percent}`, `{thing}`... (`fill` in `text.odin`). They go in by name, so a language may put them in whatever order it needs. Each text with one says in its `"about"` what fills it. Numbers with a point use the language's own (`decimal_point`).
+
+The files of other languages will sit beside `en.json` (`pl.json`), each naming its language in `"_language"` (`"Polish"`) and how the menu shows it in `"_name"`. A language may leave out any text, and the English stands in for it; a name English does not have stops the build, as a misspelling.
+
+A few words stay in the code, as they are not read as words: the codes the controls file names controller buttons by (`PAD_CODE`, so a file written in one language reads in another), the actions' words in braces (`BUTTON_WORD`), the names of files, bones, animations and shader parts, and the prints on two T-shirts.
 
 ## Known gaps
 

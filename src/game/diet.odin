@@ -69,14 +69,6 @@ Need :: enum {
 	Electrolytes,
 }
 
-NEED_NAME := [Need]cstring {
-	.Carbs        = "CARBS",
-	.Protein      = "PROTEIN",
-	.Fibre        = "FIBRE",
-	.Water        = "WATER",
-	.Vitamins     = "VITAMINS",
-	.Electrolytes = "ELECTROLYTES",
-}
 
 // What each food is made of: the share of its calories that is carbs, fat,
 // protein, fibre, vitamins and electrolytes, in per cent (they add up to
@@ -97,14 +89,6 @@ Nutrient :: enum {
 	Electrolytes,
 }
 
-NUTRIENT_NAME := [Nutrient]cstring {
-	.Carbs        = "CARBS",
-	.Fat          = "FAT",
-	.Protein      = "PROTEIN",
-	.Fibre        = "FIBRE",
-	.Vitamins     = "VITAMINS",
-	.Electrolytes = "ELECTROLYTES",
-}
 
 // Shares in per cent, in the order of Nutrient (index it with int(n)).
 Composition :: [len(Nutrient)]f32
@@ -286,66 +270,32 @@ full_of :: proc(n: Need) -> bool {
 	return s == .High || s == .Over
 }
 
-// What he says as a level changes: lacking, run out, full, too much.
-STATE_TEXT := [Need][Need_State]cstring {
-	.Carbs = {.Fine = nil, .Low = "No fuel... I need bread, honey or fruit.", .Empty = "Running on fat alone! Bread, honey or fruit!", .High = "Wheee! Sugar rush!", .Over = "Hic! Too much sugar! Hic! It's turning to fat!"},
-	.Protein = {.Fine = nil, .Low = "My muscles are wasting... I need eggs, fish or meat.", .Empty = "No protein left! Eggs, fish or meat!", .High = "Full of protein! Now to build some muscle!", .Over = "Too much protein! I'm stiff as a board!"},
-	.Fibre = {.Fine = nil, .Low = "Ooh, my tummy... I need cabbage or pumpkin.", .Empty = "My tummy is in knots! Cabbage, quick!", .High = "Uh oh... I feel gassy!", .Over = "Too much fibre! Stand back, everybody!"},
-	.Water = {.Fine = nil, .Low = "So thirsty... the pond is up the north-west path!", .Empty = "I'm drying out! Water, now!", .High = nil, .Over = nil},
-	.Vitamins = {.Fine = nil, .Low = "It's getting dim... I need berries or greens.", .Empty = "I can hardly see! Berries, quick!", .High = "I can see for miles!", .Over = "So many vitamins... I'm glowing orange!"},
-	.Electrolytes = {.Fine = nil, .Low = "Cramps... I need some rock salt.", .Empty = "Everything is cramping! Salt, quick!", .High = "I'm so salty... and so thirsty!", .Over = "Too much salt! Water! WATER!"},
+
+
+// What he says as a level changes, if anything.
+state_text :: proc(n: Need, s: Need_State) -> cstring {
+	switch s {
+	case .Low:
+		return TEXT.say_low[n]
+	case .Empty:
+		return TEXT.say_empty[n]
+	case .High:
+		return TEXT.say_high[n]
+	case .Over:
+		return TEXT.say_over[n]
+	case .Fine:
+	}
+	return nil
 }
 
-// The same, as a word or two beside the level's bar.
-LOW_NAME := [Need]cstring {
-	.Carbs        = "NO FUEL",
-	.Protein      = "WASTING",
-	.Fibre        = "TUMMY ACHE",
-	.Water        = "THIRSTY",
-	.Vitamins     = "DIM EYES",
-	.Electrolytes = "CRAMPS",
-}
-HIGH_NAME := [Need]cstring {
-	.Carbs        = "SUGAR RUSH",
-	.Protein      = "BULKING",
-	.Fibre        = "GASSY",
-	.Water        = "",
-	.Vitamins     = "EAGLE EYES",
-	.Electrolytes = "SALTY",
-}
-TOO_MUCH_NAME := [Need]cstring {
-	.Carbs        = "HICCUPS",
-	.Protein      = "STIFF",
-	.Fibre        = "GAS STORM",
-	.Water        = "",
-	.Vitamins     = "GLOWING",
-	.Electrolytes = "PARCHED",
-}
-// What to eat for more of each: shown when he lacks it.
-NEED_EAT := [Need]cstring {
-	.Carbs        = "bread, honey, fruit, pumpkin",
-	.Protein      = "eggs, fish, meat, nuts",
-	.Fibre        = "cabbage, pumpkin, apples",
-	.Water        = "a drink at the pond",
-	.Vitamins     = "berries, cabbage, pumpkin",
-	.Electrolytes = "rock salt, cheese, mushrooms",
-}
-
-// How the game ends when he has run right out of something for too long.
+// How the game ends when he has run right out of something for too long
+// (the words are TEXT.ending).
 Ending :: struct {
 	title, line: cstring,
 }
-ENDINGS := [Need]Ending {
-	.Carbs        = {},
-	.Protein      = {},
-	.Fibre        = {},
-	.Water        = {"DRIED OUT!", "He needed a drink from the pond."},
-	.Vitamins     = {"NO VITAMINS!", "Everything went dark. He needed fruit and greens."},
-	.Electrolytes = {"CRAMPED UP!", "With no salt every muscle seized up."},
-}
 
 ending :: proc() -> Ending {
-	return ENDINGS[g.prosio.fail_need]
+	return TEXT.ending[g.prosio.fail_need]
 }
 
 // How much faster or slower his diet makes him walk.
@@ -416,7 +366,7 @@ update_diet :: proc(dt: f32) {
 	for n in Need {
 		state := need_state(n)
 		if state != p.need_was[n] {
-			if text := STATE_TEXT[n][state]; text != nil {
+			if text := state_text(n, state); text != nil {
 				say(text, 2.6)
 			}
 			p.need_was[n] = state
@@ -438,7 +388,7 @@ update_diet :: proc(dt: f32) {
 	rush := full_of(.Carbs)
 	if p.rush && !rush {
 		p.crash_t = CRASH_TIME
-		say("Sugar crash... so sleepy...", 2.4)
+		say(TEXT.sugar_crash, 2.4)
 	}
 	p.rush = rush
 	p.crash_t -= dt
@@ -462,7 +412,7 @@ update_diet :: proc(dt: f32) {
 			p.airborne = true
 			p.peak = p.height
 			p.stretch_vel += 4
-			say("Hic!", 0.5)
+			say(TEXT.hic, 0.5)
 		}
 	}
 
@@ -477,14 +427,14 @@ update_diet :: proc(dt: f32) {
 			pass_gas()
 		}
 	} else if pressed(.Gas) && !full_of(.Fibre) {
-		answer("Nothing in there... I need more fibre!")
+		answer(TEXT.no_fibre)
 	}
 	if lacks(.Fibre) {
 		p.ache_cd -= dt
 		if p.ache_cd <= 0 && grounded && p.carry == .Nothing {
 			p.ache_cd = random_range(ACHE_EVERY.x, ACHE_EVERY.y)
 			p.ache_t = ACHE_TIME
-			say("Ooh... my tummy!", 1.2)
+			say(TEXT.tummy, 1.2)
 		}
 	} else {
 		p.ache_cd = ACHE_EVERY.x
@@ -497,7 +447,7 @@ update_diet :: proc(dt: f32) {
 			p.cramp_t = 0
 			p.ache_t = ACHE_TIME
 			p.vel *= 0.3
-			say("Ow ow ow! Cramp!", 1.2)
+			say(TEXT.cramp, 1.2)
 		}
 	} else {
 		p.cramp_t = max(p.cramp_t - dt, 0)
@@ -526,7 +476,7 @@ pass_gas :: proc() {
 	p.stretch_vel += 3
 	p.wobble_vel += 3
 	g.shake = max(g.shake, 0.15)
-	say("PRRRRT!", 0.9)
+	say(TEXT.wind, 0.9)
 	for &e in g.enemies[:g.enemy_count] {
 		if on_ground(&e) && length2(e.pos - p.pos) < gas_reach() {
 			e.scared_t = GAS_SCARE
@@ -558,7 +508,7 @@ drink :: proc() {
 	}
 	salt_before := p.need[.Electrolytes]
 	if p.need[.Water] > 95 && !washed && !full_of(.Electrolytes) {
-		answer("I'm not thirsty!")
+		answer(TEXT.not_thirsty)
 		return
 	}
 	// Water washes some salt out of him too (enough that the goats lose
@@ -572,7 +522,7 @@ drink :: proc() {
 	p.pick_total = DRINK_TIME
 	p.drinking = true
 	p.vel = {}
-	say(washed ? "Glug glug glug... that washed it out!" : "Glug glug glug... aah!", 1.8)
+	say(washed ? TEXT.drink_washed : TEXT.drink, 1.8)
 	at := p.pos + normalize2(to) * (prosio_radius(p.kg) + 0.5)
 	burst({at.x, 0.2, at.y}, 10, 2, POND_SPLASH, 0.07)
 }
@@ -587,15 +537,6 @@ Part :: enum {
 	Fibre,
 	Water,
 	Frame,
-}
-PART_NAME := [Part]cstring {
-	.Fat     = "FAT",
-	.Muscle  = "MUSCLE",
-	.Carbs   = "CARBS",
-	.Protein = "PROTEIN",
-	.Fibre   = "FIBRE",
-	.Water   = "WATER",
-	.Frame   = "BONES",
 }
 PART_NEED := #partial [Part]Need {
 	.Carbs   = .Carbs,
@@ -634,15 +575,16 @@ tenths :: proc(kg: f32) -> i32 {
 }
 
 kg_text :: proc(kg: f32) -> cstring {
-	return ui_format2("%d.%d kg", tenths(kg) / 10, tenths(kg) % 10)
+	return fill(TEXT.kg, {"kg", Decimal{int(tenths(kg)), 1}})
 }
 
+// A text with his whole weight in it, as {kg}.
 weight_text :: proc(format: cstring) -> cstring {
 	sum: i32
 	for part in Part {
 		sum += tenths(part_kg(part))
 	}
-	return ui_format2(format, sum / 10, sum % 10)
+	return fill(format, {"kg", Decimal{int(sum), 1}})
 }
 
 // His weight as its parts laid end to end, each in its own colour.

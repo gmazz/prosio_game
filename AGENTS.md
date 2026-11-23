@@ -43,6 +43,7 @@ Follow `.claude/agents/playtester.md`. It is written for one kind of agent but a
 ## If you were asked to change the game
 
 - Every number that shapes the game is in `data/tuning/*.json`, one file to a subject. The build turns those files into `src/game/gen_*.odin`: edit the JSON, never the `gen_` files, and put any new number in the JSON, not in the code. The README's "Tuning" section says what is in each file, and the few things that stay in the code.
+- Every word the game shows is in `data/text/en.json`, which the code reads as `TEXT.<name>`. Put any new text there, never in the code (a rule fails if you do): numbers and names go into it by name with `fill` (`{kcal}`), buttons as `{Action}`. The README's "Text" section says how.
 - `src/game/platform.odin` is the only file that calls raylib. The game allocates no memory.
 - When you fix or decide something, add a rule for it to `src/check/rules.odin`, and keep the README true.
 - Run `tools/check.sh` before you say you are done.

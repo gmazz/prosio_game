@@ -65,22 +65,21 @@ Region_Kind :: enum {
 	Bees,
 }
 
+// (Its name, and what is found there, are TEXT.region_name and region_about.)
 Region :: struct {
-	name:   cstring,
-	about:  cstring, // what is found there
 	centre: Vec2,
 	radius: Vec2,
 }
 
 REGIONS := [Region_Kind]Region {
-	.Home    = {"HOME", "the oven", HOME, {13, 11}},
-	.Forest  = {"THE FOREST", "berries, apples, mushrooms, nuts... and foxes", {-62, -10}, {33, 50}},
-	.Fields  = {"THE WHEAT FIELDS", "wheat, and the mill", {58, 26}, {27, 20}},
-	.Garden  = {"THE GARDEN", "pumpkins, cabbages", {-14, 48}, {17, 15}},
-	.Turkeys = {"TURKEY MEADOW", "eggs... and angry turkeys", {14, -46}, {25, 18}},
-	.Hills   = {"GOAT HILLS", "rock salt, goats to milk, and the churn", {70, -42}, {26, 22}},
-	.Pond    = {"THE POND", "water, fish, and the cooking fire", POND, {14, 11}},
-	.Bees    = {"BEE MEADOW", "honey... and bees", {-50, 56}, {13, 9}},
+	.Home    = {HOME, {13, 11}},
+	.Forest  = {{-62, -10}, {33, 50}},
+	.Fields  = {{58, 26}, {27, 20}},
+	.Garden  = {{-14, 48}, {17, 15}},
+	.Turkeys = {{14, -46}, {25, 18}},
+	.Hills   = {{70, -42}, {26, 22}},
+	.Pond    = {POND, {14, 11}},
+	.Bees    = {{-50, 56}, {13, 9}},
 }
 
 // The region a place is in, if any.
@@ -986,7 +985,7 @@ shake_tree :: proc(index: int, cost: f32) {
 	for _ in 0 ..< min(t.fruit, int(TREE_SHAKE_APPLES * power + 0.5)) {
 		drop_apple(index)
 	}
-	say(power > 1.3 ? "SHAKE SHAKE SHAKE!" : (power < 0.8 ? "Shake... shake..." : "Shake shake!"), 1.2)
+	say(power > 1.3 ? TEXT.shake_hard : (power < 0.8 ? TEXT.shake_soft : TEXT.shake), 1.2)
 }
 
 update_world :: proc(dt: f32) {

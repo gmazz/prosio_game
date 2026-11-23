@@ -39,7 +39,7 @@ update_spoil :: proc(dt: f32) {
 	seconds := p.spoil_t
 	p.spoil_t = 0
 	if rotten, any := spoil(&p.sack, &p.sack_kcal, &p.sack_fresh, seconds, 1); any {
-		say_named("Pee-yew! My %s went bad. Out it goes!", ITEM_NAME[rotten])
+		say_filled(fill(TEXT.went_bad, {"thing", TEXT.item_name[rotten]}))
 		sack_step(0)
 	}
 	for &l in g.larders {
@@ -55,11 +55,11 @@ fresh_word :: proc(item: Item, fresh: f32) -> cstring {
 	case SPOIL_HALF[item] <= 0:
 		return nil
 	case fresh >= STALE:
-		return "fresh"
+		return TEXT.fresh
 	case fresh >= 0.5:
-		return "a bit stale"
+		return TEXT.a_bit_stale
 	}
-	return "going off!"
+	return TEXT.going_off
 }
 
 // Room taken up in a larder.
@@ -216,11 +216,11 @@ update_larder_menu :: proc() {
 	switch {
 	case button_pressed(.Right):
 		if larder_move(l, item, 1, true) == 0 && g.prosio.sack[item] > 0 {
-			answer("The larder is full!")
+			answer(TEXT.larder_full)
 		}
 	case button_pressed(.Left):
 		if larder_move(l, item, 1, false) == 0 && l.stock[item] > 0 {
-			answer("My sack is full!")
+			answer(TEXT.sack_full)
 		}
 	case button_pressed(.Confirm) || button_pressed(.Action):
 		// All of it in, or (with none in the sack) all of it out.
@@ -245,16 +245,16 @@ draw_larder_menu :: proc() {
 	pw, ph := 760 * s, 190 * s + f32(max(shown, 1)) * row
 	px, py := sw / 2 - pw / 2, sh / 2 - ph / 2
 	ui_round_rect(px, py, pw, ph, {74, 46, 38, 240}, 0.08)
-	label_centred("THE LARDER", sw / 2, py + 16 * s, 40 * s, UI_ORANGE)
-	label_centred("Food keeps five times longer in here", sw / 2, py + 62 * s, 18 * s, UI_YELLOW)
+	label_centred(TEXT.larder_title, sw / 2, py + 16 * s, 40 * s, UI_ORANGE)
+	label_centred(TEXT.larder_about, sw / 2, py + 62 * s, 18 * s, UI_YELLOW)
 	GREY :: Color{220, 200, 180, 255}
 	top := py + 100 * s
-	label("IN THE SACK", px + 290 * s, top, 15 * s, GREY)
-	label("IN THE LARDER", px + 470 * s, top, 15 * s, GREY)
-	label(ui_format("sack %d%% full", i32(math.round(sack_full() * 100))), px + 290 * s, top + 18 * s, 13 * s, GREY)
-	label(ui_format("larder %d%% full", i32(math.round(larder_litres(l) / LARDER_LITRES * 100))), px + 470 * s, top + 18 * s, 13 * s, GREY)
+	label(TEXT.in_the_sack, px + 290 * s, top, 15 * s, GREY)
+	label(TEXT.in_the_larder, px + 470 * s, top, 15 * s, GREY)
+	label(fill(TEXT.sack_percent_full, {"percent", int(i32(math.round(sack_full() * 100)))}), px + 290 * s, top + 18 * s, 13 * s, GREY)
+	label(fill(TEXT.larder_percent_full, {"percent", int(i32(math.round(larder_litres(l) / LARDER_LITRES * 100)))}), px + 470 * s, top + 18 * s, 13 * s, GREY)
 	if len(rows) == 0 {
-		label_centred("Nothing in the sack, nothing in the larder.", sw / 2, top + 50 * s, 18 * s, UI_WHITE)
+		label_centred(TEXT.nothing_in_either, sw / 2, top + 50 * s, 18 * s, UI_WHITE)
 	}
 	first := clamp(larder_choice - shown + 1, 0, max(len(rows) - shown, 0))
 	y := top + 42 * s
@@ -266,18 +266,18 @@ draw_larder_menu :: proc() {
 		}
 		ui_round_rect(px + 30 * s, y, 32 * s, 32 * s, SACK_BOX, 0.2)
 		draw_icon(item, px + 33 * s, y + 3 * s, 26 * s)
-		label(ITEM_NAME[item], px + 74 * s, y + 6 * s, 18 * s)
-		label(ui_format("%d", i32(g.prosio.sack[item])), px + 300 * s, y + 6 * s, 20 * s, g.prosio.sack[item] > 0 ? UI_WHITE : GREY)
+		label(TEXT.item_name[item], px + 74 * s, y + 6 * s, 18 * s)
+		label(number_text(int(i32(g.prosio.sack[item]))), px + 300 * s, y + 6 * s, 20 * s, g.prosio.sack[item] > 0 ? UI_WHITE : GREY)
 		if word := fresh_word(item, g.prosio.sack_fresh[item]); word != nil && g.prosio.sack[item] > 0 {
 			label(word, px + 340 * s, y + 9 * s, 13 * s, g.prosio.sack_fresh[item] < STALE ? UI_ORANGE : GREY)
 		}
-		label(ui_format("%d", i32(l.stock[item])), px + 480 * s, y + 6 * s, 20 * s, l.stock[item] > 0 ? UI_WHITE : GREY)
+		label(number_text(int(i32(l.stock[item]))), px + 480 * s, y + 6 * s, 20 * s, l.stock[item] > 0 ? UI_WHITE : GREY)
 		if word := fresh_word(item, l.fresh[item]); word != nil && l.stock[item] > 0 {
 			label(word, px + 520 * s, y + 9 * s, 13 * s, l.fresh[item] < STALE ? UI_ORANGE : GREY)
 		}
 		y += row
 	}
-	label_centred("UP / DOWN: choose     RIGHT: one in     LEFT: one out     {Action}: all of it     {Close}: close", sw / 2, py + ph - 40 * s, 15 * s, UI_YELLOW)
+	label_centred(TEXT.larder_help, sw / 2, py + ph - 40 * s, 15 * s, UI_YELLOW)
 }
 
 // A larder: a wooden cupboard on short legs under a little roof, with a

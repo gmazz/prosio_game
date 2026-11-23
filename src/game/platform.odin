@@ -866,33 +866,6 @@ ui_text_width :: proc(text: cstring, size: f32) -> f32 {
 	return rl.MeasureTextEx(pixel_font, expand_keys(text), f32(pixel_font.baseSize) * k, 0).x
 }
 
-// Formats a number into a short text, e.g. ui_format("%d kg", 80). Button
-// names in braces are written out first: raylib's TextFormat (Odin's own
-// formatter underneath) would take the braces for its own.
-ui_format :: proc(format: cstring, value: i32) -> cstring {
-	return rl.TextFormat(expand_keys(format), value)
-}
-
-// Three numbers.
-ui_format3 :: proc(format: cstring, a, b, c: i32) -> cstring {
-	return rl.TextFormat(expand_keys(format), a, b, c)
-}
-
-// A name and two numbers, e.g. ui_format_title("%s: +%d%% (up to %d%%)", "Baker", 40, 80).
-ui_format_title :: proc(format: cstring, name: cstring, a, b: i32) -> cstring {
-	return rl.TextFormat(expand_keys(format), name, a, b)
-}
-
-// The same with a name, e.g. ui_format_name("my %s", "PIE").
-ui_format_name :: proc(format: cstring, name: cstring) -> cstring {
-	return rl.TextFormat(expand_keys(format), name)
-}
-
-// The same with two numbers, e.g. ui_format2("%d/%d", 2, 3).
-ui_format2 :: proc(format: cstring, a, b: i32) -> cstring {
-	return rl.TextFormat(expand_keys(format), a, b)
-}
-
 // Darkens the edges of the screen a little, to draw the eye to the middle.
 // reach is how far in the dark comes: 1 is the usual narrow band.
 ui_vignette :: proc(strength: u8, reach: f32 = 1) {

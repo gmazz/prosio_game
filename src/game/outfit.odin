@@ -125,16 +125,6 @@ Preset :: enum {
 	Chef,
 	Bare,
 }
-PRESET_NAME := [Preset]cstring {
-	.Explorer      = "Explorer",
-	.Metalhead     = "Metalhead",
-	.Eighties_Nerd = "80s computer kid",
-	.Keynote       = "Black turtleneck",
-	.Aviator       = "Aviator",
-	.Space_Pirate  = "Space pirate",
-	.Chef          = "Chef",
-	.Bare          = "Bare pig",
-}
 
 // Which whole outfit he has on, if it is exactly one of them.
 worn_preset :: proc() -> (preset: Preset, whole: bool) {
@@ -160,48 +150,7 @@ Outfit_Row :: enum {
 	Feet,
 }
 
-ROW_NAME := [Outfit_Row]cstring {
-	.Preset   = "Whole outfit",
-	.Hair     = "Hair",
-	.Hat      = "Hat",
-	.Glasses  = "Glasses",
-	.Face     = "Face",
-	.Earrings = "Rings",
-	.Neck     = "Neck",
-	.Shirt    = "Shirt",
-	.Over     = "On top",
-	.Legs     = "Legs",
-	.Feet     = "Feet",
-}
-// The heading over the first row of each part of him.
-ROW_SECTION := #partial [Outfit_Row]cstring {
-	.Hair  = "HEAD",
-	.Neck  = "TORSO",
-	.Legs  = "LEGS",
-	.Feet  = "FEET",
-}
 
-HAIR_NAME := [Hair]cstring{.Tuft = "A tuft", .None = "Bald", .Long_Black = "Long and black", .Shaggy = "Long and shaggy", .Bowl = "Bowl cut", .Grey = "Short and grey"}
-HAT_NAME := [Hat]cstring{.Headband = "Headband", .None = "Nothing", .Straw_Hat = "Straw hat", .Top_Hat = "Top hat", .Beanie = "Woolly hat", .Crown = "Crown", .Flying_Cap = "Flying cap", .Chef_Hat = "Chef's hat"}
-GLASSES_NAME := [Glasses]cstring{.None = "None", .Round = "Round glasses", .Sunglasses = "Sunglasses", .Monocle = "Monocle", .Nerd = "Big square glasses", .Eyepatch = "Eyepatch"}
-FACE_NAME := [Face]cstring{.None = "Nothing", .Moustache = "Moustache", .Beard = "Beard", .Lipstick = "Lipstick", .Scar = "Scar", .Stubble = "Grey stubble"}
-EARRINGS_NAME := [Earrings]cstring{.None = "None", .Ears = "Earrings", .Nose = "Nose ring", .Both = "Ears and nose"}
-NECK_NAME := [Neck]cstring{.Kerchief = "Kerchief", .None = "Nothing", .Scarf = "White scarf", .Tie = "Red tie", .Bow_Tie = "Bow tie"}
-SHIRT_NAME := [Shirt]cstring {
-	.Jacket       = "Explorer jacket",
-	.None         = "Nothing",
-	.T_Shirt      = "Red T-shirt",
-	.Sailor       = "Sailor shirt",
-	.Band_Tee     = "Band T-shirt",
-	.Computer_Tee = "Computer T-shirt",
-	.Turtleneck   = "Black turtleneck",
-	.White_Shirt  = "White shirt",
-	.Pirate_Top   = "Skull and bones",
-	.Chef_Jacket  = "Chef's jacket",
-}
-OVER_NAME := [Over]cstring{.None = "Nothing", .Gilet = "Gilet", .Coat = "Long coat", .Leather = "Leather jacket", .Trench = "Trench coat", .Cape = "Cape", .Apron = "Apron"}
-LEGS_NAME := [Legwear]cstring{.Shorts = "Shorts", .None = "Nothing", .Jeans = "Jeans", .Skirt = "Skirt", .Leather = "Black leather", .Cords = "Brown cords", .Checks = "Grey checks"}
-FEET_NAME := [Footwear]cstring{.Hooves = "Bare hooves", .Sneakers = "White sneakers", .Trainers = "Grey trainers", .Boots = "Brown boots", .Black_Boots = "Tall black boots", .Sandals = "Sandals"}
 
 // Steps one row's choice on, or back, round in a circle.
 cycle :: proc(value: ^$T, step: int) {
@@ -235,17 +184,17 @@ outfit_choice :: proc(row: Outfit_Row) -> cstring {
 	switch row {
 	case .Preset:
 		which, whole := worn_preset()
-		return whole ? PRESET_NAME[which] : "A mixture"
-	case .Hair:     return HAIR_NAME[outfit.hair]
-	case .Hat:      return HAT_NAME[outfit.hat]
-	case .Glasses:  return GLASSES_NAME[outfit.glasses]
-	case .Face:     return FACE_NAME[outfit.face]
-	case .Earrings: return EARRINGS_NAME[outfit.earrings]
-	case .Neck:     return NECK_NAME[outfit.neck]
-	case .Shirt:    return SHIRT_NAME[outfit.shirt]
-	case .Over:     return OVER_NAME[outfit.over]
-	case .Legs:     return LEGS_NAME[outfit.legs]
-	case .Feet:     return FEET_NAME[outfit.feet]
+		return whole ? TEXT.preset_name[which] : TEXT.a_mixture
+	case .Hair:     return TEXT.hair_name[outfit.hair]
+	case .Hat:      return TEXT.hat_name[outfit.hat]
+	case .Glasses:  return TEXT.glasses_name[outfit.glasses]
+	case .Face:     return TEXT.face_name[outfit.face]
+	case .Earrings: return TEXT.earrings_name[outfit.earrings]
+	case .Neck:     return TEXT.neck_name[outfit.neck]
+	case .Shirt:    return TEXT.shirt_name[outfit.shirt]
+	case .Over:     return TEXT.over_name[outfit.over]
+	case .Legs:     return TEXT.legs_name[outfit.legs]
+	case .Feet:     return TEXT.feet_name[outfit.feet]
 	}
 	return ""
 }
@@ -258,7 +207,6 @@ Bag_Tab :: enum {
 	Map,
 	Controls,
 }
-BAG_TAB_NAME := [Bag_Tab]cstring{.Sack = "SACK", .Body = "BODY", .Outfit = "OUTFIT", .Map = "MAP", .Controls = "CONTROLS"}
 bag_tab: Bag_Tab
 bag_row: Outfit_Row
 bag_item: Item
@@ -333,7 +281,7 @@ draw_bag :: proc() {
 	// The tabs.
 	tx := x + 20 * s
 	for tab in Bag_Tab {
-		name := BAG_TAB_NAME[tab]
+		name := TEXT.bag_tab_name[tab]
 		tw := ui_text_width(name, 20 * s) + 20 * s
 		if tab == bag_tab {
 			ui_round_rect(tx, y + 16 * s, tw, 40 * s, {250, 172, 182, 235}, 0.4)
@@ -348,19 +296,19 @@ draw_bag :: proc() {
 	switch bag_tab {
 	case .Sack:
 		draw_bag_sack(x + 20 * s, top, w - 40 * s, s)
-		label_centred("ARROWS: choose   {Action}: eat, or choose to use   {Sack}: other panel   {Bag}: close", x + w / 2, y + h - 36 * s, 13 * s, UI_YELLOW)
+		label_centred(TEXT.sack_help, x + w / 2, y + h - 36 * s, 13 * s, UI_YELLOW)
 	case .Outfit:
 		draw_bag_outfit(x + 20 * s, top, w - 40 * s, s)
-		label_centred("UP/DOWN: row    LEFT/RIGHT: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred(TEXT.outfit_help, x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	case .Body:
 		draw_bag_body(x + 20 * s, top, w - 40 * s, s)
-		label_centred("{Sack}: other panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred(TEXT.bag_help, x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	case .Map:
 		draw_bag_map(x + 20 * s, top, w - 40 * s, s)
-		label_centred("{Sack}: other panel    {Bag}: close", x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_centred(TEXT.bag_help, x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
 	case .Controls:
 		draw_controls_panel(x + 20 * s, top, w - 40 * s, s)
-		label_centred("ARROWS: choose    {Confirm}: change    {Sack}: panel    {Bag}: close", x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
+		label_centred(TEXT.controls_help, x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
 	}
 }
 
@@ -481,7 +429,7 @@ draw_bag_map :: proc(x, y, w, s: f32) {
 	for r, kind in REGIONS {
 		if g.seen_region[kind] {
 			at := to_map(r.centre, x, y, cell)
-			label_centred(r.name, at.x, at.y - 7 * s, 14 * s, UI_WHITE)
+			label_centred(TEXT.region_name[kind], at.x, at.y - 7 * s, 14 * s, UI_WHITE)
 		}
 	}
 	// And himself, blinking.
@@ -492,7 +440,7 @@ draw_bag_map :: proc(x, y, w, s: f32) {
 	ahead := at + facing_dir(p.facing) * 9 * s
 	ui_circle(ahead.x, ahead.y, 2 * s, UI_DARK)
 
-	label("The dark parts are still to explore.", x, y + cell * MAP_H + 14 * s, 18 * s, {200, 200, 200, 255})
+	label(TEXT.map_dark, x, y + cell * MAP_H + 14 * s, 18 * s, {200, 200, 200, 255})
 }
 
 // Everything that can be in the sack, gathered or baked, and how many.
@@ -513,34 +461,34 @@ draw_bag_sack :: proc(x, y, w, s: f32) {
 		if count == 0 {
 			ui_round_rect(bx, by, size, size, {60, 60, 60, 140}, 0.2) // none yet: greyed
 		}
-		label_centred(ui_format("%d", i32(count)), bx + size / 2, by + size + 4 * s, 16 * s, count > 0 ? UI_WHITE : Color{150, 150, 150, 255})
+		label_centred(number_text(int(i32(count))), bx + size / 2, by + size + 4 * s, 16 * s, count > 0 ? UI_WHITE : Color{150, 150, 150, 255})
 	}
 	// The chosen one: what it is worth, and what is in it.
 	rows := (len(Item) + SACK_COLUMNS - 1) / SACK_COLUMNS
 	info := y + f32(rows) * (size + 28 * s) + 10 * s
 	defer draw_content(bag_item, x, info + 100 * s, w, s)
-	label(ITEM_NAME[bag_item], x, info, 28 * s)
+	label(TEXT.item_name[bag_item], x, info, 28 * s)
 	if is_food(bag_item) {
-		label(ui_format("%d kcal", i32(sack_piece_kcal(bag_item))), x, info + 36 * s, 22 * s, UI_YELLOW)
+		label(fill(TEXT.kcal, {"kcal", int(i32(sack_piece_kcal(bag_item)))}), x, info + 36 * s, 22 * s, UI_YELLOW)
 		// How fresh what he has of it is (or that it keeps).
 		if p.sack[bag_item] > 0 {
 			word := fresh_word(bag_item, p.sack_fresh[bag_item])
 			if word == nil {
-				word = "keeps"
+				word = TEXT.keeps
 			}
-			label(word, x + w - ui_text_width(word, 18 * s), info + 6 * s, 18 * s, word == "going off!" ? UI_ORANGE : Color{200, 220, 200, 255})
+			label(word, x + w - ui_text_width(word, 18 * s), info + 6 * s, 18 * s, word == TEXT.going_off ? UI_ORANGE : Color{200, 220, 200, 255})
 		}
 	}
 	switch {
 	case !is_food(bag_item):
 		// Not food: what it is for.
-		label(THING_ABOUT[bag_item], x, info + 40 * s, 18 * s, {220, 200, 180, 255})
+		label(TEXT.thing_about[bag_item], x, info + 40 * s, 18 * s, {220, 200, 180, 255})
 	case !edible(bag_item):
-		how: cstring = "Not to eat raw: the fire by the pond cooks it"
+		how: cstring = TEXT.not_raw
 		if bag_item == .Wheat {
-			how = "Not to eat: the mill grinds it into flour"
+			how = TEXT.not_to_eat_wheat
 		} else if bag_item == .Flour {
-			how = "Not to eat: bake it in the oven"
+			how = TEXT.not_to_eat_flour
 		}
 		label(how, x, info + 66 * s, 18 * s, {220, 200, 180, 255})
 	case:
@@ -551,9 +499,9 @@ draw_bag_sack :: proc(x, y, w, s: f32) {
 		for kg in ([4]f32{meal.carbs, meal.fat, meal.protein, meal.fibre}) {
 			grams += i32(math.round(kg * 100))
 		}
-		label(ui_format2("+%d.%02d kg", grams / 100, grams % 100), x + 170 * s, info + 36 * s, 22 * s, UI_GREEN)
+		label(fill(TEXT.plus_kg, {"kg", Decimal{int(grams), 2}}), x + 170 * s, info + 36 * s, 22 * s, UI_GREEN)
 		if is_dish(bag_item) && COOK_RANGE[recipe_for(bag_item).at][1] > 1 {
-			label("Cooked: richer than what went in", x, info + 66 * s, 18 * s, {220, 200, 180, 255})
+			label(TEXT.cooked_richer, x, info + 66 * s, 18 * s, {220, 200, 180, 255})
 		}
 	}
 }
@@ -568,8 +516,8 @@ draw_content :: proc(item: Item, x, y, w, s: f32) {
 	}
 	c := composition(item)
 	m := piece_meal(item)
-	label("MADE OF, IN SHARES OF ITS KCAL:", x, y, 15 * s, UI_ORANGE)
-	label("IN ONE PIECE", x + w - ui_text_width("IN ONE PIECE", 13 * s) - 10 * s, y + 2 * s, 13 * s, {200, 200, 200, 255})
+	label(TEXT.made_of, x, y, 15 * s, UI_ORANGE)
+	label(TEXT.in_one_piece, x + w - ui_text_width(TEXT.in_one_piece, 13 * s) - 10 * s, y + 2 * s, 13 * s, {200, 200, 200, 255})
 	bar_w := w - 10 * s
 	left := x
 	for share, i in c {
@@ -593,17 +541,17 @@ draw_content :: proc(item: Item, x, y, w, s: f32) {
 		cy := y + 42 * s + f32(i / 2) * 22 * s
 		none := share < 0.5
 		ui_rect(cx, cy + 3 * s, 9 * s, 9 * s, NUTRIENT_COLOR[n])
-		label(NUTRIENT_NAME[n], cx + 14 * s, cy, size, none ? GREY : UI_WHITE)
-		per := ui_format("%d%%", i32(math.round(share)))
+		label(TEXT.nutrient_name[n], cx + 14 * s, cy, size, none ? GREY : UI_WHITE)
+		per := fill(TEXT.percent, {"percent", int(i32(math.round(share)))})
 		label(per, cx + 160 * s - ui_text_width(per, size), cy, size, none ? GREY : UI_YELLOW)
 		if none {
 			continue
 		}
 		if n == .Vitamins || n == .Electrolytes {
-			label(ui_format("+%d", i32(math.round(amounts[n]))), cx + 168 * s, cy, size, UI_GREEN)
+			label(fill("+{n}", {"n", int(i32(math.round(amounts[n])))}), cx + 168 * s, cy, size, UI_GREEN)
 		} else {
 			hundredths := i32(math.round(amounts[n] * 100))
-			label(ui_format2("+%d.%02d kg", hundredths / 100, hundredths % 100), cx + 168 * s, cy, size, UI_GREEN)
+			label(fill(TEXT.plus_kg, {"kg", Decimal{int(hundredths), 2}}), cx + 168 * s, cy, size, UI_GREEN)
 		}
 	}
 }
@@ -616,28 +564,28 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 	GREY :: Color{200, 200, 200, 255}
 	trend_word :: proc(change: f32, x, y, size: f32) {
 		if change > 0.0005 {
-			label("growing", x, y, size, UI_GREEN)
+			label(TEXT.growing, x, y, size, UI_GREEN)
 		} else if change < -0.0005 {
-			label("fading", x, y, size, UI_ORANGE)
+			label(TEXT.fading, x, y, size, UI_ORANGE)
 		}
 	}
 	// What he weighs, as the sum of his parts: the bar, and each part's
 	// kilograms under it.
-	label(weight_text("HE WEIGHS %d.%d kg"), x, y, 22 * s)
-	label("the sum of:", x + w - ui_text_width("the sum of:", 13 * s), y + 5 * s, 13 * s, GREY)
+	label(weight_text(TEXT.he_weighs), x, y, 22 * s)
+	label(TEXT.the_sum_of, x + w - ui_text_width(TEXT.the_sum_of, 13 * s), y + 5 * s, 13 * s, GREY)
 	draw_weight_stack(x, y + 30 * s, w, 14 * s, s)
 	for part in Part {
 		i := int(part)
 		px := x + f32(i % 4) * w / 4
 		py := y + 52 * s + f32(i / 4) * 19 * s
 		ui_rect(px, py + 3 * s, 9 * s, 9 * s, PART_COLOR[part])
-		label(PART_NAME[part], px + 13 * s, py, 11 * s, GREY)
+		label(TEXT.part_name[part], px + 13 * s, py, 11 * s, GREY)
 		label(kg_text(part_kg(part)), px + 70 * s, py, 12 * s)
 	}
 	if p.fat_trend > 0.01 {
-		label("getting fatter", x + w - 100 * s, y + 5 * s, 13 * s, UI_ORANGE)
+		label(TEXT.getting_fatter, x + w - 100 * s, y + 5 * s, 13 * s, UI_ORANGE)
 	} else if p.fat_trend < -0.01 {
-		label("getting thinner", x + w - 108 * s, y + 5 * s, 13 * s, UI_GREEN)
+		label(TEXT.getting_thinner, x + w - 108 * s, y + 5 * s, 13 * s, UI_GREEN)
 	}
 
 	ry := y + 94 * s
@@ -645,11 +593,11 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 	bar_w := 190 * s
 	for t in Trait {
 		if t == .Arms {
-			label("MUSCLE", x, ry, 15 * s, UI_ORANGE)
+			label(TEXT.muscle, x, ry, 15 * s, UI_ORANGE)
 			ry += text_height(15 * s)
 		}
 		if t == .Lungs {
-			label("SKILLS", x, ry, 15 * s, UI_ORANGE)
+			label(TEXT.skills, x, ry, 15 * s, UI_ORANGE)
 			ry += text_height(15 * s)
 		}
 		level := p.trait[t]
@@ -657,22 +605,22 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			// The kitchen's skills, a line each: never forgotten, so there is
 			// no trend to show, only what he is called and what it is worth.
 			if t == .Baking {
-				label("IN THE KITCHEN (never forgotten)", x, ry, 15 * s, UI_ORANGE)
+				label(TEXT.in_the_kitchen, x, ry, 15 * s, UI_ORANGE)
 				ry += text_height(15 * s)
 			}
 			at := t == .Baking ? Station_Kind.Oven : (t == .Grilling ? Station_Kind.Fire : Station_Kind.Churn)
 			short := bar_w * 0.55
-			label(TRAIT_NAME[t], x, ry, 15 * s)
+			label(TEXT.trait_name[t], x, ry, 15 * s)
 			ui_rect(bar_x - 2 * s, ry + 2 * s, short + 4 * s, 13 * s, UI_DARK)
 			ui_rect(bar_x, ry + 4 * s, short, 9 * s, {96, 110, 120, 255})
 			ui_rect(bar_x, ry + 4 * s, short * level, 9 * s, NEED_POWER)
 			bonus := i32(math.round((cook_bonus(at) - 1) * 100))
 			most := i32(math.round((COOK_RANGE[at][1] - 1) * 100))
-			label(ui_format_title("%s: +%d%% (of +%d%%)", cook_title(at), bonus, most), bar_x + short + 12 * s, ry + 1 * s, 13 * s, UI_YELLOW)
+			label(fill(TEXT.cook_bonus_short, {"title", cook_title(at)}, {"percent", int(bonus)}, {"most", int(most)}), bar_x + short + 12 * s, ry + 1 * s, 13 * s, UI_YELLOW)
 			ry += text_height(15 * s) + 3 * s
 			continue
 		}
-		label(TRAIT_NAME[t], x, ry, 15 * s)
+		label(TEXT.trait_name[t], x, ry, 15 * s)
 		ui_rect(bar_x - 2 * s, ry + 2 * s, bar_w + 4 * s, 13 * s, UI_DARK)
 		if is_muscle(t) {
 			// Wasted at the left, ordinary at the mark, built to the right.
@@ -685,7 +633,7 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			at := level >= 0 ? ordinary + bar_w * 0.75 * level : ordinary + bar_w * 0.25 * level
 			ui_rect(at - 1.5 * s, ry + 1 * s, 3 * s, 15 * s, UI_WHITE)
 			kg := muscle_kg(t)
-			label(ui_format2("%d.%d kg", i32(kg), i32(kg * 10) % 10), bar_x + bar_w + 10 * s, ry, 13 * s)
+			label(fill(TEXT.kg, {"kg", Decimal{int(i32(kg * 10)), 1}}), bar_x + bar_w + 10 * s, ry, 13 * s)
 		} else {
 			ui_rect(bar_x, ry + 4 * s, bar_w, 9 * s, {96, 110, 120, 255})
 			ui_rect(bar_x, ry + 4 * s, bar_w * level, 9 * s, NEED_POWER)
@@ -694,8 +642,8 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 		// What makes it grow, and what it is good for, each on a line of its
 		// own under it (spaced by the font's own lines).
 		name_h, note_h := text_height(15 * s), text_height(12 * s)
-		label(TRAIT_GROWS[t], x + 10 * s, ry + name_h, 12 * s, GREY)
-		label(TRAIT_GIVES[t], x + 10 * s, ry + name_h + note_h, 12 * s, UI_YELLOW)
+		label(TEXT.trait_grows[t], x + 10 * s, ry + name_h, 12 * s, GREY)
+		label(TEXT.trait_gives[t], x + 10 * s, ry + name_h + note_h, 12 * s, UI_YELLOW)
 		ry += name_h + 2 * note_h + 3 * s
 	}
 }
@@ -704,7 +652,7 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 draw_bag_outfit :: proc(x, y, w, s: f32) {
 	ry := y - 6 * s
 	for row in Outfit_Row {
-		if section := ROW_SECTION[row]; section != nil {
+		if section := TEXT.row_section[row]; section != nil {
 			label(section, x, ry + 4 * s, 15 * s, UI_ORANGE)
 			ry += 22 * s
 		}
@@ -713,7 +661,7 @@ draw_bag_outfit :: proc(x, y, w, s: f32) {
 			ui_round_rect(x - 8 * s, ry - 5 * s, w + 16 * s, 33 * s, {118, 78, 60, 255}, 0.3)
 		}
 		size := 19 * s
-		label(ROW_NAME[row], x + 10 * s, ry + 1 * s, size, chosen ? UI_YELLOW : UI_WHITE)
+		label(TEXT.row_name[row], x + 10 * s, ry + 1 * s, size, chosen ? UI_YELLOW : UI_WHITE)
 		choice := outfit_choice(row)
 		cw := ui_text_width(choice, size)
 		right := x + w - 10 * s

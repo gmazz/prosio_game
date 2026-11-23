@@ -362,7 +362,7 @@ agent_line :: proc() {
 	}
 	fmt.printf("now: at (%.1f, %.1f)", p.pos.x, p.pos.y)
 	if g.in_region {
-		fmt.printf(" in %s", game.REGIONS[g.region].name)
+		fmt.printf(" in %s", game.TEXT.region_name[g.region])
 	}
 	fmt.printf(", %.1f kg, stamina %.0f, %s", p.kg, p.stamina, agent_carrying())
 	if p.height > 0.05 {
@@ -431,19 +431,19 @@ agent_look :: proc(radius: f32) {
 	case .Menu, .Paused:
 		fmt.printfln("The %s is open. u and d choose, e selects%s.", agent_scene_name(), game.scene == .Paused ? ", p closes it" : "")
 		for item, i in game.menu_items() {
-			text := item == .Look ? game.look_text() : game.MENU_TEXT[item]
+			text := item == .Look ? game.look_text() : game.TEXT.menu_text[item]
 			fmt.printfln("  %s %s", i == game.menu_choice ? ">" : " ", text)
 		}
 		return
 	case .Oven:
 		buf: [len(game.RECIPES)]^game.Recipe
 		recipes := game.station_recipes(game.cook_at, &buf)
-		fmt.printfln("The menu of %s is open. u and d choose, l and r change how many, e or a makes it, p or g closes.", game.STATION_NAME[game.cook_at])
+		fmt.printfln("The menu of %s is open. u and d choose, l and r change how many, e or a makes it, p or g closes.", game.TEXT.station_name[game.cook_at])
 		for r, i in recipes {
-			fmt.printf("  %s %s: needs", i == game.cook_choice ? ">" : " ", game.ITEM_NAME[r.dish])
+			fmt.printf("  %s %s: needs", i == game.cook_choice ? ">" : " ", game.TEXT.item_name[r.dish])
 			for need in r.needs {
 				if need.count > 0 {
-					fmt.printf(" %d %s (has %d)", need.count, game.ITEM_NAME[need.item], p.sack[need.item])
+					fmt.printf(" %d %s (has %d)", need.count, game.TEXT.item_name[need.item], p.sack[need.item])
 				}
 			}
 			fmt.printfln("; he can make %d", game.max_batch(r))
@@ -455,18 +455,18 @@ agent_look :: proc(radius: f32) {
 		fmt.println("The larder is open. u and d choose, r puts one in, l takes one out, e moves all of it, p or g closes.")
 		buf: [len(game.Item)]game.Item
 		for item, i in game.larder_rows(l, &buf) {
-			fmt.printfln("  %s %s: %d in the sack, %d in the larder", i == game.larder_choice ? ">" : " ", game.ITEM_NAME[item], p.sack[item], l.stock[item])
+			fmt.printfln("  %s %s: %d in the sack, %d in the larder", i == game.larder_choice ? ">" : " ", game.TEXT.item_name[item], p.sack[item], l.stock[item])
 		}
 		return
 	case .Bag:
 		fmt.printfln("The sack, body, outfit and map menu is open on the %v panel. z and c switch panels, m or p closes.", game.bag_tab)
 		#partial switch game.bag_tab {
 		case .Sack:
-			fmt.printfln("  the arrows choose, e or q eats (or, for a thing to use, chooses it and closes the menu). Chosen: %s (he has %d)", game.ITEM_NAME[game.bag_item], p.sack[game.bag_item])
+			fmt.printfln("  the arrows choose, e or q eats (or, for a thing to use, chooses it and closes the menu). Chosen: %s (he has %d)", game.TEXT.item_name[game.bag_item], p.sack[game.bag_item])
 			fmt.print("  in the sack:")
 			for n, item in p.sack {
 				if n > 0 {
-					fmt.printf(" %s %d,", game.ITEM_NAME[item], n)
+					fmt.printf(" %s %d,", game.TEXT.item_name[item], n)
 				}
 			}
 			fmt.println()
@@ -475,7 +475,7 @@ agent_look :: proc(radius: f32) {
 		case .Controls:
 			fmt.println("  each action, its controller button and its two keys (the agent's own letters stay as they are):")
 			for b, i in game.REMAPPABLE {
-				fmt.printfln("  %s %s: %s, %s, %s", i == game.controls_row ? ">" : " ", game.CONTROL_NAME[b], game.PAD_NAME[game.bindings[b].pad], game.key_name(game.bindings[b].keys[0]), game.key_name(game.bindings[b].keys[1]))
+				fmt.printfln("  %s %s: %s, %s, %s", i == game.controls_row ? ">" : " ", game.TEXT.control_name[b], game.TEXT.pad_name[game.bindings[b].pad], game.key_name(game.bindings[b].keys[0]), game.key_name(game.bindings[b].keys[1]))
 			}
 			fmt.printfln("  %s back to the defaults", game.controls_row == len(game.REMAPPABLE) ? ">" : " ")
 		case:
@@ -491,7 +491,7 @@ agent_look :: proc(radius: f32) {
 	}
 	fmt.printf("facing %s; chosen in the sack: ", agent_facing())
 	if p.sack[p.sack_sel] > 0 {
-		fmt.printfln("%s (%d)", game.ITEM_NAME[p.sack_sel], p.sack[p.sack_sel])
+		fmt.printfln("%s (%d)", game.TEXT.item_name[p.sack_sel], p.sack[p.sack_sel])
 	} else {
 		fmt.println("nothing")
 	}
@@ -524,7 +524,7 @@ agent_look :: proc(radius: f32) {
 		}
 		extra := ""
 		if e.has_loot {
-			extra = fmt.tprintf(", carrying his %s", game.ITEM_NAME[e.loot])
+			extra = fmt.tprintf(", carrying his %s", game.TEXT.item_name[e.loot])
 		}
 		if e.kind == .Goat && e.state != .Dead {
 			extra = e.milk_t <= 0 ? ", has milk" : ", no milk yet"
@@ -601,7 +601,7 @@ agent_look :: proc(radius: f32) {
 		if !game.station_standing(at) {
 			continue
 		}
-		how := st.ready ? fmt.tprintf("ready: %d %s", st.count, game.ITEM_NAME[st.dish]) : (st.baking ? fmt.tprintf("busy, %.0f s to go", st.bake_t) : "empty")
+		how := st.ready ? fmt.tprintf("ready: %d %s", st.count, game.TEXT.item_name[st.dish]) : (st.baking ? fmt.tprintf("busy, %.0f s to go", st.bake_t) : "empty")
 		add(&things, st.pos, radius, at == .Camp ? fmt.tprintf("his campfire (%s)", how) : fmt.tprintf("the %v (%s)", at, how))
 	}
 	add(&things, g.mill.pos, radius, fmt.tprintf("the mill (%d sheaves grinding, %d flour ready)", g.mill.grinding, g.mill.ready))
@@ -654,7 +654,7 @@ agent_map :: proc() {
 	g := &game.g
 	fmt.println("The meadow runs from x -100 to 100 and y -70 to 70; home is at (0, 0). Right is larger x, down is larger y.")
 	for r, kind in game.REGIONS {
-		fmt.printfln("  %-14s %-52s %s%s", r.name, r.about, agent_where(r.centre), g.seen_region[kind] ? "" : "  (not been there)")
+		fmt.printfln("  %-14s %-52s %s%s", game.TEXT.region_name[kind], game.TEXT.region_about[kind], agent_where(r.centre), g.seen_region[kind] ? "" : "  (not been there)")
 	}
 	fmt.println("Fixed places:")
 	for st, at in g.stations {

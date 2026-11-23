@@ -384,7 +384,7 @@ update_enemies :: proc(dt: f32) {
 					p.need[.Electrolytes] = max(p.need[.Electrolytes] - LICK * dt, 0)
 					licked = true
 				}
-				hint("Hee hee! That tickles!")
+				hint(TEXT.tickles)
 				if math.mod(g.time + f32(index) * 0.37, 0.7) < dt {
 					spawn_particle({e.pos.x, 1.3, e.pos.y}, {0, 1, 0}, 0.8, 0.09, COLOR_HEART, 0)
 				}
@@ -402,7 +402,7 @@ update_enemies :: proc(dt: f32) {
 			if out := beyond_edge(e.pos); out > FOG_LOST || (out > 0 && e.y <= 0 && e.vy < 0) {
 				// Into the fog beyond the meadow: lost.
 				if length2(e.pos - p.pos) < 25 {
-					say("Bye bye! Into the fog...", 1.4)
+					say(TEXT.into_the_fog, 1.4)
 				}
 				leave(&e)
 				continue
@@ -451,7 +451,7 @@ update_enemies :: proc(dt: f32) {
 				e.limp = 0
 				burst({e.pos.x, 0.2, e.pos.y}, 22, 5, POND_SPLASH, 0.13)
 				if length2(e.pos - p.pos) < 25 {
-					say(e.ko ? "Sploosh!" : (DROWN_RATE[e.kind] > 10 ? "SPLASH! Can turkeys swim?" : "SPLASH! Swim for it!"), 1.2)
+					say(e.ko ? TEXT.sploosh : (DROWN_RATE[e.kind] > 10 ? TEXT.splash_turkey : TEXT.splash_swim), 1.2)
 				}
 				continue
 			}
@@ -509,7 +509,7 @@ update_enemies :: proc(dt: f32) {
 				burst({e.pos.x, 0.3, e.pos.y}, 12, 2, POND_SPLASH, 0.1)
 				e.drowned_t = 0
 				if length2(e.pos - p.pos) < 25 {
-					say("Glub glub... oops! Bottoms up!", 1.6)
+					say(TEXT.bottoms_up, 1.6)
 				}
 			}
 			if math.mod(g.time + f32(index) * 0.29, 0.35) < dt {
@@ -735,7 +735,7 @@ fox_velocity :: proc(e: ^Enemy, dist: f32, toward: Vec2, dt: f32) -> Vec2 {
 			e.yield_dir = normalize2(-toward)
 			e.yield_t = QUAD_YIELD_TIME
 			if dist < 40 {
-				say_named("Oh no! The fox ate my %s!", ITEM_NAME[e.loot])
+				say_filled(fill(TEXT.fox_ate, {"thing", TEXT.item_name[e.loot]}))
 			}
 			return e.yield_dir * QUAD_YIELD_SPEED
 		}
@@ -773,7 +773,7 @@ steal :: proc(e: ^Enemy) {
 	e.has_loot = true
 	e.loot_t = 0
 	sack_step(0)
-	say_named("Hey! The fox took my %s!", ITEM_NAME[best])
+	say_filled(fill(TEXT.fox_took, {"thing", TEXT.item_name[best]}))
 	burst({p.pos.x, p.height + 1.2 * PROSIO_SIZE, p.pos.y}, 6, 2.5, COLOR_STAR, 0.08)
 }
 
@@ -789,7 +789,7 @@ drop_loot :: proc(e: ^Enemy) {
 	if sack_room(e.loot) > 0 {
 		sack_add(e.loot, e.loot_kcal)
 		sack_step(0)
-		say_named("Got my %s back!", ITEM_NAME[e.loot])
+		say_filled(fill(TEXT.got_back, {"thing", TEXT.item_name[e.loot]}))
 	}
 }
 
@@ -809,16 +809,16 @@ use_held_animal :: proc() {
 	e := &g.enemies[p.carry_index]
 	switch {
 	case e.ko && MEAT_FROM[e.kind] == 0:
-		answer("Nobody eats fox.")
+		answer(TEXT.nobody_eats_fox)
 	case e.ko:
 		fire, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2)
 		if !at_fire {
-			answer("The chopping block is by the fire, at the pond (or by my campfire).")
+			answer(TEXT.chopping_block)
 			return
 		}
 		room := sack_room(.Meat)
 		if room <= 0 {
-			answer("No room in my sack for meat!")
+			answer(TEXT.no_room_meat)
 			return
 		}
 		// A body that has lain a while gives poorer meat, nearer going off.
@@ -837,13 +837,13 @@ use_held_animal :: proc() {
 		p.lift_t = 0
 		p.carry_kg = 0
 		p.swinging = false
-		say("Chop, chop, chop! Meat for the fire!", 1.8)
+		say(TEXT.chop, 1.8)
 	case e.kind == .Goat:
 		milk_goat(e, e.chain[1])
 	case e.kind == .Billy:
-		answer("A billy goat gives no milk!")
+		answer(TEXT.billy_no_milk)
 	case:
-		answer("Nothing to do with this one but bash or throw it.")
+		answer(TEXT.only_bash)
 	}
 }
 
@@ -851,15 +851,15 @@ use_held_animal :: proc() {
 // off him, or in a pen.
 milk_goat :: proc(e: ^Enemy, at: Vec3) {
 	if e.milk_t > 0 {
-		answer("This goat has no milk just now.")
+		answer(TEXT.goat_no_milk)
 	} else if sack_room(.Milk) < 1 {
-		answer("No room in my sack for more milk!")
+		answer(TEXT.no_room_milk)
 	} else {
 		sack_add(.Milk, RAW_KCAL[.Milk])
 		sack_step(0)
 		e.milk_t = MILK_EVERY
 		train(.Hooves, MILK_WORK)
-		say("Squirt, squirt! A jug of milk!", 1.6)
+		say(TEXT.milked, 1.6)
 		burst(at, 6, 1.5, COLOR_WHITE, 0.06)
 	}
 }
@@ -1021,9 +1021,9 @@ touch_prosio :: proc(e: ^Enemy, can_shove: bool) {
 				p.dazed_t = 0.9
 				p.safe_t = 3
 				p.winded = false
-				say("Wooo... dizzy...", 1.2)
+				say(TEXT.dizzy, 1.2)
 			} else {
-				say(felt < 0.7 ? "Boing! It bounced off me!" : (e.kind == .Turkey ? "Ouch! It pecked me!" : "Oof! Headbutt!"), 0.9)
+				say(felt < 0.7 ? TEXT.bounced_off : (e.kind == .Turkey ? TEXT.pecked : TEXT.headbutt), 0.9)
 			}
 			e.vel = away * (felt < 0.7 ? 7 : 4)
 			e.timer = 1.2
@@ -1072,7 +1072,7 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 		// Prosio bounces back when he cannot send it flying.
 		p.vel = -away * hit_speed * 0.45
 		burst({e.pos.x, 0.7, e.pos.y}, 4, 2, COLOR_DUST, 0.1)
-		say("Boing! I'm too light!", 1.2)
+		say(TEXT.too_light, 1.2)
 		return
 	}
 
@@ -1081,11 +1081,11 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 	g.shake = max(g.shake, min(speed * 0.04, 0.8))
 	burst({e.pos.x, 0.7, e.pos.y}, 6 + int(speed), 3 + speed * 0.2, COLOR_STAR, 0.12)
 	if e.ko {
-		say("BOOM!", 0.9)
+		say(TEXT.boom, 0.9)
 	} else if before - e.health < ALARM_BLOW {
-		hint("Not hard enough... I need more weight!")
+		hint(TEXT.not_hard_enough)
 	} else {
-		say("Pow!", 0.6)
+		say(TEXT.pow, 0.6)
 	}
 }
 
@@ -1130,7 +1130,7 @@ stomp_enemies :: proc() -> bool {
 		p.vy = 5
 		p.peak = p.height
 		g.shake = max(g.shake, min(damage / 400, 0.6))
-		say(knocked_out ? "MEGA STOMP!" : "STOMP!", 0.8)
+		say(knocked_out ? TEXT.mega_stomp : TEXT.stomp, 0.8)
 	}
 	return hit
 }

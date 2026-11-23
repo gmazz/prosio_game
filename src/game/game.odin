@@ -101,7 +101,7 @@ scene: Scene
 menu_choice: int
 
 init :: proc(opts: Options) {
-	platform_init("Prosio", 1280, 720)
+	platform_init(TEXT.window_title, 1280, 720)
 	g.opts = opts
 	keyboard_enabled = opts.shot_path == nil && !opts.agent
 	load_controls()

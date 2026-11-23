@@ -153,17 +153,6 @@ jump_height :: proc(kg: f32) -> f32 {
 	return JUMP_ENERGY * tone(.Legs, WEAK_LEGS, LEG_SPRING) / kg
 }
 
-// The same, with a name put into the text ("Got my %s back!"). The text is
-// kept here, as the formatted one does not last.
-named_text: [96]u8
-say_named :: proc(format: cstring, name: cstring, seconds: f32 = 2) {
-	text := string(ui_format_name(format, name))
-	n := min(len(text), len(named_text) - 1)
-	copy(named_text[:n], text[:n])
-	named_text[n] = 0
-	say(cstring(&named_text[0]), seconds)
-}
-
 say :: proc(text: cstring, seconds: f32 = 1.6) {
 	g.prosio.bubble = text
 	g.prosio.bubble_t = seconds
@@ -206,7 +195,7 @@ bruise :: proc(points: f32) {
 	p.knock_t = 0
 	p.stamina = min(p.stamina, stamina_top())
 	if p.bruises > BRUISE_MOST * BRUISE_WARN {
-		hint("Ow... I'm black and blue! I must get away!")
+		hint(TEXT.black_and_blue)
 	}
 }
 
@@ -340,7 +329,7 @@ update_prosio :: proc(dt: f32) {
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 5, 2, COLOR_DUST, 0.1)
 			grounded = false
 		} else {
-			answer("Too tired to jump!")
+			answer(TEXT.too_tired_jump)
 		}
 	}
 
@@ -353,7 +342,7 @@ update_prosio :: proc(dt: f32) {
 			if p.stamina >= cost {
 				shake_tree(tree, cost)
 			} else {
-				answer("Too tired!")
+				answer(TEXT.too_tired)
 			}
 		} else if p.stamina >= cost {
 			dir := moving ? normalize2(move) : facing_dir(p.facing)
@@ -367,14 +356,14 @@ update_prosio :: proc(dt: f32) {
 			p.wobble_vel -= 2
 			burst({p.pos.x, p.height + 0.1, p.pos.y}, 6, 2, COLOR_DUST, 0.12)
 		} else {
-			answer("Too tired!")
+			answer(TEXT.too_tired)
 		}
 	}
 
 	// A heavy sack: he says so, once.
 	if sack_kg() / p.kg > LOAD_HEAVY && !p.heavy_said {
 		p.heavy_said = true
-		say("Oof! This sack is heavy...", 1.4)
+		say(TEXT.sack_heavy, 1.4)
 	} else if sack_kg() / p.kg < LOAD_HEAVY * 0.8 {
 		p.heavy_said = false
 	}
@@ -401,7 +390,7 @@ update_prosio :: proc(dt: f32) {
 			p.winded = true
 			p.sprinting = false
 			sprint_latched = false
-			say("Puff... puff...", 1.4)
+			say(TEXT.puff, 1.4)
 		}
 	}
 
@@ -502,9 +491,9 @@ update_prosio :: proc(dt: f32) {
 	} else if p.bruises >= BRUISE_MOST {
 		p.fail = .Beaten
 	} else if starving() {
-		hint(sack_has_food() ? "So hungry... {Eat}: eat from my sack!" : "So hungry... I must find food!")
+		hint(sack_has_food() ? TEXT.hungry_eat : TEXT.hungry_find)
 	} else if p.fat > FAT_MAX - FAT_DANGER {
-		hint("So full... no more food for now!")
+		hint(TEXT.too_full)
 	}
 	if p.fail != .None {
 		if p.carry != .Nothing {

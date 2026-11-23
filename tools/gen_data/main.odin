@@ -26,6 +26,10 @@ package gen_data
 // bool, or "untyped" for a bare number) makes a constant; any other type a
 // table, which is a constant only with "const": true.
 //
+// The words the game shows are in data/text/<language>.json, one file to a
+// language, made into one struct of texts (src/game/gen_text.odin): see
+// generate_text below.
+//
 //   tools/gen_data.sh     (the build scripts run it)
 
 import "core:fmt"
@@ -60,10 +64,21 @@ main :: proc() {
 			}
 		}
 	}
+	if code, ok := generate_text(path_join(root, "data", "text")); ok {
+		out := path_join(out_dir, "gen_text.odin")
+		append(&written, "gen_text.odin")
+		old, _ := os.read_entire_file(out, context.allocator)
+		if string(old) != code && os.write_entire_file(out, code) != nil {
+			fmt.eprintfln("gen_data: could not write %s", out)
+			failed = true
+		}
+	} else {
+		failed = true
+	}
 	// A generated file whose data file is gone goes too.
 	if existing, err := filepath.glob(path_join(out_dir, "gen_*.odin")); err == nil {
 		for path in existing {
-			if !slice.contains(written[:], filepath.base(path)) && !strings.has_prefix(filepath.base(path), "gen_text") {
+			if !slice.contains(written[:], filepath.base(path)) {
 				os.remove(path)
 			}
 		}
@@ -465,4 +480,306 @@ write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path: string
 		}
 		fmt.sbprintfln(b, "%s %s %s%s%s", name, constant ? "::" : ":=", partial ? "#partial " : "", type, lit)
 	}
+}
+
+// ---- Writing the texts as Odin. ----
+//
+// A text file is an object of sections (objects); "_language" names the
+// language in the code (English, Polish), "_name" is how the menu shows it,
+// and any key starting with "_" is a note. In a section, every other key, in
+// small letters, is a text the code reads as TEXT.<key>:
+//
+//   "sack_full": "My sack is full!"
+//   "fox_ate": { "text": "Oh no! The fox ate my {thing}!", "about": "..." }
+//   "bash_words": ["WHACK!", "THUD!"]                         (a list)
+//   "item_name": { "_of": "Item", "Apple": "APPLE", ... }     (a table)
+//
+// A table has a text for each name of an enum ("_of"), or, marked "_some":
+// true, for only some of them (the rest have none); a text in a table can
+// be a list, or a struct ({"title": ..., "line": ...}) or a table of its own,
+// when "_type" gives the Odin type ("[Need][Level]cstring"). A section can
+// hold sections. Names in braces are filled in by the code: {kcal} with a
+// number, {Action} with the button that does it (see the README).
+//
+// English (en.json) is complete: every text the game shows. Another language
+// leaves out whatever it has not got yet, and the English stands in for it;
+// a key English does not have is a mistake, and stops the build.
+
+ODIN_WORDS :: []string{"import", "foreign", "package", "typeid", "when", "where", "if", "else", "for", "switch", "in", "not_in", "do", "case", "break", "continue", "fallthrough", "defer", "return", "proc", "struct", "union", "enum", "bit_set", "bit_field", "map", "dynamic", "auto_cast", "cast", "transmute", "distinct", "using", "context", "or_else", "or_return", "or_break", "or_continue", "asm", "matrix"}
+
+Text_Field :: struct {
+	name:  string,
+	node:  Node,
+	about: string,
+	file:  string,
+}
+
+Language_Texts :: struct {
+	file:   string,
+	enum_:  string,
+	name:   string,
+	fields: map[string]Text_Field,
+	order:  [dynamic]string,
+}
+
+gather_texts :: proc(section: Node, lang: ^Language_Texts, path: string, top: bool) -> (ok: bool) {
+	ok = true
+	for key, i in section.keys {
+		v := section.values[i]
+		switch {
+		case top && key == "_language":
+			lang.enum_ = v.text
+		case top && key == "_name":
+			lang.name = v.text
+		case strings.has_prefix(key, "_"):
+			// a note
+		case !is_field_name(key):
+			fmt.eprintfln("%s:%d: \"%s\": a text's name is in small letters, with _ between words", path, v.line, key)
+			ok = false
+		case slice.contains(ODIN_WORDS, key):
+			fmt.eprintfln("%s:%d: \"%s\" is a word of Odin's own: give the text another name", path, v.line, key)
+			ok = false
+		case v.kind == .Object && !has_key(v, "text") && !has_key(v, "_of"):
+			if !gather_texts(v, lang, path, false) {
+				ok = false
+			}
+		case:
+			if key in lang.fields {
+				fmt.eprintfln("%s:%d: \"%s\" is there twice (texts are named once in a file, whatever the section)", path, v.line, key)
+				ok = false
+				continue
+			}
+			f := Text_Field{name = key, node = v, file = path}
+			if v.kind == .Object && has_key(v, "text") {
+				f.node = get_key(v, "text")
+				f.about = get_key(v, "about").text
+			}
+			lang.fields[key] = f
+			append(&lang.order, key)
+		}
+	}
+	return
+}
+
+has_key :: proc(n: Node, key: string) -> bool {
+	return slice.contains(n.keys[:], key)
+}
+
+get_key :: proc(n: Node, key: string) -> Node {
+	for k, i in n.keys {
+		if k == key {
+			return n.values[i]
+		}
+	}
+	return {}
+}
+
+write_text_string :: proc(b: ^strings.Builder, s: string) {
+	strings.write_byte(b, '"')
+	for c in transmute([]u8)s {
+		switch c {
+		case '"':
+			strings.write_string(b, "\\\"")
+		case '\\':
+			strings.write_string(b, "\\\\")
+		case '\n':
+			strings.write_string(b, "\\n")
+		case:
+			strings.write_byte(b, c)
+		}
+	}
+	strings.write_byte(b, '"')
+}
+
+// A text, a list of them, or a struct or table of them, as an Odin literal.
+// With a fallback (English), whatever n leaves out of a table is taken from
+// it. type is n's Odin type: what is inside a table is written with its own
+// (a literal inside one without its type makes the compiler build the whole
+// table when the game starts, rather than have it ready).
+write_text_literal :: proc(b: ^strings.Builder, n: Node, fallback: Node, has_fallback: bool, type: string) {
+	inner := element_type(type)
+	switch n.kind {
+	case .Null:
+		strings.write_string(b, "nil")
+	case .String:
+		write_text_string(b, n.text)
+	case .Array:
+		strings.write_byte(b, '{')
+		for item, i in n.items {
+			if i > 0 {
+				strings.write_string(b, ", ")
+			}
+			write_text_literal(b, item, {}, false, inner)
+		}
+		strings.write_byte(b, '}')
+	case .Object:
+		strings.write_byte(b, '{')
+		count := 0
+		keys := has_fallback && fallback.kind == .Object ? fallback.keys[:] : n.keys[:]
+		for key in keys {
+			if strings.has_prefix(key, "_") {
+				continue
+			}
+			value := get_key(n, key)
+			if !has_key(n, key) {
+				value = get_key(fallback, key)
+			}
+			if count > 0 {
+				strings.write_string(b, ", ")
+			}
+			count += 1
+			fmt.sbprintf(b, "%s%s = ", is_field_name(key) ? "" : ".", key)
+			if !is_field_name(key) && (value.kind == .Object || value.kind == .Array) && inner != "" {
+				strings.write_string(b, inner)
+			}
+			write_text_literal(b, value, get_key(fallback, key), has_fallback && has_key(fallback, key), inner)
+		}
+		strings.write_byte(b, '}')
+	case .Number, .Bool:
+		strings.write_string(b, n.text)
+	}
+}
+
+// The type of what is in a table or list: "[Need][Need_State]cstring" holds
+// "[Need_State]cstring"s. Empty for anything else.
+element_type :: proc(type: string) -> string {
+	if !strings.has_prefix(type, "[") {
+		return ""
+	}
+	end := strings.index_byte(type, ']')
+	return type[end + 1:]
+}
+
+// The Odin type of a text.
+text_type :: proc(f: Text_Field) -> (type: string, ok: bool) {
+	n := f.node
+	switch n.kind {
+	case .String:
+		return "cstring", true
+	case .Array:
+		return fmt.aprintf("[%d]cstring", len(n.items)), true
+	case .Object:
+		if t := get_key(n, "_type"); t.kind == .String {
+			return fmt.aprintf("#partial %s", t.text), true
+		}
+		of := get_key(n, "_of")
+		for key, i in n.keys {
+			if strings.has_prefix(key, "_") {
+				continue
+			}
+			v := n.values[i]
+			#partial switch v.kind {
+			case .String, .Null:
+				return fmt.aprintf("#partial [%s]cstring", of.text), true
+			case .Array:
+				return fmt.aprintf("#partial [%s][%d]cstring", of.text, len(v.items)), true
+			}
+			break
+		}
+		fmt.eprintfln("%s:%d: %s: a table of anything but texts or lists needs its \"_type\"", f.file, n.line, f.name)
+	case .Null, .Number, .Bool:
+		fmt.eprintfln("%s:%d: %s: a text is a string, a list or a table", f.file, n.line, f.name)
+	}
+	return "", false
+}
+
+generate_text :: proc(dir: string) -> (code: string, ok: bool) {
+	files, _ := filepath.glob(path_join(dir, "*.json"))
+	slice.sort(files)
+	langs: [dynamic]Language_Texts
+	ok = true
+	for path in files {
+		root, read := read_file(path)
+		if !read {
+			ok = false
+			continue
+		}
+		lang := Language_Texts{file = path}
+		if !gather_texts(root, &lang, path, true) {
+			ok = false
+		}
+		if lang.enum_ == "" || !is_enum_name(lang.enum_) {
+			fmt.eprintfln("%s: name the language in \"_language\", as a word with a capital (\"English\")", path)
+			ok = false
+			continue
+		}
+		if filepath.base(path) == "en.json" {
+			inject_at(&langs, 0, lang)
+		} else {
+			append(&langs, lang)
+		}
+	}
+	if len(langs) == 0 || filepath.base(langs[0].file) != "en.json" {
+		fmt.eprintfln("%s: en.json, with every text, is missing", dir)
+		return "", false
+	}
+	if !ok {
+		return
+	}
+	english := &langs[0]
+	for &lang in langs[1:] {
+		for key in lang.order {
+			if key not_in english.fields {
+				f := lang.fields[key]
+				fmt.eprintfln("%s:%d: \"%s\" is not in en.json (misspelt, or gone from the game?)", f.file, f.node.line, key)
+				ok = false
+			}
+		}
+	}
+	b := strings.builder_make()
+	fmt.sbprintfln(&b, "package game\n")
+	fmt.sbprintfln(&b, "// Made by tools/gen_data from data/text/*.json: do not edit; edit those files.\n")
+	strings.write_string(&b, "Language :: enum u8 {\n")
+	for lang in langs {
+		fmt.sbprintfln(&b, "\t%s,", lang.enum_)
+	}
+	strings.write_string(&b, "}\n\n// How the menu names each language, in itself.\nLANGUAGE_NAME := [Language]cstring {\n")
+	for lang in langs {
+		fmt.sbprintf(&b, "\t.%s = ", lang.enum_)
+		write_text_string(&b, lang.name != "" ? lang.name : lang.enum_)
+		strings.write_string(&b, ",\n")
+	}
+	strings.write_string(&b, "}\n\n// Every text the game shows.\nText :: struct {\n")
+	for key in english.order {
+		f := english.fields[key]
+		type, typed := text_type(f)
+		if !typed {
+			ok = false
+			continue
+		}
+		if f.about != "" {
+			write_comment(&b, f.about, "\t")
+		}
+		fmt.sbprintfln(&b, "\t%s: %s,", key, strings.trim_prefix(type, "#partial "))
+	}
+	strings.write_string(&b, "}\n\n// The texts, in each language.\nTEXTS := [Language]Text {\n")
+	for lang in langs {
+		fmt.sbprintfln(&b, "\t.%s = {{", lang.enum_)
+		for key in english.order {
+			en := english.fields[key]
+			f, has := lang.fields[key]
+			if !has {
+				f = en
+			}
+			type, _ := text_type(en)
+			fmt.sbprintf(&b, "\t\t%s = ", key)
+			if en.node.kind == .Object {
+				fmt.sbprintf(&b, "%s", type)
+			}
+			write_text_literal(&b, f.node, en.node, en.node.kind == .Object, strings.trim_prefix(type, "#partial "))
+			strings.write_string(&b, ",\n")
+		}
+		strings.write_string(&b, "\t},\n")
+	}
+	strings.write_string(&b, "}\n\n// The texts in the language chosen (see set_language).\nTEXT := &TEXTS[.English]\n")
+	strings.write_string(&b, "\n// The tables only some things have a text in (\"_some\": true).\nTEXT_SOME := [?]string{")
+	count := 0
+	for key in english.order {
+		if n := english.fields[key].node; n.kind == .Object && get_key(n, "_some").truth {
+			fmt.sbprintf(&b, "%s\"%s\"", count > 0 ? ", " : "", key)
+			count += 1
+		}
+	}
+	strings.write_string(&b, "}\n")
+	return strings.to_string(b), ok
 }

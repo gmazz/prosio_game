@@ -8,6 +8,10 @@ import game "../game"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:os"
+import "core:path/filepath"
+import "core:reflect"
+import "core:strings"
 
 passed, failed: int
 
@@ -50,6 +54,7 @@ run_rules :: proc() -> int {
 	rules_shake_salt_fog()
 	rules_campfire()
 	rules_undergrowth()
+	rules_text()
 	fmt.printf("\n%d passed, %d failed\n", passed, failed)
 	return failed
 }
@@ -2682,4 +2687,168 @@ rules_undergrowth :: proc() {
 	}
 	stopped := p.pos.x < stump.pos.x - stump.r
 	check("mossy stumps and fallen logs lie in the forest, off the paths and out of the clearings, and stand in his way", stumps == game.FOREST_STUMPS && misplaced == 0 && stopped, fmt.tprintf("%d of them, %d misplaced, he walked into one and stopped %.1f m short of its middle", stumps, misplaced, stump.pos.x - p.pos.x))
+}
+
+// The words the game shows are all in data/text, none in the code; English
+// has every one of them; buttons named in them are real buttons; and the
+// names filled into them are filled in as they should be.
+rules_text :: proc() {
+	section("text")
+
+	// No sentence a player could read is written in the game's code. (The
+	// code reads TEXT.<name>; data/text/en.json has the words.) A literal
+	// with a letter and a space, or a letter and ! ? , ' is taken for one.
+	// The files of models and the controller's own names are not looked at;
+	// nor are the controls file's codes and the shaders' lines, which are
+	// not text a player reads.
+	files, _ := filepath.glob("src/game/*.odin")
+	found: [dynamic]string
+	for path in files {
+		base := filepath.base(path)
+		if strings.has_prefix(base, "gen_") || strings.has_prefix(base, "quadruped") || strings.has_prefix(base, "pad_") || strings.has_suffix(base, "_asset.odin") || strings.has_suffix(base, "_assets.odin") {
+			continue
+		}
+		data, err := os.read_entire_file(path, context.temp_allocator)
+		if err != nil {
+			found_err := fmt.tprintf("%s cannot be read", path)
+			append(&found, found_err)
+			continue
+		}
+		in_codes := false
+		lines := string(data)
+		number := 0
+		for line in strings.split_lines_iterator(&lines) {
+			number += 1
+			if strings.has_prefix(line, "PAD_CODE :=") {
+				in_codes = true
+			}
+			if in_codes {
+				in_codes = line != "}"
+				continue
+			}
+			if strings.contains(line, "#version") {
+				continue
+			}
+			for literal in string_literals(line) {
+				if looks_like_text(literal) {
+					append(&found, fmt.tprintf("%s:%d %q", base, number, literal))
+				}
+			}
+		}
+	}
+	check("no text a player reads is written in the game's code: it is all in data/text", len(found) == 0, len(found) == 0 ? "" : fmt.tprintf("%d found, as %v", len(found), found[:min(len(found), 5)]))
+
+	// English has every text: no line left empty, and every table full but
+	// those that only some have (data/text marks them "_some").
+	english := &game.TEXTS[.English]
+	missing: [dynamic]string
+	for f in reflect.struct_fields_zipped(game.Text) {
+		at := rawptr(uintptr(english) + f.offset)
+		some := false
+		for name in game.TEXT_SOME {
+			some ||= name == f.name
+		}
+		ti := reflect.type_info_base(f.type)
+		#partial switch v in ti.variant {
+		case reflect.Type_Info_String:
+			if (^cstring)(at)^ == nil || (^cstring)(at)^ == "" {
+				append(&missing, f.name)
+			}
+		case reflect.Type_Info_Enumerated_Array, reflect.Type_Info_Array:
+			count, elem := 0, ti
+			if e, ok := v.(reflect.Type_Info_Enumerated_Array); ok {
+				count, elem = e.count, e.elem
+			}
+			if a, ok := v.(reflect.Type_Info_Array); ok {
+				count, elem = a.count, a.elem
+			}
+			if some || reflect.type_info_base(elem).id != cstring {
+				continue
+			}
+			for i in 0 ..< count {
+				text := ([^]cstring)(at)[i]
+				if text == nil || text == "" {
+					append(&missing, fmt.tprintf("%s[%d]", f.name, i))
+				}
+			}
+		}
+	}
+	check("English has every text the game shows (a table only some things have is marked \"_some\")", len(missing) == 0, len(missing) == 0 ? "" : fmt.tprintf("missing %v", missing[:min(len(missing), 8)]))
+
+	// Every button named in braces is one the game knows: none is left in
+	// braces when the text is drawn.
+	unknown: [dynamic]string
+	for f in reflect.struct_fields_zipped(game.Text) {
+		at := rawptr(uintptr(english) + f.offset)
+		ti := reflect.type_info_base(f.type)
+		texts: []cstring
+		#partial switch v in ti.variant {
+		case reflect.Type_Info_String:
+			texts = ([^]cstring)(at)[:1]
+		case reflect.Type_Info_Enumerated_Array:
+			if reflect.type_info_base(v.elem).id == cstring {
+				texts = ([^]cstring)(at)[:v.count]
+			}
+		case reflect.Type_Info_Array:
+			if reflect.type_info_base(v.elem).id == cstring {
+				texts = ([^]cstring)(at)[:v.count]
+			}
+		}
+		for text in texts {
+			if text == nil {
+				continue
+			}
+			drawn := string(game.expand_keys(text))
+			for i := 0; i + 1 < len(drawn); i += 1 {
+				if drawn[i] == '{' && drawn[i + 1] >= 'A' && drawn[i + 1] <= 'Z' {
+					append(&unknown, fmt.tprintf("%s: %s", f.name, drawn))
+					break
+				}
+			}
+		}
+	}
+	check("every button named in a text, as {Action}, is a button the game has", len(unknown) == 0, len(unknown) == 0 ? "" : fmt.tprintf("%v", unknown[:min(len(unknown), 4)]))
+
+	// Names in small letters are filled in by name, in any order, numbers
+	// with the language's own point; a name nothing fills is left as it is.
+	a := string(game.fill("{b} and {a}, {c}", {"a", 1}, {"b", "two"}))
+	b := string(game.fill("{kg} kg, {small} kg, {less} kg, {whole}", {"kg", game.Decimal{125, 2}}, {"small", game.Decimal{5, 2}}, {"less", game.Decimal{-15, 1}}, {"whole", game.Decimal{7, 0}}))
+	check("texts are filled in by name: numbers, names and decimals", a == "two and 1, {c}" && b == "1.25 kg, 0.05 kg, -1.5 kg, 7", fmt.tprintf("%q, %q", a, b))
+}
+
+// The string literals in a line of Odin, leaving out what follows a //.
+string_literals :: proc(line: string) -> []string {
+	out: [dynamic]string
+	start := -1
+	for i := 0; i < len(line); i += 1 {
+		c := line[i]
+		if start < 0 {
+			if c == '/' && i + 1 < len(line) && line[i + 1] == '/' {
+				break
+			}
+			if c == '"' {
+				start = i + 1
+			}
+		} else if c == '\\' {
+			i += 1
+		} else if c == '"' {
+			append(&out, line[start:i])
+			start = -1
+		}
+	}
+	return out[:]
+}
+
+// A literal with a letter, and a space or ! ? , ' in it.
+looks_like_text :: proc(s: string) -> bool {
+	letter, mark := false, false
+	for c in transmute([]u8)s {
+		switch c {
+		case 'a' ..= 'z', 'A' ..= 'Z':
+			letter = true
+		case ' ', '!', '?', ',', '\'':
+			mark = true
+		}
+	}
+	return letter && mark
 }

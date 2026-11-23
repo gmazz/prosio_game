@@ -119,16 +119,16 @@ grab_fish :: proc() {
 	if fish != nil && dist < prosio_radius(p.kg) + fish_reach() {
 		at = fish.pos
 		if sack_room(.Fish) < 1 {
-			answer("No room in my sack for more fish!")
+			answer(TEXT.no_room_fish)
 		} else {
 			sack_add(.Fish, math.round(RAW_KCAL[.Fish] * fish.size))
 			fish.away_t = random_range(FISH_BACK.x, FISH_BACK.y)
 			p.pick_item = .Fish
 			p.drinking = false
-			say(rod ? "A bite! Got one on the line!" : "Got one! A slippery fish!", 1.4)
+			say(rod ? TEXT.fish_bite : TEXT.fish_grabbed, 1.4)
 		}
 	} else {
-		say(rod ? "No bite... they are too far out. I'll wait." : "Splash! Missed... they come close if I stand still.", 2)
+		say(rod ? TEXT.fish_no_bite : TEXT.fish_missed, 2)
 	}
 	p.casting = rod
 	p.cast_at = at
@@ -232,7 +232,7 @@ scare_pests_near :: proc(pos: Vec2, y: f32) {
 		}
 		c.state = .Fleeing
 		c.stoned = true
-		say(c.kind == .Crow ? "Shoo, crow! And stay away!" : "Shoo, rabbit! And stay away!", 1.4)
+		say(c.kind == .Crow ? TEXT.shoo_crow_away : TEXT.shoo_rabbit_away, 1.4)
 	}
 }
 
@@ -269,7 +269,7 @@ update_pests :: proc(dt: f32) {
 			food := &g.foods[c.food]
 			if near || !food_ready(food) {
 				if near {
-					hint(c.kind == .Rabbit ? "Shoo, rabbit! Not my cabbages!" : "Shoo, crow! Not my wheat!")
+					hint(c.kind == .Rabbit ? TEXT.shoo_rabbit : TEXT.shoo_crow)
 				}
 				c.state = .Fleeing
 				continue
@@ -285,13 +285,13 @@ update_pests :: proc(dt: f32) {
 				c.state = .Eating
 				c.t = NIBBLE_TIME
 				if length2(p.pos - c.pos) < PEST_HEARD {
-					hint(c.kind == .Crow ? "Caw, caw! A crow is at my wheat!" : "Rustle, rustle... a rabbit is at my cabbages!")
+					hint(c.kind == .Crow ? TEXT.crow_at_wheat : TEXT.rabbit_at_cabbages)
 				}
 			}
 		case .Eating:
 			food := &g.foods[c.food]
 			if near {
-				hint(c.kind == .Rabbit ? "Shoo, rabbit! Not my cabbages!" : "Shoo, crow! Not my wheat!")
+				hint(c.kind == .Rabbit ? TEXT.shoo_rabbit : TEXT.shoo_crow)
 			}
 			c.t -= dt
 			if near || c.t <= 0 || !food_ready(food) {
@@ -394,7 +394,7 @@ update_bees :: proc(dt: f32) {
 		h.calm_t -= dt
 		if length2(p.pos - hive) < HIVE_GUARD && h.calm_t <= 0 && p.fail == .None {
 			if h.angry_t <= 0 {
-				say("Uh oh... BEES!", 1.2)
+				say(TEXT.bees, 1.2)
 			}
 			h.angry_t = BEE_ANGRY
 		}
@@ -417,7 +417,7 @@ update_bees :: proc(dt: f32) {
 				p.regen_delay = 0.4
 				p.wobble_vel += 2
 				g.shake = max(g.shake, 0.1)
-				say(felt < 0.7 ? "Ha! I hardly feel them!" : "Ow! Ow! Bees!", 0.7)
+				say(felt < 0.7 ? TEXT.bees_hardly : TEXT.bees_ow, 0.7)
 				burst({p.pos.x, p.height + 1.4 * PROSIO_SIZE, p.pos.y}, 3, 2, COLOR_STAR, 0.06)
 			}
 		}

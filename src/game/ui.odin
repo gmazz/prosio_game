@@ -2,8 +2,6 @@ package game
 
 import "core:math"
 
-CONTROLS :: "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}"
-
 // Text with a dark edge all round, a pixel of the font wide, so it reads on
 // any background.
 label :: proc(text: cstring, x, y, size: f32, color: Color = UI_WHITE) {
@@ -37,17 +35,17 @@ prompt_text :: proc() -> cstring {
 		open := gate_state(gate) == GATE_OPEN
 		switch {
 		case p.carry == .Enemy:
-			action = open ? "{Action}: shut the gate     drag it through first!" : "{Action}: open the gate, to bring it through"
+			action = open ? TEXT.gate_shut_drag : TEXT.gate_open_bring
 		case open:
-			action = "{Action}: shut the gate     {Grab}: take it down"
+			action = TEXT.gate_shut_take
 		case:
-			action = "{Action}: open the gate     {Grab}: take it down"
+			action = TEXT.gate_open_take
 		}
 	} else if p.carry != .Nothing {
 		// What F will do with an animal: throw it, or, too heavy or too
 		// tired for that, put it down.
 		too_heavy := p.carry_kg > p.kg * LIFT_LIMIT * strength()
-		let_go: cstring = too_heavy ? "{Grab}: let go" : (p.stamina < throw_cost() ? "{Grab}: put it down (too tired to throw)" : "{Grab}: put it down     hold {Grab}, let go: throw")
+		let_go: cstring = too_heavy ? TEXT.let_go : (p.stamina < throw_cost() ? TEXT.put_down_tired : TEXT.put_down_or_throw)
 		at_fence := false
 		if p.carry == .Enemy && p.lift_t <= 0 {
 			what, _, _ := built_in_reach()
@@ -55,130 +53,129 @@ prompt_text :: proc() -> cstring {
 		}
 		switch {
 		case at_fence && ENEMY_KG[g.enemies[p.carry_index].kind] <= hoist_most():
-			action = "{Grab}: lift it over the fence"
+			action = TEXT.lift_over_fence
 		case at_fence:
-			action = "Too heavy to lift over the fence: it needs a gate     {Grab}: let go" 
+			action = TEXT.too_heavy_over_fence 
 		case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_FROM[g.enemies[p.carry_index].kind] > 0:
 			// A body: it wants chopping up, at the block by the fire.
 			if _, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2); at_fire {
-				action = ui_format_name("{Action}: chop it into meat     %s", let_go)
+				action = fill(TEXT.chop_it, {"then", let_go})
 			} else if g.camp_up {
-				action = ui_format_name(too_heavy ? "Drag it to a fire to chop it     %s" : "Drag it to a fire to chop it     {Bump}: bash with it     %s", let_go)
+				action = fill(too_heavy ? TEXT.drag_to_fire : TEXT.drag_to_fire_or_bash, {"then", let_go})
 			} else {
-				action = ui_format_name(too_heavy ? "Drag it to the fire by the pond     %s" : "Drag it to the fire by the pond     {Bump}: bash with it     %s", let_go)
+				action = fill(too_heavy ? TEXT.drag_to_pond : TEXT.drag_to_pond_or_bash, {"then", let_go})
 			}
 		case p.carry == .Enemy && too_heavy:
-			action = "Too heavy to swing!   {Bump}: heave     {Grab}: let go"
+			action = TEXT.too_heavy_swing
 		case p.carry == .Enemy && g.enemies[p.carry_index].kind == .Goat:
-			action = ui_format_name("{Action}: milk it     {Bump}: bash with it     %s", let_go)
+			action = fill(TEXT.milk_or_bash, {"then", let_go})
 		case p.carry == .Enemy:
-			action = ui_format_name("{Bump}: bash with it!     %s", let_go)
+			action = fill(TEXT.bash_with_it, {"then", let_go})
 		case p.lift_t > 0:
-			action = "Lifting..."
+			action = TEXT.lifting
 		case:
-			action = "{Grab}: put it down     hold {Grab}, let go: throw"
+			action = TEXT.put_down_or_throw
 		}
 	} else if goat := licking_goat(); goat != nil && goat.milk_t <= 0 {
-		action = goat.licking ? "{Action}: milk the goat while it licks" : "{Action}: milk the goat"
+		action = goat.licking ? TEXT.milk_goat_licking : TEXT.milk_goat
 	} else if food := food_in_reach(p.pos, prosio_radius(p.kg) + 0.75); food != nil && food.kind == .Wood {
-		action = "{Action}: pick up the branch (wood for fires and for building)"
+		action = TEXT.pick_branch
 	} else if food != nil && food.kind == .Spear {
-		action = "{Action}: pick up the spear"
+		action = TEXT.pick_spear
 	} else if food != nil {
 		// What it is worth now: less if it has not finished growing.
-		action = ui_format(food.grow < 0.95 && !food.fallen ? "{Action}: pick it now (%d kcal, still growing)" : "{Action}: pick it (%d kcal)", i32(food_kcal(food)))
+		action = fill(food.grow < 0.95 && !food.fallen ? TEXT.pick_growing : TEXT.pick, {"kcal", int(i32(food_kcal(food)))})
 	} else if bush := bush_in_reach(p.pos, prosio_radius(p.kg) + 0.6); bush != nil {
 		if bush.kind == .Hive {
-			action = "{Action}: take the honey (300 kcal)"
+			action = TEXT.take_honey
 		} else if bush.kind == .Salt_Rock {
-			action = "{Action}: break off a lump of rock salt"
+			action = TEXT.break_salt
 		} else if bush.kind == .Pebbles {
-			action = "{Action}: pick up pebbles (for throwing)"
+			action = TEXT.pick_pebbles
 		} else {
-			action = ui_format(bush.ripe < 0.95 ? "{Action}: pick berries now (%d kcal, still ripening)" : "{Action}: pick berries (%d kcal)", i32(bush_kcal(bush)))
+			action = fill(bush.ripe < 0.95 ? TEXT.pick_berries_ripening : TEXT.pick_berries, {"kcal", int(i32(bush_kcal(bush)))})
 		}
 	} else if l := larder_first(); l >= 0 {
-		action = larder_empty(&g.larders[l]) ? "{Action}: open the larder     {Grab}: take it down" : "{Action}: open the larder"
+		action = larder_empty(&g.larders[l]) ? TEXT.open_larder_take : TEXT.open_larder
 	} else if at, near := station_near(p.pos, prosio_radius(p.kg)); near {
 		o := g.stations[at]
 		switch at {
 		case .Oven:
-			action = o.ready ? "{Action}: take it out of the oven" : (o.baking ? "Baking... wait for the ding!" : "{Action}: bake something")
+			action = o.ready ? TEXT.oven_take : (o.baking ? TEXT.oven_wait : TEXT.oven_bake)
 		case .Fire:
-			action = o.ready ? "{Action}: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "{Action}: cook something")
+			action = o.ready ? TEXT.fire_take : (o.baking ? TEXT.fire_wait : TEXT.fire_cook)
 		case .Camp:
-			action = o.ready ? "{Action}: take it off the fire" : (o.baking ? "Cooking... wait for the sizzle!" : "{Action}: cook something     {Grab}: pack it up")
+			action = o.ready ? TEXT.fire_take : (o.baking ? TEXT.fire_wait : TEXT.camp_cook)
 		case .Churn:
-			action = o.ready ? "{Action}: take it from the stool" : (o.baking ? "Churning... nearly there!" : "{Action}: churn some milk")
+			action = o.ready ? TEXT.churn_take : (o.baking ? TEXT.churn_wait : TEXT.churn_churn)
 		case .Bench:
-			action = o.ready ? "{Action}: take it off the workbench" : (o.baking ? "Building... nearly done!" : "{Action}: build something of wood")
+			action = o.ready ? TEXT.bench_take : (o.baking ? TEXT.bench_wait : TEXT.bench_build)
 		}
 	} else if mill_in_reach(p.pos, prosio_radius(p.kg)) {
 		switch {
 		case g.mill.ready > 0:
-			action = "{Action}: take the flour"
+			action = TEXT.mill_take
 		case g.mill.grinding > 0:
-			action = "Grinding... wait for the flour"
+			action = TEXT.mill_wait
 		case p.sack[.Wheat] > 0:
-			action = "{Action}: grind the wheat"
+			action = TEXT.mill_grind
 		case:
-			action = "The mill grinds wheat into flour"
+			action = TEXT.mill_about
 		}
 	} else if pond_in_reach(p.pos, prosio_radius(p.kg)) {
 		if rod_chosen() {
-			action = fish_in_reach() ? "{Action}: drink     {Grab}: cast the rod, a fish is near enough!" : "{Action}: drink     {Grab}: cast the rod (no fish near enough yet)"
+			action = fish_in_reach() ? TEXT.pond_cast_near : TEXT.pond_cast
 		} else {
-			action = fish_in_reach() ? "{Action}: drink     {Grab}: grab that fish!" : "{Action}: drink     {Grab}: grab for a fish (stand still and they come)"
+			action = fish_in_reach() ? TEXT.pond_grab_near : TEXT.pond_grab
 		}
 	} else if _, in_reach := grab_target(); !in_reach && throwable_chosen() {
-		action = p.winding ? "Let go of {Grab}: throw     {Aim}: aim at something else" : (p.sack_sel == .Spear ? "Hold {Grab}, let go: throw the spear" : "Hold {Grab}, let go: throw a pebble")
+		action = p.winding ? TEXT.winding : (p.sack_sel == .Spear ? TEXT.hold_throw_spear : TEXT.hold_throw_pebble)
 	} else if target, found := grab_target(); found {
 		if target.kind == .Rock {
-			action = "{Grab}: lift the rock"
+			action = TEXT.lift_rock
 		} else if e := &g.enemies[target.index]; e.state == .Dead {
-			action = "{Grab}: take it by the leg"
+			action = TEXT.take_by_leg
 		} else {
-			GRAB := [Enemy_Kind]cstring{.Turkey = "{Grab}: grab the turkey", .Goat = "{Grab}: grab the goat", .Billy = "{Grab}: grab the billy goat", .Fox = "{Grab}: grab the fox"}
-			action = GRAB[e.kind]
+			action = TEXT.grab_animal[e.kind]
 		}
 	} else if (p.sack_sel == .Fence || p.sack_sel == .Gate) && p.sack[p.sack_sel] > 0 {
 		// Q puts a piece up where the mark on the ground is; F takes one down.
 		ok, _ := fence_fits(fence_ahead())
 		what, _, _ := built_in_reach()
-		put: cstring = p.sack_sel == .Gate ? "{Eat}: put the gate up here" : "{Eat}: put a piece of fence up here"
+		put: cstring = p.sack_sel == .Gate ? TEXT.put_gate : TEXT.put_fence
 		switch {
 		case ok && what == .Fence:
-			action = ui_format_name("%s     {Grab}: take this piece down", put)
+			action = fill(TEXT.put_or_take_down, {"put", put})
 		case ok:
 			action = put
 		case what == .Fence:
-			action = "{Grab}: take this piece of fence down"
+			action = TEXT.take_fence_down
 		case what == .Scarecrow:
-			action = "{Grab}: take the scarecrow down"
+			action = TEXT.take_scarecrow_down
 		}
 	} else if p.sack_sel == .Scarecrow && p.sack[.Scarecrow] > 0 {
-		action = "{Eat}: stand the scarecrow up here"
+		action = TEXT.put_scarecrow
 	} else if p.sack_sel == .Larder && p.sack[.Larder] > 0 && larder_in_reach() < 0 {
-		action = "{Eat}: stand the larder up here"
+		action = TEXT.put_larder
 	} else if p.sack_sel == .Campfire && p.sack[.Campfire] > 0 && !g.camp_up {
-		action = "{Eat}: set up my campfire here"
+		action = TEXT.put_campfire
 	} else if what, _, which := built_in_reach(); what != .Nothing {
 		switch {
 		case what == .Larder:
-			action = larder_empty(&g.larders[which]) ? "{Action}: open the larder     {Grab}: take it down" : "{Action}: open the larder"
+			action = larder_empty(&g.larders[which]) ? TEXT.open_larder_take : TEXT.open_larder
 		case what == .Scarecrow:
-			action = "{Grab}: take the scarecrow down"
+			action = TEXT.take_scarecrow_down
 		case can_clear_fence():
-			action = "{Jump}: jump over the fence     {Grab}: take this piece down"
+			action = TEXT.jump_fence
 		case g.prosio.carry == .Enemy:
-			action = "Throw it over the fence: hold {Grab}, let go"
+			action = TEXT.throw_over_fence
 		case:
-			action = "Too heavy to jump the fence!     {Grab}: take this piece down"
+			action = TEXT.too_heavy_jump_fence
 		}
 	}
 	if action == nil && p.carry == .Nothing {
 		if _, at_tree := tree_in_front(facing_dir(p.facing)); at_tree {
-			action = "{Bump}: shake the tree"
+			action = TEXT.shake_tree
 		}
 	}
 	return action
@@ -205,22 +202,22 @@ draw_ui :: proc() {
 		switch {
 		case o.ready:
 			pulse := 1 + 0.08 * math.sin(g.time * 6)
-			world_label("READY!", top, 22 * s * pulse, UI_GREEN)
+			world_label(TEXT.ready, top, 22 * s * pulse, UI_GREEN)
 		case o.baking:
-			world_label(ui_format(STATION_BUSY[at], i32(math.ceil(o.bake_t))), top, 18 * s, UI_ORANGE)
+			world_label(fill(TEXT.station_busy[at], {"seconds", int(i32(math.ceil(o.bake_t)))}), top, 18 * s, UI_ORANGE)
 		case:
-			world_label(STATION_LABEL[at], top, 16 * s, UI_YELLOW)
+			world_label(TEXT.station_label[at], top, 16 * s, UI_YELLOW)
 		}
 	}
 	mill_top := Vec3{g.mill.pos.x, 4.6, g.mill.pos.y}
 	switch {
 	case g.mill.ready > 0 && g.mill.grinding == 0:
 		pulse := 1 + 0.08 * math.sin(g.time * 6)
-		world_label("FLOUR READY!", mill_top, 20 * s * pulse, UI_GREEN)
+		world_label(TEXT.flour_ready_label, mill_top, 20 * s * pulse, UI_GREEN)
 	case g.mill.grinding > 0:
-		world_label(ui_format("GRINDING... %d", i32(g.mill.grinding)), mill_top, 18 * s, UI_ORANGE)
+		world_label(fill(TEXT.mill_busy, {"count", int(i32(g.mill.grinding))}), mill_top, 18 * s, UI_ORANGE)
 	case:
-		world_label("MILL", mill_top, 16 * s, UI_YELLOW)
+		world_label(TEXT.mill, mill_top, 16 * s, UI_YELLOW)
 	}
 
 	// Speech bubble.
@@ -240,14 +237,14 @@ draw_ui :: proc() {
 	// Where he is: the part of the meadow, and, for a few seconds after he
 	// gets there, what is found there.
 	if g.in_region {
-		r := REGIONS[g.region]
 		fade := clamp(g.region_t * 2, 0, 1)
 		name_color := UI_YELLOW
 		name_color.a = u8(255 * fade)
 		about_color := UI_WHITE
 		about_color.a = u8(255 * fade * clamp(REGION_ABOUT_TIME - g.region_t, 0, 1))
-		label(r.name, sw - ui_text_width(r.name, 22 * s) - 20 * s, 16 * s, 22 * s, name_color)
-		label(r.about, sw - ui_text_width(r.about, 16 * s) - 20 * s, 44 * s, 16 * s, about_color)
+		name, about := TEXT.region_name[g.region], TEXT.region_about[g.region]
+		label(name, sw - ui_text_width(name, 22 * s) - 20 * s, 16 * s, 22 * s, name_color)
+		label(about, sw - ui_text_width(about, 16 * s) - 20 * s, 44 * s, 16 * s, about_color)
 	}
 
 	// What the action buttons do right now.
@@ -257,23 +254,23 @@ draw_ui :: proc() {
 
 	if p.fail != .None && p.fail_t > 0.8 {
 		ui_rect(0, 0, sw, sh, {0, 0, 0, 110})
-		title: cstring = "PROSIO FAINTED!"
-		line: cstring = "No fat and no carbs left... nothing to keep him going."
+		title: cstring = TEXT.fainted
+		line: cstring = TEXT.fainted_line
 		if p.fail == .Heart_Attack {
-			title = "HEART ATTACK!"
-			line = "Too heavy... his heart could not keep up."
+			title = TEXT.heart_attack
+			line = TEXT.heart_attack_line
 		}
 		if p.fail == .Diet {
 			title, line = ending().title, ending().line
 		}
 		if p.fail == .Beaten {
-			title = "KNOCKED OUT!"
-			line = "Bruised all over... the animals got the better of him."
+			title = TEXT.knocked_out
+			line = TEXT.knocked_out_line
 		}
 		label_centred(title, sw / 2, sh * 0.56, 64 * s, UI_RED)
 		label_centred(line, sw / 2, sh * 0.56 + 76 * s, 28 * s)
-		label_centred("Press {Restart} to wake up at home", sw / 2, sh * 0.56 + 124 * s, 26 * s, UI_YELLOW)
-		label_centred("(his sack is lost, and some of his muscle; what he has learnt stays)", sw / 2, sh * 0.56 + 160 * s, 18 * s)
+		label_centred(TEXT.wake_up, sw / 2, sh * 0.56 + 124 * s, 26 * s, UI_YELLOW)
+		label_centred(TEXT.wake_up_note, sw / 2, sh * 0.56 + 160 * s, 18 * s)
 	}
 }
 
@@ -286,17 +283,9 @@ Menu_Item :: enum {
 	Quit,
 }
 
-MENU_TEXT := [Menu_Item]cstring {
-	.Play         = "PLAY",
-	.Resume       = "RESUME",
-	.Look         = "",
-	.Restart      = "START OVER",
-	.Exit_To_Menu = "EXIT TO MENU",
-	.Quit         = "QUIT",
-}
 
 look_text :: proc() -> cstring {
-	return ui_format("PIXELS: %d / 6", i32(pixel_level + 1))
+	return fill(TEXT.pixels, {"level", int(i32(pixel_level + 1))})
 }
 
 // With a saved Prosio, the main menu carries on with him, or starts over
@@ -329,21 +318,21 @@ draw_menu :: proc() {
 	s := min(sw / 1280, sh / 720)
 	ui_rect(0, 0, sw, sh, {10, 24, 20, scene == .Menu ? 120 : 150})
 
-	title: cstring = scene == .Menu ? "PROSIO" : "PAUSED"
+	title: cstring = scene == .Menu ? TEXT.title : TEXT.paused
 	size := (scene == .Menu ? 120 : 72) * s
 	top := sh * (scene == .Menu ? 0.12 : 0.2)
 	ui_text(title, sw / 2 - ui_text_width(title, size) / 2 + 5 * s, top + 5 * s, size, UI_DARK)
 	ui_text(title, sw / 2 - ui_text_width(title, size) / 2, top, size, scene == .Menu ? Color{250, 172, 182, 255} : UI_WHITE)
 	if scene == .Menu {
-		label_centred("the pig who gathers, bakes and bumps", sw / 2, top + size + 4 * s, 24 * s, UI_YELLOW)
+		label_centred(TEXT.subtitle, sw / 2, top + size + 4 * s, 24 * s, UI_YELLOW)
 	}
 
 	y := sh * 0.5
 	for i in 0 ..< menu_length() {
 		item := menu_items()[i]
-		text := item == .Look ? look_text() : MENU_TEXT[item]
+		text := item == .Look ? look_text() : TEXT.menu_text[item]
 		if item == .Play && has_save {
-			text = "CONTINUE"
+			text = TEXT.continue_game
 		}
 		chosen := i == menu_choice
 		text_size := (chosen ? 44 : 36) * s
@@ -357,8 +346,8 @@ draw_menu :: proc() {
 		y += 64 * s
 	}
 
-	label_centred("Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 6", sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
+	label_centred(TEXT.menu_help, sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
 	// What every button does (in the game only the line about what the
 	// buttons would do just there shows).
-	label_centred(CONTROLS, sw / 2, sh - 70 * s, 13 * s)
+	label_centred(TEXT.controls_line, sw / 2, sh - 70 * s, 13 * s)
 }
