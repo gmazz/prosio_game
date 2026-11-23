@@ -2,65 +2,10 @@ package game
 
 import "core:math"
 
-// Food goes off. Each kind of food in the sack loses half of what it is
-// worth in SPOIL_HALF seconds (some never: grain, flour, nuts, honey, salt,
-// butter), and so does its freshness; once that is below ROTTEN, out it
-// goes ("Pee-yew!"). The sack keeps one freshness for each kind, as it keeps
-// one total of calories: a fresh apple put in with stale ones makes them a
-// little fresher on average.
-//
-// A dead animal goes off too: the longer its body lies, the poorer the meat
-// chopped from it, and flies gather. In the end it is gone.
-//
-// A larder keeps food LARDER_KEEPS times as long, and holds more than the
-// sack. It is built at the workbench (wood, and salt to keep the damp out),
-// stood up with Q like a scarecrow, and E at it opens it: food goes in and
-// out of it from the sack. F takes an empty one down again.
-SPOIL_HALF := [Item]f32 {
-	.Apple         = 3600,
-	.Berries       = 1200,
-	.Mushroom      = 1200,
-	.Pumpkin       = 3600,
-	.Cabbage       = 3600,
-	.Nuts          = 0,
-	.Wheat         = 0,
-	.Egg           = 1200,
-	.Flour         = 0,
-	.Salt          = 0,
-	.Fish          = 600,
-	.Meat          = 600,
-	.Milk          = 600,
-	.Honey         = 0,
-	.Pebble        = 0,
-	.Apple_Pie     = 1800,
-	.Pumpkin_Pie   = 1800,
-	.Berry_Muffins = 1800,
-	.Mushroom_Pie  = 1800,
-	.Nut_Cake      = 2400,
-	.Bread         = 1800,
-	.Fried_Egg     = 1200,
-	.Grilled_Fish  = 1200,
-	.Roast         = 1200,
-	.Butter        = 0,
-	.Cheese        = 7200,
-	.Wood          = 0,
-	.Fence         = 0,
-	.Scarecrow     = 0,
-	.Rod           = 0,
-	.Spear         = 0,
-	.Gate          = 0,
-	.Larder        = 0,
-	.Campfire      = 0,
-}
-ROTTEN :: f32(0.3) // below this freshness it is thrown away
-STALE :: f32(0.75) // and below this it is said to be going off
 LARDER_KEEPS :: f32(5) // food keeps this many times as long in a larder
 LARDER_LITRES :: f32(100)
 LARDER_RADIUS :: f32(0.6)
 MAX_LARDERS :: 4
-SPOIL_EVERY :: f32(1) // seconds between one look at what has gone off and the next
-BODY_FLIES :: f32(0.5) // a body that has lain this share of its time draws flies
-BODY_MEAT_LEAST :: f32(0.35) // the freshness of meat chopped from a body about to go
 
 Larder :: struct {
 	used:  bool,

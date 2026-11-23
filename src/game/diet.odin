@@ -122,29 +122,6 @@ SALT_COLOR :: Color{236, 236, 240, 255}
 // Shares in per cent, in the order of Nutrient (index it with int(n)).
 Composition :: [len(Nutrient)]f32
 
-// Raw foods, and the two the churn makes (it changes what milk is: the
-// butter is the cream, the cheese the curds, and salt). Every other dish is
-// what went into it, mixed by calories: see composition.
-COMPOSITION := #partial [Item]Composition {
-	//              carbs  fat  protein  fibre  vitamins  electrolytes
-	.Apple    = {86, 1, 1, 5, 6, 1},
-	.Berries  = {76, 3, 3, 4, 14, 0},
-	.Mushroom = {30, 5, 40, 10, 5, 10},
-	.Pumpkin  = {82, 2, 7, 4, 3, 2},
-	.Cabbage  = {55, 3, 15, 20, 5, 2},
-	.Nuts     = {12, 70, 12, 5, 0, 1},
-	.Wheat    = {82, 4, 12, 2, 0, 0},
-	.Flour    = {82, 4, 12, 2, 0, 0},
-	.Egg      = {2, 60, 34, 0, 3, 1},
-	.Salt     = {0, 0, 0, 0, 0, 100},
-	.Fish     = {0, 25, 70, 0, 3, 2},
-	.Meat     = {0, 45, 53, 0, 1, 1},
-	.Milk     = {8, 48, 40, 0, 2, 2},
-	.Honey    = {99, 0, 0, 0, 1, 0},
-	.Butter   = {0, 98, 1, 0, 1, 0},
-	.Cheese   = {2, 52, 37, 0, 1, 8},
-}
-
 // What a food is made of, in per cent of its calories. A dish without a
 // row of its own is the mix of what went into it, each part counted by its
 // calories (so wood, with none, changes nothing). Cooking makes a dish

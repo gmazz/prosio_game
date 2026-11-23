@@ -21,17 +21,6 @@ import "core:math"
 // logs with it, more for a bigger dish (they are in the recipes); the churn
 // and the mill need none. Wood lies under the forest trees (workshop.odin).
 
-KCAL_PER_KG :: f32(200) // calories eaten for each kilogram he puts on
-// The sack holds SACK_LITRES, whatever is in it: each thing takes up the
-// room in ITEM_LITRES, and weighs ITEM_KG, which he carries. It is meant to
-// be roomy: a whole pen's worth of wood, or a day's food, goes in at once.
-// What it weighs has no limit but his back: a load slows him a little,
-// makes walking, sprinting and jumping cost a little more, and trains his
-// legs (and his lungs, sprinting) faster, as a pack does (see load_share).
-SACK_LITRES :: f32(60)
-BATCH_MOST :: 9 // of one dish at once
-OVEN_RADIUS :: f32(1.15)
-
 Item :: enum u8 {
 	Apple,
 	Berries,
@@ -122,80 +111,6 @@ ITEM_NAME := [Item]cstring {
 	.Campfire      = "CAMPFIRE KIT",
 }
 
-// What one of each thing weighs (kg) and how much room it takes (litres).
-ITEM_KG := [Item]f32 {
-	.Apple         = 0.2,
-	.Berries       = 0.1,
-	.Mushroom      = 0.05,
-	.Pumpkin       = 3,
-	.Cabbage       = 1,
-	.Nuts          = 0.1,
-	.Wheat         = 0.5,
-	.Egg           = 0.06,
-	.Flour         = 0.5,
-	.Salt          = 0.3,
-	.Fish          = 0.4,
-	.Meat          = 0.5,
-	.Milk          = 1,
-	.Honey         = 0.5,
-	.Pebble        = 0.3,
-	.Apple_Pie     = 1.2,
-	.Pumpkin_Pie   = 1.5,
-	.Berry_Muffins = 0.5,
-	.Mushroom_Pie  = 1,
-	.Nut_Cake      = 0.9,
-	.Bread         = 0.9,
-	.Fried_Egg     = 0.1,
-	.Grilled_Fish  = 0.4,
-	.Roast         = 0.8,
-	.Butter        = 0.5,
-	.Cheese        = 0.6,
-	.Wood          = 1,
-	.Fence         = 3,
-	.Scarecrow     = 3,
-	.Rod           = 0.4,
-	.Spear         = 1,
-	.Gate          = 4,
-	.Larder        = 6,
-	.Campfire      = 5,
-}
-ITEM_LITRES := [Item]f32 {
-	.Apple         = 0.3,
-	.Berries       = 0.2,
-	.Mushroom      = 0.15,
-	.Pumpkin       = 4,
-	.Cabbage       = 1.5,
-	.Nuts          = 0.15,
-	.Wheat         = 1.5,
-	.Egg           = 0.1,
-	.Flour         = 0.6,
-	.Salt          = 0.15,
-	.Fish          = 0.5,
-	.Meat          = 0.6,
-	.Milk          = 1,
-	.Honey         = 0.5,
-	.Pebble        = 0.15,
-	.Apple_Pie     = 1.5,
-	.Pumpkin_Pie   = 1.5,
-	.Berry_Muffins = 1,
-	.Mushroom_Pie  = 1.5,
-	.Nut_Cake      = 1,
-	.Bread         = 1,
-	.Fried_Egg     = 0.2,
-	.Grilled_Fish  = 0.6,
-	.Roast         = 1,
-	.Butter        = 0.5,
-	.Cheese        = 0.6,
-	.Wood          = 1.5,
-	.Fence         = 4, // a flat-pack piece
-	.Scarecrow     = 6,
-	.Rod           = 1.5,
-	.Spear         = 2,
-	.Gate          = 5,
-	.Larder        = 15,
-	.Campfire      = 8,
-}
-
 // What is in the sack weighs, and the room it takes.
 sack_kg :: proc() -> (sum: f32) {
 	for count, item in g.prosio.sack {
@@ -219,26 +134,6 @@ sack_full :: proc() -> f32 {
 // How many more of this would fit.
 sack_room :: proc(item: Item) -> int {
 	return int(math.floor((SACK_LITRES - sack_litres()) / ITEM_LITRES[item] + 0.001))
-}
-
-// Calories in one of each raw thing, full grown and of the usual size (what
-// is actually picked varies: see FOOD_BUDGET in world.odin). A dish's are
-// worked out from what went into it.
-RAW_KCAL := #partial [Item]f32 {
-	.Apple    = 95,
-	.Berries  = 50, // a bunch
-	.Mushroom = 30,
-	.Pumpkin  = 400,
-	.Cabbage  = 250, // a whole head
-	.Nuts     = 180, // a handful
-	.Wheat    = 340, // a sheaf, about a cup of flour
-	.Egg      = 130,
-	.Flour    = 340,
-	.Salt     = 30, // a lump: all of it electrolytes, none of it energy
-	.Fish     = 200,
-	.Meat     = 300, // one piece; a turkey gives two, a goat five
-	.Milk     = 150, // a jug
-	.Honey    = 300, // a comb
 }
 
 // Some things have to be made into something else first.
@@ -345,12 +240,6 @@ STATION_ABOUT := [Station_Kind]cstring {
 	.Camp  = "The better the cook, the richer the dish",
 }
 STATION_BUSY := [Station_Kind]cstring{.Oven = "BAKING... %d", .Fire = "COOKING... %d", .Churn = "CHURNING... %d", .Bench = "BUILDING... %d", .Camp = "COOKING... %d"}
-STATION_TIME := [Station_Kind]f32{.Oven = 6, .Fire = 4, .Churn = 5, .Bench = 3, .Camp = 4} // seconds to make a batch
-// How much richer what is made here is than what went in: for a beginner,
-// and at the most, for a master. The skill that takes him from one to the
-// other, and what he is called on the way.
-COOK_RANGE := [Station_Kind][2]f32{.Oven = {1.15, 1.8}, .Fire = {1, 1.5}, .Churn = {1, 1.25}, .Bench = {1, 1}, .Camp = {1, 1.5}}
-STATION_SKILL := [Station_Kind]Trait{.Oven = .Baking, .Fire = .Grilling, .Churn = .Dairy, .Bench = .Hooves, .Camp = .Grilling}
 COOK_TITLE := [Station_Kind][4]cstring {
 	.Oven  = {"Beginner baker", "Apprentice baker", "Baker", "Master baker"},
 	.Fire  = {"Beginner cook", "Apprentice cook", "Cook", "Master of the grill"},
@@ -358,7 +247,6 @@ COOK_TITLE := [Station_Kind][4]cstring {
 	.Churn = {"Beginner dairy pig", "Apprentice dairy pig", "Dairy pig", "Master cheesemaker"},
 	.Bench = {},
 }
-STATION_RADIUS := [Station_Kind]f32{.Oven = OVEN_RADIUS, .Fire = 0.8, .Churn = 0.55, .Bench = BENCH_RADIUS, .Camp = 0.8}
 STATION_ROUND := [Station_Kind]Round_Kind{.Oven = .Oven, .Fire = .Fire, .Churn = .Churn, .Bench = .Bench, .Camp = .Fire}
 // What he says as he starts something there, while it is not done, when it
 // is, and as he takes it.
@@ -370,31 +258,7 @@ STATION_TAKE := [Station_Kind]cstring{.Oven = "Into the sack, still warm!", .Fir
 Recipe :: struct {
 	at:    Station_Kind,
 	dish:  Item,
-	needs: [4]Ingredient,
-}
-
-// The logs each dish takes are the last thing it needs: one for something
-// small, two for a pie or a tray of muffins, three for a big rich cake.
-RECIPES := [?]Recipe {
-	{.Oven, .Apple_Pie, {{.Apple, 3}, {.Flour, 1}, {.Egg, 1}, {.Wood, 2}}},
-	{.Oven, .Pumpkin_Pie, {{.Pumpkin, 1}, {.Flour, 1}, {.Egg, 1}, {.Wood, 2}}},
-	{.Oven, .Berry_Muffins, {{.Berries, 3}, {.Flour, 1}, {.Egg, 1}, {.Wood, 2}}},
-	{.Oven, .Mushroom_Pie, {{.Mushroom, 3}, {.Flour, 1}, {.Egg, 1}, {.Wood, 2}}},
-	{.Oven, .Nut_Cake, {{.Nuts, 2}, {.Flour, 1}, {.Egg, 1}, {.Wood, 3}}},
-	{.Oven, .Bread, {{.Flour, 2}, {.Wood, 1}, {}, {}}},
-	{.Fire, .Fried_Egg, {{.Egg, 1}, {.Wood, 1}, {}, {}}},
-	{.Fire, .Grilled_Fish, {{.Fish, 1}, {.Wood, 1}, {}, {}}},
-	{.Fire, .Roast, {{.Meat, 1}, {.Wood, 1}, {}, {}}},
-	{.Churn, .Butter, {{.Milk, 2}, {}, {}, {}}},
-	{.Churn, .Cheese, {{.Milk, 2}, {.Salt, 1}, {}, {}}},
-	// The plans of the workbench (what each is for is in PLAN_ABOUT).
-	{.Bench, .Fence, {{.Wood, 2}, {}, {}, {}}},
-	{.Bench, .Scarecrow, {{.Wood, 3}, {.Wheat, 3}, {}, {}}},
-	{.Bench, .Rod, {{.Wood, 2}, {}, {}, {}}},
-	{.Bench, .Spear, {{.Wood, 2}, {.Pebble, 1}, {}, {}}},
-	{.Bench, .Gate, {{.Wood, 3}, {}, {}, {}}},
-	{.Bench, .Larder, {{.Wood, 4}, {.Salt, 2}, {}, {}}},
-	{.Bench, .Campfire, {{.Wood, 4}, {.Pebble, 4}, {}, {}}},
+	needs: []Ingredient, // (as many as it takes)
 }
 
 // An oven, a fire or a churn: it makes one kind of thing at a time, one or
@@ -918,9 +782,6 @@ draw_fire :: proc(at: Station_Kind = .Fire) {
 	box(cleaver, {-0.17, 0.2, 0}, {0.26, 0.06, 0.05}, COLOR_HOOF)
 }
 
-FIRE_BLOCK :: Vec3{1.55, 0, 0.35} // where the chopping block stands, from the fire
-BLOCK_RADIUS :: f32(0.36)
-
 // The churn, in the goat hills: a tall wooden tub with a plunger that goes
 // up and down as it churns, and a stool beside it where what it made waits.
 draw_churn :: proc() {
@@ -950,8 +811,6 @@ draw_churn :: proc() {
 		draw_dish(stool * translate({0, 0.36, 0}), o.dish)
 	}
 }
-
-CHURN_STOOL :: Vec3{0.95, 0, 0.3}
 
 CRUST :: Color{230, 182, 108, 255}
 CRUST_DARK :: Color{190, 130, 66, 255}
@@ -1712,11 +1571,6 @@ draw_cook_menu :: proc() {
 	}
 	label_centred("UP / DOWN: choose     LEFT / RIGHT: how many     {Action}: make it     {Close}: close", sw / 2, py + ph - 42 * s, 18 * s, UI_YELLOW)
 }
-
-// The mill, by the wheat fields: it grinds wheat into flour, a sheaf at a
-// time. E puts all the wheat in the sack into it; E again takes the flour.
-MILL_RADIUS :: f32(1.35)
-MILL_TIME :: f32(2.5) // seconds to grind one sheaf
 
 Mill :: struct {
 	pos:      Vec2,
