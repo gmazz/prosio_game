@@ -18,8 +18,6 @@ AWAKE :: f32(42) // animals further than this from Prosio rest
 BUMP_GAIN :: f32(0.479)
 // How hard an enemy shoves Prosio: speed = BONK * enemy's weight / Prosio's weight
 BONK :: f32(31)
-// Throws slower than this do not get an enemy off its feet.
-WEAK_HIT :: f32(3)
 
 // Bad-tempered turkeys live in Turkey Meadow and roam the open meadow, laying
 // eggs as they go; goats keep to the goat hills, led by a big billy goat;
@@ -62,7 +60,7 @@ Enemy :: struct {
 	home:   Vec2,
 	y, vy:  f32, // height above the ground and vertical speed
 	facing: f32,
-	spin:   f32,
+	impact: Enemy_Impact,
 	hop:    f32,
 	gait:   f32, // how many strides it has walked, run or swum: the legs of a packed animal keep step with it (see quadruped.odin)
 	pace:   f32, // measured ground step speed (m/s, negative when backing up)
@@ -96,6 +94,9 @@ Enemy :: struct {
 	egg_t:     f32, // a turkey lays an egg when this runs out
 	scared_t:  f32, // running from Prosio's wind for this long
 	licking:   bool, // a goat, licking the salt off him
+	sour:      bool, // a goat he has hit: it will not lick him, however salty, until it forgets
+	forget_t:  f32, // and it forgets once he has been out of its sight this much longer
+	drowned_t: f32, // how long it has lain drowned in the pond: it floats a moment, then sinks
 	body_t:    f32, // how much longer its body lies there
 	milk_t:    f32, // a goat has milk again when this runs out
 	penned:    bool, // with fences all round it: settled, and at home there (see look_for_pen)
@@ -155,12 +156,23 @@ BODY_LIFE :: f32(240)
 // Thrown into the pond, an animal swims for the nearest bank, this fast (m/s)
 // and losing this much health a second while it does: a fox swims well, a
 // goat tires, and a turkey is no swimmer at all, so one that lands far out
-// goes bottoms up (comically: feet in the air, cross eyes, bubbles) and
-// floats ashore, where its body lies like any other.
+// goes bottoms up (comically: feet in the air, cross eyes, bubbles), then
+// sinks out of sight: nothing of it comes ashore.
 SWIM_SPEED := [Enemy_Kind]f32{.Turkey = 0.7, .Goat = 1.1, .Billy = 0.9, .Fox = 1.6}
 DROWN_RATE := [Enemy_Kind]f32{.Turkey = 16, .Goat = 3, .Billy = 5, .Fox = 0}
 SWIM_SINK := [Enemy_Kind]f32{.Turkey = 0.16, .Goat = 0.62, .Billy = 0.75, .Fox = 0.3} // how far down it sits in the water
-FLOAT_DRIFT :: f32(0.5) // m/s a drowned one drifts to the bank
+SINK_WAIT :: f32(1.5) // seconds a drowned one floats bottoms up,
+SINK_SPEED :: f32(0.5) // then sinks this fast (m/s)
+SINK_DEPTH :: f32(1.4) // until it is this deep, and gone
+// How far down a drowned animal has sunk.
+sunk :: proc(e: Enemy) -> f32 {
+	return max(e.drowned_t - SINK_WAIT, 0) * SINK_SPEED
+}
+
+// A goat he has hit will not lick him, however salty he is, until it has
+// not seen him (he is further off than SOUR_SIGHT) for SOUR_FORGET seconds.
+SOUR_SIGHT :: f32(22)
+SOUR_FORGET :: f32(90)
 MILK_EVERY :: f32(180) // seconds until a milked goat has milk again
 FOX_NOTICE :: f32(13) // how far off a fox scents his sack
 FOX_REST :: f32(25) // seconds a fox keeps away after a theft or a fright
@@ -190,6 +202,16 @@ blow_damage :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
 	return HARD_BLOW * share * share
 }
 
+// Prosio has hit it, thrown it, or knocked it about, hurt or not: a goat
+// will not come licking him again for a long while (see SOUR_FORGET).
+offend :: proc(e: ^Enemy) {
+	if e.kind == .Goat || e.kind == .Billy {
+		e.sour = true
+		e.forget_t = SOUR_FORGET
+		e.licking = false
+	}
+}
+
 // The animal takes a blow. True if it has no health left.
 hurt_enemy :: proc(e: ^Enemy, damage: f32) -> bool {
 	if e.ko || damage <= 0 {
@@ -197,6 +219,7 @@ hurt_enemy :: proc(e: ^Enemy, damage: f32) -> bool {
 	}
 	e.health = max(e.health - damage, 0)
 	e.hurt_t = 0
+	offend(e)
 	if e.kind == .Turkey && damage > 4 {
 		// Feathers fly.
 		burst({e.pos.x, e.y + 0.6, e.pos.y}, 3 + int(min(damage, 60) / 8), 2.5, TURKEY_TIP, 0.07)
@@ -339,11 +362,8 @@ bump_speed :: proc(momentum: f32, kind: Enemy_Kind) -> f32 {
 // Sends an enemy flying. Leaving at this speed is a blow of that speed
 // (unless the blow has been counted already).
 launch_enemy :: proc(e: ^Enemy, dir: Vec2, speed: f32, hurts := true) {
-	drop_loot(e)
-	e.state = .Flying
-	e.skip = false
-	e.vel = dir * speed
-	e.vy = speed * 0.55
+	offend(e)
+	begin_enemy_impact(e, dir, speed, .Launch)
 	if hurts {
 		hurt_enemy(e, blow_damage(e.kind, speed))
 	}
@@ -356,6 +376,16 @@ update_enemies :: proc(dt: f32) {
 	for &e, index in g.enemies[:g.enemy_count] {
 		r := ENEMY_RADIUS[e.kind]
 		e.yield_t = max(0, e.yield_t - dt)
+		if e.sour {
+			// A goat he hit forgets it only once he has been well out of
+			// its sight for a long while; seen again, it starts over.
+			if length2(p.pos - e.pos) > SOUR_SIGHT {
+				e.forget_t -= dt
+				e.sour = e.forget_t > 0
+			} else {
+				e.forget_t = SOUR_FORGET
+			}
+		}
 		e.hit_t -= dt
 		e.scared_t -= dt
 		e.milk_t -= dt
@@ -376,6 +406,8 @@ update_enemies :: proc(dt: f32) {
 				e.scared_t = 0
 				e.limp = 0
 				e.body_t = 0
+				e.sour = false // a new one: it never met him
+				e.drowned_t = 0
 				burst({e.pos.x, 0.5, e.pos.y}, 10, 3, COLOR_DUST, 0.14)
 			}
 
@@ -495,8 +527,18 @@ update_enemies :: proc(dt: f32) {
 			e.vy -= GRAVITY * dt
 			e.y += e.vy * dt
 			e.pos += e.vel * dt
-			e.spin += length2(e.vel) * dt * 1.2
-			hit, n := collide_static(&e.pos, r, e.y, true, false, true)
+			if e.impact.kind != .None {
+				spin_enemy_impact(&e.impact, dt)
+			}
+			hit, n := collide_static(&e.pos, r, e.y, true, false, true, false)
+			if out := beyond_edge(e.pos); out > FOG_LOST || (out > 0 && e.y <= 0 && e.vy < 0) {
+				// Into the fog beyond the meadow: lost.
+				if length2(e.pos - p.pos) < 25 {
+					say("Bye bye! Into the fog...", 1.4)
+				}
+				leave(&e)
+				continue
+			}
 			if ENEMY_KG[e.kind] > FENCE_HEAVY && e.y < FENCE_TOP + 0.6 {
 				// Too big to sail over a fence: it bangs into it.
 				if h, fn := push_out_fences(&e.pos, r); h {
@@ -523,7 +565,7 @@ update_enemies :: proc(dt: f32) {
 					d := other.pos - e.pos
 					if length2(d) < r + ENEMY_RADIUS[other.kind] {
 						passed := speed * 0.7 * ENEMY_KG[e.kind] / ENEMY_KG[other.kind]
-						launch_enemy(&other, normalize2(d), min(passed, speed))
+						enemy_impact(&other, normalize2(d), min(passed, speed))
 						e.vel *= 0.5
 						burst({other.pos.x, 0.6, other.pos.y}, 8, 4, COLOR_STAR, 0.12)
 						break
@@ -536,6 +578,7 @@ update_enemies :: proc(dt: f32) {
 				e.vy = 0
 				e.vel *= 0.2
 				e.state = .Swimming
+				e.impact = {}
 				e.skip = false
 				e.limp = 0
 				burst({e.pos.x, 0.2, e.pos.y}, 22, 5, POND_SPLASH, 0.13)
@@ -557,64 +600,80 @@ update_enemies :: proc(dt: f32) {
 					e.vel = dir * (forward * SKIP_KEEP + fall * SKIP_SPIN)
 					g.shake = max(g.shake, min(fall * ENEMY_KG[e.kind] / 900, 0.6))
 					burst({e.pos.x, 0.1, e.pos.y}, 4 + int(fall), 2 + fall * 0.2, COLOR_DUST, 0.13)
-				} else if e.vy < -4 {
-					e.vy = -e.vy * 0.4
-					e.vel *= 0.7
 				} else {
-					e.vy = 0
-					e.skip = false
-					e.state = .Dizzy
-					e.timer = e.ko ? 0.7 : 2.5
+					e.vel *= IMPACT_LANDING_KEEP
+					if e.vy < -IMPACT_REBOUND_SPEED {
+						e.vy *= -IMPACT_RESTITUTION
+					} else {
+						land_enemy_impact(&e)
+					}
 				}
 			}
 
 		case .Swimming:
-			// For the nearest bank: paddling, or (drowned) drifting.
+			// Paddling for the nearest bank; or, drowned, bottoms up a moment
+			// and then down it goes, and is gone.
 			out := e.pos - POND
 			bank := POND + normalize2(out) * (POND_RADIUS - 0.3)
 			to := bank - e.pos
-			want := e.ko ? FLOAT_DRIFT : SWIM_SPEED[e.kind] * lerp(HURT_SLOW, 1, e.health / ENEMY_HEALTH)
-			e.vel = approach2(e.vel, normalize2(to) * want, 3 * dt)
+			if e.ko {
+				e.vel = approach2(e.vel, {}, 2 * dt)
+				e.pos += e.vel * dt
+				e.y = 0
+				e.drowned_t += dt
+				if math.mod(g.time + f32(index) * 0.29, e.drowned_t > SINK_WAIT ? 0.2 : 0.9) < dt {
+					spawn_particle({e.pos.x, 0.1, e.pos.y}, {0, 0.8, 0}, 1.2, 0.07, {220, 240, 250, 255}, 0) // a bubble
+				}
+				if sunk(e) >= SINK_DEPTH {
+					burst({e.pos.x, 0.1, e.pos.y}, 6, 1, POND_SPLASH, 0.06)
+					leave(&e)
+				}
+				break
+			}
+			e.vel = approach2(e.vel, normalize2(to) * SWIM_SPEED[e.kind] * lerp(HURT_SLOW, 1, e.health / ENEMY_HEALTH), 3 * dt)
 			e.pos += e.vel * dt
 			e.y = 0
-			if !e.ko {
-				e.facing = math.atan2(to.x, to.y)
-				e.hop += dt * 9
-				e.gait += quad_stride_rate(e.kind, length2(e.vel)) * dt
-				if DROWN_RATE[e.kind] > 0 && hurt_enemy(&e, DROWN_RATE[e.kind] * dt) {
-					// Glub glub... bottoms up.
-					burst({e.pos.x, 0.3, e.pos.y}, 12, 2, POND_SPLASH, 0.1)
-					if length2(e.pos - p.pos) < 25 {
-						say("Glub glub... oops! Bottoms up!", 1.6)
-					}
+			e.facing = math.atan2(to.x, to.y)
+			e.hop += dt * 9
+			e.gait += quad_stride_rate(e.kind, length2(e.vel)) * dt
+			if DROWN_RATE[e.kind] > 0 && hurt_enemy(&e, DROWN_RATE[e.kind] * dt) {
+				// Glub glub... bottoms up.
+				burst({e.pos.x, 0.3, e.pos.y}, 12, 2, POND_SPLASH, 0.1)
+				e.drowned_t = 0
+				if length2(e.pos - p.pos) < 25 {
+					say("Glub glub... oops! Bottoms up!", 1.6)
 				}
-				if math.mod(g.time + f32(index) * 0.29, 0.35) < dt {
-					spawn_particle({e.pos.x - math.sin(e.facing) * r, 0.05, e.pos.y - math.cos(e.facing) * r}, {0, 1.4, 0}, 0.5, 0.06, POND_SPLASH, 0)
-				}
-			} else if math.mod(g.time + f32(index) * 0.29, 0.9) < dt {
-				spawn_particle({e.pos.x, 0.1, e.pos.y}, {0, 0.8, 0}, 1.2, 0.07, {220, 240, 250, 255}, 0) // a bubble
+			}
+			if math.mod(g.time + f32(index) * 0.29, 0.35) < dt {
+				spawn_particle({e.pos.x - math.sin(e.facing) * r, 0.05, e.pos.y - math.cos(e.facing) * r}, {0, 1.4, 0}, 0.5, 0.06, POND_SPLASH, 0)
 			}
 			if !in_pond(e.pos) || length2(out) > POND_RADIUS - 0.35 {
 				// Ashore: out it climbs and shakes itself, and keeps well away
-				// for a while; or its body lies on the bank.
+				// for a while.
 				e.pos = POND + normalize2(out) * (POND_RADIUS - 0.5 + r + 0.15)
 				e.vel = {}
 				burst({e.pos.x, 0.5, e.pos.y}, 14, 3, POND_SPLASH, 0.08)
 				e.state = .Dizzy
-				e.timer = e.ko ? 0.1 : 1.2
-				if !e.ko {
-					e.scared_t = max(e.scared_t, 6)
-				}
+				e.timer = 1.2
+				e.scared_t = max(e.scared_t, 6)
 			}
 
 		case .Dizzy:
-			e.vel = approach2(e.vel, {}, 14 * dt)
-			e.pos += e.vel * dt
-			collide_static(&e.pos, r, e.y, true)
-			e.y = 0
 			e.timer -= dt
+			ready := e.timer <= 0
+			if e.impact.kind == .None {
+				e.vel = approach2(e.vel, {}, 14 * dt)
+			} else {
+				ready = step_enemy_impact(&e, dt) && ready
+			}
+			e.pos += e.vel * dt
+			hit, normal := collide_static(&e.pos, r, 0, true)
+			if hit && e.impact.kind != .None {
+				e.vel -= normal * min(dot2(e.vel, normal), 0)
+			}
+			e.y = 0
 			touch_prosio(&e, false)
-			if e.state == .Dizzy && e.timer <= 0 {
+			if e.state == .Dizzy && ready && (e.impact.kind == .None || e.impact.age > 0) {
 				if e.ko && MEAT_FROM[e.kind] > 0 {
 					// That was the end of it: its body stays.
 					e.state = .Dead
@@ -627,6 +686,7 @@ update_enemies :: proc(dt: f32) {
 					leave(&e)
 				} else {
 					e.state = .Chase
+					e.impact = {}
 					e.timer = 0.5
 					e.hunt = .Retreat
 					e.hunt_t = 0.8
@@ -699,7 +759,7 @@ chase_velocity :: proc(e: ^Enemy, index: int, dt: f32) -> Vec2 {
 	if e.kind == .Fox {
 		return fox_velocity(e, dist, toward, dt)
 	}
-	if goat && salty() && dist < 16 {
+	if goat && salty() && !e.sour && dist < 16 {
 		// A salty pig! It trots up and licks him, and has no mind to butt.
 		e.hunt = .Stalk
 		e.hunt_t = 1
@@ -869,6 +929,7 @@ drop_loot :: proc(e: ^Enemy) {
 leave :: proc(e: ^Enemy) {
 	unpen(e) // the next one comes back where its kind lives, not in the pen
 	e.state = .Gone
+	e.impact = {}
 	e.timer = random_range(RESPAWN[e.kind].x, RESPAWN[e.kind].y)
 	e.has_loot = false
 }
@@ -1134,19 +1195,18 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 	}
 	p.dash_t = 0
 	p.wobble_vel += 4
+	offend(e) // even a bump that only pushes it
 
-	if speed < min(WEAK_HIT, ENEMY_STURDY[e.kind]) {
-		// Too light: the enemy holds its ground and Prosio bounces back.
-		e.vel = dir * speed
-		e.timer = 0.6
+	before := e.health
+	response := enemy_impact(e, dir, speed)
+	if response < .Launch {
+		// Prosio bounces back when he cannot send it flying.
 		p.vel = -away * hit_speed * 0.45
 		burst({e.pos.x, 0.7, e.pos.y}, 4, 2, COLOR_DUST, 0.1)
 		say("Boing! I'm too light!", 1.2)
 		return
 	}
 
-	before := e.health
-	launch_enemy(e, dir, speed)
 	// A heavy Prosio ploughs on; a lighter one is slowed more.
 	p.vel *= lerp(0.2, 0.75, fatness())
 	g.shake = max(g.shake, min(speed * 0.04, 0.8))
@@ -1204,9 +1264,8 @@ stomp_enemies :: proc() -> bool {
 			e.vy = 3
 			knocked_out = true
 		} else {
-			e.state = .Dizzy
+			enemy_impact(&e, away, IMPACT_FALL_SPEED, false)
 			e.timer = 0.8 + 2.5 * (1 - e.health / ENEMY_HEALTH)
-			e.vel = away * 2
 		}
 		pain_stars({e.pos.x, e.y + r * 1.8, e.pos.y}, damage / 12)
 		burst({e.pos.x, e.y + 0.7, e.pos.y}, 4 + int(damage / 25), 3 + damage / 60, COLOR_STAR, 0.12)

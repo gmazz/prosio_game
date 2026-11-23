@@ -615,11 +615,9 @@ spear_damage :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
 
 // A spear in flight meets an animal.
 spear_hits :: proc(t: ^Thrown_Rock, e: ^Enemy, speed: f32) {
-	drop_loot(e)
 	hurt_enemy(e, spear_damage(e.kind, speed))
-	e.state = .Dizzy
-	e.timer = e.ko ? 0.7 : SPEAR_STAGGER
-	e.vel = normalize2(t.vel) * 2
+	enemy_impact(e, normalize2(t.vel), e.ko ? IMPACT_FALL_SPEED : IMPACT_STUMBLE_SPEED, false)
+	e.timer = SPEAR_STAGGER
 	pain_stars({e.pos.x, ENEMY_RADIUS[e.kind] * 1.6, e.pos.y}, 8)
 	g.shake = max(g.shake, 0.25)
 	say("THUNK!", 0.6)

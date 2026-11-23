@@ -70,6 +70,8 @@ Prosio :: struct {
 	safe_t:       f32, // time left during which enemies cannot shove him again
 	eat_t:        f32, // time left in the munching animation
 	pick_t:       f32, // time left picking something up
+	shake_t:      f32, // time left shaking a tree he has hold of
+	shake_power:  f32, // and how hard: the strength of his arms
 	pick_item:    Item, // what he is picking up
 	walk_phase:   f32,
 	wobble:       f32, // belly jiggle, a small spring
@@ -279,6 +281,7 @@ update_prosio :: proc(dt: f32) {
 	p.safe_t -= dt
 	p.eat_t -= dt
 	p.pick_t -= dt
+	p.shake_t -= dt
 	if p.pick_t <= 0 {
 		p.casting = false
 	}
@@ -323,7 +326,7 @@ update_prosio :: proc(dt: f32) {
 	}
 
 	grounded := !p.airborne
-	busy := p.eat_t > 0 || p.pick_t > 0 || p.ache_t > 0
+	busy := p.eat_t > 0 || p.pick_t > 0 || p.ache_t > 0 || p.shake_t > 0
 	can_act := p.dazed_t <= 0 && p.dash_t <= 0 && !busy
 	food := food_in_reach(p.pos, r + 0.75)
 	bush := bush_in_reach(p.pos, r + 0.6)
@@ -400,7 +403,15 @@ update_prosio :: proc(dt: f32) {
 	// Bump: a short belly charge. Costs more stamina the heavier he is.
 	if grounded && can_act && !carrying && pressed(.Bump) {
 		cost := dash_cost()
-		if p.stamina >= cost {
+		if tree, ok := tree_in_front(moving ? move : facing_dir(p.facing)); ok {
+			// Right up against a tree and facing it: he takes hold of it and
+			// shakes it, rather than charging into it.
+			if p.stamina >= cost {
+				shake_tree(tree, cost)
+			} else {
+				answer("Too tired!")
+			}
+		} else if p.stamina >= cost {
 			dir := moving ? normalize2(move) : facing_dir(p.facing)
 			p.stamina -= cost
 			p.regen_delay = 0.6

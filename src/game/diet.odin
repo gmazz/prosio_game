@@ -129,6 +129,8 @@ DIM_SIGHT :: f32(0.6)
 DIM_ZOOM :: f32(0.85)
 SALTY_THIRST :: f32(2.5) // salty: how much faster he gets thirsty
 LICK :: f32(0.25) // electrolytes the goats lick off him each second
+DRINK_SALT :: f32(25) // electrolytes a drink washes out of him,
+DRINK_SALT_FLOOR :: f32(40) // but no lower than this
 CRAMP_AFTER :: f32(2.5) // lacking electrolytes: seconds of sprinting that bring on a cramp,
 CRAMP_JUMP :: f32(0.6) // and the share of his jump he still has
 BULK_BURN :: f32(1.4) // full of protein: how much more everything burns (how much faster muscle builds is BULK in body.odin)
@@ -661,9 +663,16 @@ drink :: proc() {
 			washed = true
 		}
 	}
-	if p.need[.Water] > 95 && !washed {
+	salt_before := p.need[.Electrolytes]
+	if p.need[.Water] > 95 && !washed && !full_of(.Electrolytes) {
 		answer("I'm not thirsty!")
 		return
+	}
+	// Water washes some salt out of him too (enough that the goats lose
+	// interest), but never so much that he is short of it.
+	if p.need[.Electrolytes] > DRINK_SALT_FLOOR {
+		p.need[.Electrolytes] = max(p.need[.Electrolytes] - DRINK_SALT, DRINK_SALT_FLOOR)
+		washed ||= salt_before > NEED_HIGH
 	}
 	p.need[.Water] = 100
 	p.pick_t = DRINK_TIME

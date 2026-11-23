@@ -4,7 +4,7 @@
 
 | Owner | Scope and affected files | Status | Next step |
 |---|---|---|---|
-| Unassigned | Native visual review of packed animals | Ground drags now use a fallen pose with fixed-length grips. Both builds and WebGL checks passed. | Review in a native window when the display is available. |
+| Unassigned | Native visual review of animal impacts and packed-animal drags | Shared impacts and ground drags verified in the checks and WebGL. The desktop build succeeded. | Review the animations during a native play session. |
 
 Use one row per active change. Identify the agent or worktree and the files or asset identifiers involved. When handing off, move the outcome to the dated history below, including the asset revision, checks run, open issues and next owner if known. Coordinate changes to joint names, socket meaning, units and axes on both sides of the export.
 
@@ -46,6 +46,12 @@ These are suggested starting efforts for authoring. They have not been compared 
 Run `tools/check.sh` after game changes. Headless checks establish gameplay outcomes. Inspect rendered sequences for clipping, sliding sockets and inconsistent shadows. Record separately which builds ran, which scenes were seen, and which measurements are still missing.
 
 ## Handoff history
+
+**2026-11-23 — Claude: trees, salt, sinking and fog (on top of the shared impacts).** Not asset work, but it touches the same files. A bump close to a tree and facing it shakes the tree (`tree_in_front`, `shake_tree` in `world.odin`; Prosio's two-hooved pose in `draw.odin`). Drowned animals sink and leave instead of floating ashore (`Enemy.drowned_t`, `sunk`; drawn in `draw.odin` and `quadruped.odin`). The edge fence is replaced by a fog in `scene.frag` (`worldHalf`, `fog` uniforms), and an animal thrown past the edge is lost. Goats stop licking after any blow from Prosio through `offend` in `enemies.odin`. A shared-impact push does no damage, so `hurt_enemy` alone missed bumps on the billy goat; `offend` is now called from `prosio_hits_enemy`, `launch_enemy` and the held-animal bash as well. 145 rules pass, both builds.
+
+**2026-11-23 — Shared animal impacts.** Goat, billy goat, fox and turkey share a controller driven by transferred speed after grip and mass. A push or stumble uses a short brace. A fall or launch carries the current rotation through the tumble, sliding and settling on a flank. Survivors stand up from that pose. Knocked-out animals finish in the same fallen pose until they are moved. Packed models use their skinned mesh to find ground contact. The procedural turkey uses body and limb bounds. Tuning lives in `src/game/impact.odin`. Existing packed asset revisions are in use.
+
+**Verification.** All 140 gameplay rules passed, including 16 graded impacts across the four animals, a real 125 kg dash into a goat, rotation at landing, and the transition into the knocked-out pose. Desktop and web builds passed. WebGL sequences in `build/playtest/animal-impact/` cover the four goat responses and launches of the billy goat, fox and turkey. The heavy goat replay shows the rotation continuing into the tumble and get-up. Native visual review is pending.
 
 **2026-11-22 — Claude: goats stand or walk.** The user's next video showed a goat walking on the spot and another turning its back to him again and again. A probe (the real game, Prosio standing in Goat Hills, every goat logged each frame) found both: closing in on its spot the goat slowed gradually to 0.1 m/s, its legs walking at a quarter stride a second (creeping 33% of goat-frames); and the "walk aside when crowded" detour aimed at where it wanted to go, which while backing off is away from him, so it swung round every 0.6 s (back to him while squaring 2.6%, 14 half-turns a minute). Now in `quad_steer` it stands or walks at least 0.8 m/s (`QUAD_SLOWEST`, setting off above 0.3, stopping below 0.12), the aside detour is gone (crowded, it keeps facing him), and turning on the spot steps less (`QUAD_TURN_STEP` 0.25). Same probe after: creeping 3.9% (all speeding up or slowing down, none longer than 8 frames), back to him 0.3%, 5 half-turns. New rule: no creeping and no turned back while squaring; 115 rules pass.
 

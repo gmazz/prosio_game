@@ -15,6 +15,8 @@ uniform vec4 forest;    // centre x, z and radii of the forest
 uniform vec4 hills;     // and of the goat hills
 uniform vec4 pond;      // the pond: centre x, z and its radius
 uniform float windTime;
+uniform vec2 worldHalf; // the meadow reaches this far from the middle,
+uniform vec2 fog;       // and beyond it a thick dark fog: starting this far out, and solid this much further
 
 float hash(vec2 p) {
     vec3 q = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
@@ -122,17 +124,29 @@ vec3 meadow(vec2 p, float dither) {
     return ground;
 }
 
+// Beyond the edge of the meadow everything goes into a thick dark fog, in
+// a few dithered steps.
+const vec3 FOG_COLOR = vec3(.14, .15, .17);
+float fogged(float dither) {
+    float out_by = max(abs(position.x) - worldHalf.x, abs(position.z) - worldHalf.y);
+    float wobble = .8 * (wash(position.xz * .3 + windTime * .05) - .5);
+    return steps(smoothstep(fog.x, fog.x + fog.y, out_by + wobble), 4.0, dither);
+}
+
 void main() {
     float dither = bayer4(gl_FragCoord.xy);
+    float mist = fogged(dither);
     if (fade > 0.0 && bayer4(gl_FragCoord.xy) < fade) {
         discard;
     }
     if (surface == 1) {
-        OUT_COLOR = vec4(meadow(position.xz, dither), 1.0);
+        OUT_COLOR = vec4(mix(meadow(position.xz, dither), FOG_COLOR, mist), 1.0);
         return;
     }
     if (surface == 3) {
-        // A shadow, flattened on the ground: drawn flat into the shadow image.
+        // A shadow, flattened on the ground: drawn flat into the shadow image
+        // (none in the fog).
+        if (mist > 0.0) discard;
         OUT_COLOR = vec4(colDiffuse.rgb, 1.0);
         return;
     }
@@ -191,5 +205,5 @@ void main() {
     float contact = mix(.8, 1.0, steps(smoothstep(.0, .5, position.y), 2.0, dither));
     vec3 color = pigment * tint * contact + bounce + sky;
     color = floor(color * 14.0 + .5) / 14.0;
-    OUT_COLOR = vec4(mix(color, vec3(1.0, .89, .68), hitFlash), colDiffuse.a);
+    OUT_COLOR = vec4(mix(mix(color, vec3(1.0, .89, .68), hitFlash), FOG_COLOR, mist), colDiffuse.a);
 }

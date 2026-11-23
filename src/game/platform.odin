@@ -119,6 +119,7 @@ surface_location: i32
 uniforms: struct {
 	fade, wind_time, sway: i32,
 	fields, field_count, paths, path_count, forest, hills, pond: i32,
+	world_half, fog: i32,
 }
 active_surface: Surface
 set_surface :: proc(surface: Surface) {
@@ -163,7 +164,7 @@ drawing_shadows :: proc() -> bool {
 // Where the fields, paths and regions are, for painting the ground. Each
 // field and region is {x0, z0, x1, z1} or {centre x, centre z, radius x,
 // radius z}; each path is a segment {x0, z0, x1, z1}.
-set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills, pond: [4]f32) {
+set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills, pond: [4]f32, edge: Vec2) {
 	sh := material.shader
 	fc, pc := i32(len(fields)), i32(len(paths))
 	if fc > 0 {
@@ -178,6 +179,11 @@ set_ground_uniforms :: proc(fields: [][4]f32, paths: [][4]f32, forest, hills, po
 	rl.SetShaderValue(sh, uniforms.forest, &f, .VEC4)
 	rl.SetShaderValue(sh, uniforms.hills, &h, .VEC4)
 	rl.SetShaderValue(sh, uniforms.pond, &w, .VEC4)
+	// The edge of the meadow, and the fog beyond it.
+	e := edge
+	fog := [2]f32{FOG_START, FOG_THICK}
+	rl.SetShaderValue(sh, uniforms.world_half, &e, .VEC2)
+	rl.SetShaderValue(sh, uniforms.fog, &fog, .VEC2)
 }
 
 // How far what follows sways in the wind at its top (leaves).
@@ -230,6 +236,8 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	uniforms.forest = rl.GetShaderLocation(material.shader, "forest")
 	uniforms.hills = rl.GetShaderLocation(material.shader, "hills")
 	uniforms.pond = rl.GetShaderLocation(material.shader, "pond")
+	uniforms.world_half = rl.GetShaderLocation(material.shader, "worldHalf")
+	uniforms.fog = rl.GetShaderLocation(material.shader, "fog")
 	init_quad_meshes()
 	init_tree_meshes()
 }
@@ -858,29 +866,31 @@ ui_text_width :: proc(text: cstring, size: f32) -> f32 {
 	return f32(rl.MeasureText(expand_keys(text), i32(size)))
 }
 
-// Formats a number into a short text, e.g. ui_format("%d kg", 80).
+// Formats a number into a short text, e.g. ui_format("%d kg", 80). Button
+// names in braces are written out first: raylib's TextFormat (Odin's own
+// formatter underneath) would take the braces for its own.
 ui_format :: proc(format: cstring, value: i32) -> cstring {
-	return rl.TextFormat(format, value)
+	return rl.TextFormat(expand_keys(format), value)
 }
 
 // Three numbers.
 ui_format3 :: proc(format: cstring, a, b, c: i32) -> cstring {
-	return rl.TextFormat(format, a, b, c)
+	return rl.TextFormat(expand_keys(format), a, b, c)
 }
 
 // A name and two numbers, e.g. ui_format_title("%s: +%d%% (up to %d%%)", "Baker", 40, 80).
 ui_format_title :: proc(format: cstring, name: cstring, a, b: i32) -> cstring {
-	return rl.TextFormat(format, name, a, b)
+	return rl.TextFormat(expand_keys(format), name, a, b)
 }
 
 // The same with a name, e.g. ui_format_name("my %s", "PIE").
 ui_format_name :: proc(format: cstring, name: cstring) -> cstring {
-	return rl.TextFormat(format, name)
+	return rl.TextFormat(expand_keys(format), name)
 }
 
 // The same with two numbers, e.g. ui_format2("%d/%d", 2, 3).
 ui_format2 :: proc(format: cstring, a, b: i32) -> cstring {
-	return rl.TextFormat(format, a, b)
+	return rl.TextFormat(expand_keys(format), a, b)
 }
 
 // Darkens the edges of the screen a little, to draw the eye to the middle.

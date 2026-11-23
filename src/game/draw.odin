@@ -5,6 +5,13 @@ import "core:math/linalg"
 
 // Everything is drawn from a handful of simple shapes placed with matrices.
 
+IMPACT_QUAD_PIVOT :: f32(1.1)
+IMPACT_TURKEY_PIVOT :: f32(1.18)
+IMPACT_STEP_ANGLE :: f32(0.43)
+IMPACT_HIND_TUCK :: f32(-0.7)
+IMPACT_FRONT_TUCK :: f32(0.65)
+IMPACT_LEG_SPLAY :: f32(0.24)
+
 COLOR_SKY :: Color{159, 181, 157, 255}
 COLOR_OUTSIDE :: Color{93, 130, 105, 255}
 COLOR_TUFT :: Color{94, 132, 85, 255}
@@ -131,32 +138,9 @@ draw_ground :: proc() {
 	outlines_enabled = true
 }
 
-// The fence round the meadow, and the trees, rocks and bushes.
+// The trees, rocks and bushes. (Round the meadow there is no fence: it
+// fades into fog, see scene.frag.)
 draw_world :: proc() {
-	w := WORLD_HALF
-	// Fence: posts and two rails all the way round.
-	for x := -w.x; x <= w.x; x += 2 {
-		if abs(x - g.camera.x) > 21 * g.camera_zoom {
-			continue
-		}
-		box(IDENTITY, {x, 0.45, -w.y - 0.2}, {0.24, 0.9, 0.24}, COLOR_FENCE)
-		box(IDENTITY, {x, 0.45, w.y + 0.2}, {0.24, 0.9, 0.24}, COLOR_FENCE)
-	}
-	for z := -w.y + 2; z <= w.y - 2; z += 2 {
-		if !on_screen({g.camera.x, z}, 1) {
-			continue
-		}
-		box(IDENTITY, {-w.x - 0.2, 0.45, z}, {0.24, 0.9, 0.24}, COLOR_FENCE)
-		box(IDENTITY, {w.x + 0.2, 0.45, z}, {0.24, 0.9, 0.24}, COLOR_FENCE)
-	}
-	rail := shade(COLOR_FENCE, 0.9)
-	for y in ([2]f32{0.32, 0.68}) {
-		box(IDENTITY, {0, y, -w.y - 0.2}, {w.x * 2 + 0.4, 0.1, 0.1}, rail)
-		box(IDENTITY, {0, y, w.y + 0.2}, {w.x * 2 + 0.4, 0.1, 0.1}, rail)
-		box(IDENTITY, {-w.x - 0.2, y, 0}, {0.1, 0.1, w.y * 2 + 0.4}, rail)
-		box(IDENTITY, {w.x + 0.2, y, 0}, {0.1, 0.1, w.y * 2 + 0.4}, rail)
-	}
-
 	// Trees, rocks, bushes. Trees further off still cast shadows into view.
 	for r, i in g.rounds[:g.round_count] {
 		if r.r <= 0 || !on_screen(r.pos, r.kind == .Tree ? 6 : 2) {
@@ -315,7 +299,7 @@ draw_tree :: proc(pos: Vec2, index: int) {
 	}
 	m := translate({pos.x, 0, pos.y}) * rot_y(f32(index) * 2.39)
 	// A shaken tree trembles for a moment.
-	shake := g.rounds[index].shake_t
+	shake := g.rounds[index].shake_t * g.rounds[index].shake_power
 	crown := m * translate({math.sin(g.time * 47) * shake * 0.25, 0, math.cos(g.time * 39) * shake * 0.2})
 
 	bark := t.species == .Blossom ? Color{104, 78, 72, 255} : COLOR_TRUNK
@@ -542,6 +526,59 @@ Animal_Pose :: struct {
 	dead:        bool, // crosses for eyes
 }
 
+// Carry the same body frame across flight, floor contact and standing up.
+impact_pose :: proc(e: Enemy) -> Animal_Pose {
+	r := ENEMY_RADIUS[e.kind]
+	i := e.impact
+	pivot := Vec3{0, e.kind == .Turkey ? IMPACT_TURKEY_PIVOT : IMPACT_QUAD_PIVOT, 0}
+	m := translate({e.pos.x, e.y, e.pos.y}) * rot_y(e.facing) * scale({r, r, r}) *
+	     translate(pivot) * linalg.matrix4_from_quaternion(i.rotation) * translate(-pivot)
+	pose := Animal_Pose{rear = m, front = m, dizzy = i.kind >= .Fall, dead = e.state == .Dead}
+	for si in 0..<2 {
+		side := f32(si * 2 - 1)
+		stride := side * math.sin(e.hop) * min(length2(e.vel) / IMPACT_FALL_SPEED, 1) * (1 - smooth(clamp(i.age / i.duration, 0, 1)))
+		if i.phase != .Brace {
+			stride = 0
+		}
+		pose.legs[si] = {
+			{stride * IMPACT_STEP_ANGLE + i.bend * IMPACT_HIND_TUCK, -side * i.bend * IMPACT_LEG_SPLAY},
+			{-stride * IMPACT_STEP_ANGLE + i.bend * IMPACT_FRONT_TUCK, -side * i.bend * IMPACT_LEG_SPLAY},
+		}
+	}
+	if _, packed := quad_model_for(e.kind); !packed {
+		// Procedural models have no mesh skin to query. Use body and limb bounds.
+		low := impact_shape_low(pose, e.kind)
+		lift := impact_ground_lift(e, low)
+		pose.rear[1, 3] += lift
+		pose.front[1, 3] += lift
+	}
+	return pose
+}
+
+impact_shape_low :: proc(pose: Animal_Pose, kind: Enemy_Kind) -> f32 {
+	m := pose.rear
+	if kind != .Turkey {
+		return min(impact_part_low(m, {0, 1, 0}, {0.51, 1, 1.32}),
+		           impact_part_low(m, {0, 1.55, 1}, {0.45, 0.47, 0.48}))
+	}
+	low := min(impact_part_low(m, {0, 1.22, -0.25}, {0.7, 0.6, 0.72}),
+	           impact_part_low(m, {0, 1.2, 0.18}, {0.62, 0.64, 0.6}),
+	           impact_part_low(m, {0, 1.92, 0.83}, {0.29, 0.31, 0.54}))
+	fan := m * translate({0, 1.3, -0.62}) * rot_x(-1)
+	for side, si in ([2]f32{-1, 1}) {
+		turn := pose.legs[si][0]
+		leg := m * translate({side * 0.22, 0.86, -0.06}) * rot_z(turn.y) * rot_x(turn.x)
+		low = min(low, impact_part_low(leg, {0, -0.84, 0.075}, {0.165, 0.04, 0.22}),
+		          impact_part_low(fan * rot_z(side * 0.55), {0, 0.5, 0}, {0.14, 0.5, 0.05}))
+	}
+	return min(low, impact_part_low(fan, {0, 0.5, 0}, {0.14, 0.5, 0.05}))
+}
+
+impact_part_low :: proc(m: Mat4, center, radii: Vec3) -> f32 {
+	up := Vec3{m[1, 0], m[1, 1], m[1, 2]}
+	return m[1, 3] + linalg.dot(up, center) - linalg.length(up * radii)
+}
+
 // Animal models share the same metre-independent frame (+Z is the muzzle).
 // A diagonal pair of feet advances together in the trot.
 draw_enemy :: proc(e: Enemy) {
@@ -550,7 +587,9 @@ draw_enemy :: proc(e: Enemy) {
 	}
 	r := ENEMY_RADIUS[e.kind]
 	pose := Animal_Pose{dizzy = e.state == .Dizzy || e.limp > 0 || e.ko}
-	if e.state == .Held {
+	if e.impact.kind != .None {
+		pose = impact_pose(e)
+	} else if e.state == .Held {
 		pose = held_pose(e)
 	} else if e.state == .Dead {
 		pose.dead = true
@@ -563,7 +602,7 @@ draw_enemy :: proc(e: Enemy) {
 		// Bottoms up: on its back in the water, feet in the air.
 		pose.dead = true
 		bob := 0.03 * math.sin(g.time * 2.5 + e.pos.x)
-		m := translate({e.pos.x, 0.12 + bob, e.pos.y}) * rot_y(e.facing + g.time * 0.3) * scale({r, r, r}) * rot_z(math.PI) * translate({0, -0.55, 0})
+		m := translate({e.pos.x, 0.12 + bob - sunk(e), e.pos.y}) * rot_y(e.facing + g.time * 0.3) * scale({r, r, r}) * rot_z(math.PI) * translate({0, -0.55, 0})
 		pose.rear, pose.front = m, m
 	} else {
 		pace := e.state == .Chase ? min(length2(e.vel) / ENEMY_SPEED[e.kind], 1) : f32(0)
@@ -581,8 +620,6 @@ draw_enemy :: proc(e: Enemy) {
 		}
 		m := translate({e.pos.x, lift, e.pos.y}) * rot_y(e.facing) * scale({r, r, r})
 		#partial switch e.state {
-		case .Flying:
-			m = m * translate({0, 0.9, 0}) * rot_x(e.spin) * translate({0, -0.9, 0})
 		case .Dizzy:
 			m = m * rot_z(0.10 * math.sin(g.time * 6))
 		}
@@ -1147,6 +1184,11 @@ draw_prosio :: proc() {
 		case p.eat_t > 0:
 			hand = {side * 0.24, 1.55, 0.48}
 			elbow.z = 0.32
+		case p.shake_t > 0 && p.fail == .None:
+			// Both hooves on the trunk in front of him, shaking it to and fro.
+			jiggle := math.sin(g.time * 38) * 0.06 * p.shake_power
+			hand = {side * 0.22, 1.2, belly_out + belly + 0.3 + jiggle}
+			elbow = {side * (chest + 0.12), 1.2, (belly_out + belly) * 0.5 + jiggle * 0.5}
 		case p.dash_t > 0:
 			hand.y, hand.z = 1.02, -0.31
 			elbow.z = -0.23

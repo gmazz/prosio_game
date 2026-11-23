@@ -81,7 +81,7 @@ draw_packed_tree :: proc(pos: Vec2, index: int, t: Tree_Shape) {
 	lean := Vec2{2 * tree_random(index, 3) - 1, 2 * tree_random(index, 4) - 1} * TREE_LEAN
 	m := translate({pos.x, 0, pos.y}) * rot_y(f32(index) * 2.39) * rot_x(lean.x) * rot_z(lean.y)
 	// A shaken tree's crown trembles for a moment.
-	shake := g.rounds[index].shake_t
+	shake := g.rounds[index].shake_t * g.rounds[index].shake_power
 	crown := m * translate({math.sin(g.time * 47) * shake * 0.25, 0, math.cos(g.time * 39) * shake * 0.2})
 	shaped := scale(t.scale)
 

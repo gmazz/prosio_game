@@ -8,6 +8,18 @@ GRAVITY :: f32(25)
 // with its oven is in the middle; each kind of food grows in its own part of
 // the meadow (see REGIONS), so he has to go out and fetch it.
 WORLD_HALF :: Vec2{100, 70}
+// Beyond the edge of the meadow lies a thick dark fog: it starts FOG_START
+// metres past the edge and is solid FOG_THICK metres further. Nobody walks
+// into it, but an animal thrown far enough flies into it and is lost: it
+// comes back later at home, like any other that is gone.
+FOG_START :: f32(-2.5)
+FOG_THICK :: f32(6)
+FOG_LOST :: f32(3) // how far past the edge a flying animal is lost (or as soon as it comes down beyond it)
+
+// How far beyond the edge of the meadow a place is (less than 0 inside).
+beyond_edge :: proc(pos: Vec2) -> f32 {
+	return max(abs(pos.x) - WORLD_HALF.x, abs(pos.y) - WORLD_HALF.y)
+}
 HOME :: Vec2{0, 0}
 
 // Food is scarce. Of each kind there is never more in the whole meadow than
@@ -100,7 +112,8 @@ Round :: struct {
 	fruit:   int, // apples on an apple tree, bunches of berries on a bush
 	fruit_t: f32, // until the next apple or bunch starts (or a ripe apple falls)
 	ripe:    f32, // how ripe its fruit is, 0 to 1
-	shake_t: f32, // just shaken: the leaves are still trembling
+	shake_t: f32, // just shaken: the leaves are still trembling,
+	shake_power: f32, // this hard (1 for a knock)
 }
 
 // The parts of the meadow, each with its own food. They are ellipses.
@@ -811,7 +824,7 @@ near_segment :: proc(p, a, b: Vec2, reach: f32) -> bool {
 // The fences he has put up stop animals, and whatever else is not Prosio
 // (enemy is true for all of those), unless it is in the air above them or
 // is being carried over (over_fences). He himself steps over them.
-collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false, over_fences := false, wet := false) -> (hit: bool, normal: Vec2) {
+collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false, over_fences := false, wet := false, edge := true) -> (hit: bool, normal: Vec2) {
 	// Two passes, so a push out of one thing cannot leave the circle inside another.
 	for _ in 0 ..< 2 {
 		if !over_fences && g.fence_count > 0 && feet < FENCE_TOP {
@@ -871,7 +884,7 @@ collide_static :: proc(pos: ^Vec2, r: f32, feet: f32, enemy := false, over_fence
 				hit, normal = true, n
 			}
 		}
-		lim := WORLD_HALF - {r, r}
+		lim := edge ? WORLD_HALF - {r, r} : Vec2{1e9, 1e9} // (a thrown animal may sail on into the fog)
 		if pos.x < -lim.x {
 			pos.x = -lim.x
 			hit, normal = true, {1, 0}
@@ -1024,12 +1037,66 @@ shake_trees_near :: proc(pos: Vec2, reach: f32, strength: f32) {
 			continue
 		}
 		t.shake_t = 0.6
+		t.shake_power = 1
 		shape := tree_shape(i)
 		burst({t.pos.x, shape.canopy_y, t.pos.y}, 6, 2, COLOR_LEAF, 0.09)
 		for _ in 0 ..< min(t.fruit, 1 + int(strength / 4)) {
 			drop_apple(i)
 		}
 	}
+}
+
+// Shaking a tree: standing right at it (no further than TREE_SHAKE_REACH
+// from its trunk) and facing it (within TREE_SHAKE_ANGLE either side) he
+// takes hold of it with both hooves and shakes it, as hard as his arms are
+// strong (see strength in body.odin). The crown shakes that much, and that
+// many apples come down.
+TREE_SHAKE_REACH :: f32(0.6) // metres between him and the trunk
+TREE_SHAKE_ANGLE :: f32(math.PI / 6) // 30 degrees either side of where he faces
+TREE_SHAKE_TIME :: f32(0.9) // seconds he shakes it
+TREE_SHAKE_APPLES :: f32(2) // apples that come down for arms of ordinary strength
+
+// The tree he is right up against and facing, if there is one.
+tree_in_front :: proc(facing: Vec2) -> (index: int, ok: bool) {
+	p := &g.prosio
+	r := prosio_radius(p.kg)
+	best := TREE_SHAKE_REACH
+	for t, i in g.rounds[:g.round_count] {
+		if t.kind != .Tree || t.r <= 0 {
+			continue
+		}
+		to := t.pos - p.pos
+		gap := length2(to) - t.r - r
+		if gap > best || abs(angle_diff(math.atan2(to.x, to.y), math.atan2(facing.x, facing.y))) > TREE_SHAKE_ANGLE {
+			continue
+		}
+		best, index, ok = gap, i, true
+	}
+	return
+}
+
+// He takes hold of the tree and shakes it, for this much stamina.
+shake_tree :: proc(index: int, cost: f32) {
+	p := &g.prosio
+	t := &g.rounds[index]
+	power := strength()
+	to := t.pos - p.pos
+	p.facing = math.atan2(to.x, to.y)
+	p.vel = {}
+	p.shake_t = TREE_SHAKE_TIME
+	p.shake_power = power
+	p.stamina -= cost
+	p.regen_delay = 0.6
+	burn(FIGHT_BURN, .Fighting, true)
+	train(.Arms, SWING_WORK * 0.3)
+	t.shake_t = TREE_SHAKE_TIME
+	t.shake_power = 1.6 * power
+	shape := tree_shape(index)
+	burst({t.pos.x, shape.canopy_y, t.pos.y}, 4 + int(8 * power), 2 + power, COLOR_LEAF, 0.09)
+	for _ in 0 ..< min(t.fruit, int(TREE_SHAKE_APPLES * power + 0.5)) {
+		drop_apple(index)
+	}
+	say(power > 1.3 ? "SHAKE SHAKE SHAKE!" : (power < 0.8 ? "Shake... shake..." : "Shake shake!"), 1.2)
 }
 
 update_world :: proc(dt: f32) {

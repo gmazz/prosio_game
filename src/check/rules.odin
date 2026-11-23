@@ -40,12 +40,14 @@ run_rules :: proc() -> int {
 	rules_animals()
 	rules_fox_rig()
 	rules_fighting()
+	rules_impacts()
 	rules_stones()
 	rules_workshop()
 	rules_saving()
 	rules_moving()
 	rules_packed_animals()
 	rules_controls()
+	rules_shake_salt_fog()
 	fmt.printf("\n%d passed, %d failed\n", passed, failed)
 	return failed
 }
@@ -279,6 +281,116 @@ rules_fighting :: proc() {
 	e.pos = p.pos + {game.prosio_radius(p.kg) + game.ENEMY_RADIUS[.Turkey] + 0.6, 0}
 	step(2, {}, {.Grab})
 	check("with an animal and a rock both in reach, F takes the animal", p.carry == .Enemy, fmt.tprintf("carrying %v", p.carry))
+}
+
+rules_impacts :: proc() {
+	section("animal impact motion")
+	fresh()
+	g := &game.g
+	g.round_count, g.food_count = 0, 0
+	p := &g.prosio
+	p.pos = {-30, -30}
+	p.kg = 125
+	dt :: f32(1.0 / 120)
+	classified, recovered, downed := 0, 0, 0
+	largest_turn, largest_landing_turn, floor_error: f32
+	corpse_kept_pose := true
+	speeds := [4]f32{0.5, 1.4, 2.6, 6}
+	for kind in game.Enemy_Kind {
+		for response, n in ([4]game.Impact_Kind{.Push, .Stumble, .Fall, .Launch}) {
+			g.enemy_count = 0
+			game.add_enemy(kind, {6, 6})
+			e := &g.enemies[0]
+			dir := n == 2 ? game.Vec2{1, 0} : game.Vec2{0, 1}
+			e.facing = 0
+			speed := speeds[n]
+			p.vel = dir * ((speed * game.ENEMY_KG[kind] / game.BUMP_GAIN + game.ENEMY_GRIP[kind]) / p.kg)
+			game.prosio_hits_enemy(e, dir)
+			classified += e.impact.kind == response ? 1 : 0
+			air, tipped, rested, slid := false, false, false, false
+			for _ in 0..<480 {
+				old := e.impact.rotation
+				state := e.state
+				game.update_enemies(dt)
+				air ||= e.y > 0
+				if e.state == .Chase {
+					if air == (response == .Launch) && tipped == (response >= .Fall) &&
+					   rested == (response >= .Fall) && slid == (response >= .Fall) &&
+					   abs(old.w) > 0.999 {
+						recovered += 1
+					}
+					break
+				}
+				tipped ||= abs(e.impact.rotation.w) < 0.85
+				rested ||= e.impact.phase == .Down && e.y == 0
+				slid ||= e.impact.phase == .Tumble && length(e.vel) > 0.1
+				turn := 2 * math.acos(clamp(abs(linalg.dot(old, e.impact.rotation)), 0, 1))
+				largest_turn = max(largest_turn, turn)
+				if state == .Flying && e.state == .Dizzy {
+					largest_landing_turn = max(largest_landing_turn, turn)
+				}
+				if e.impact.phase == .Down {
+					pose := game.impact_pose(e^)
+					skin: [game.QUAD_MAX_BONES]game.Mat4
+					if qk, ok := game.quad_skin(pose, e^, &skin); ok {
+						floor_error = max(floor_error, abs(game.quad_mesh_low(&game.QUAD_MODELS[qk], &skin)))
+					}
+				}
+			}
+		}
+	}
+	for kind in game.Enemy_Kind {
+		g.enemy_count = 0
+		game.add_enemy(kind, {6, 6})
+		e := &g.enemies[0]
+		e.health = 1
+		game.launch_enemy(e, {1, 0}, 8)
+		for _ in 0..<420 {
+			before := e.impact.rotation
+			game.update_enemies(dt)
+			if e.state == .Dead || e.state == .Gone {
+				downed += e.ko ? 1 : 0
+				if e.state == .Dead {
+					corpse_kept_pose &&= abs(linalg.dot(before, e.impact.rotation)) > 0.999 && abs(e.impact.rotation.w) < 0.85
+				}
+				break
+			}
+		}
+	}
+	fresh()
+	g.round_count, g.food_count, g.enemy_count = 0, 0, 0
+	p.pos, p.facing = {6, 6}, 0
+	game.set_weight(125)
+	dir := game.Vec2{0, 1}
+	gap := game.prosio_radius(p.kg) + game.ENEMY_RADIUS[.Goat] + 0.03
+	game.add_enemy(.Goat, p.pos + dir * gap)
+	goat := &g.enemies[0]
+	step(1, {.Down}, {.Bump})
+	heavy_dash := goat.impact.kind == .Launch && !goat.ko
+	rolled, rose := false, false
+	for _ in 0..<180 {
+		step(1)
+		rolled ||= goat.state == .Dizzy && abs(goat.impact.rotation.w) < 0.65
+		if goat.impact.phase == .Rise {
+			rose = true
+			heavy_dash &&= length(goat.vel) < 0.05
+		}
+	}
+	check("a heavy dash flips a goat, which tumbles to a stop before standing", heavy_dash && rolled && rose && goat.state == .Chase,
+	      fmt.tprintf("launch and stopped before rising %v, rolled on ground %v, rose %v, final %v", heavy_dash, rolled, rose, goat.state))
+
+	// With the same impulse, lighter animals fly and the heaviest is still on its feet.
+	momentum :: f32(820)
+	mass_response := game.impact_kind(game.bump_speed(momentum, .Turkey)) == .Launch &&
+	                 game.impact_kind(game.bump_speed(momentum, .Fox)) == .Launch &&
+	                 game.impact_kind(game.bump_speed(momentum, .Goat)) == .Launch &&
+	                 game.impact_kind(game.bump_speed(momentum, .Billy)) == .Stumble
+	check("impact size and animal mass give a push, stumble, fall or flight", classified == 16 && mass_response,
+	      fmt.tprintf("%d/16 graded hits, lighter animals travel farther under the same blow", classified))
+	check("all animals keep their rotation through landing and get up from the ground", recovered == 16 && largest_turn < 0.09 && largest_landing_turn > 0 && largest_landing_turn < 0.07 && floor_error < 0.002,
+	      fmt.tprintf("%d/16 recovered, max %.3f rad/step, max landing step %.3f rad, rest floor error %.4f m", recovered, largest_turn, largest_landing_turn, floor_error))
+	check("knocked-out animals finish the fall on their side", downed == 4 && corpse_kept_pose,
+	      fmt.tprintf("%d/4 knocked out, fallen pose continues into corpse", downed))
 }
 
 // Pebbles, thrown stones, aiming, and what they do to animals and crows.
@@ -1419,8 +1531,8 @@ rules_animals :: proc() {
 	// Thrown into the pond: dropped in (unhurt) at a place, then left for a
 	// minute. What became of it, and where it ended up.
 	Wet :: struct {
-		swam, drowned, ashore: bool,
-		health:                f32,
+		swam, drowned, ashore, sank: bool,
+		health:                      f32,
 	}
 	dunk :: proc(kind: game.Enemy_Kind, from_middle: f32) -> (w: Wet) {
 		g := &game.g
@@ -1435,9 +1547,10 @@ rules_animals :: proc() {
 		for _ in 0 ..< 60 * 60 {
 			step(1)
 			w.swam ||= e.state == .Swimming
+			w.drowned ||= e.ko
+			w.sank ||= e.state == .Gone
 		}
-		w.drowned = e.ko
-		w.ashore = !game.in_pond(e.pos) && e.state != .Swimming
+		w.ashore = !w.sank && !game.in_pond(e.pos) && e.state != .Swimming
 		w.health = e.health
 		return
 	}
@@ -1445,7 +1558,7 @@ rules_animals :: proc() {
 	near_turkey := dunk(.Turkey, game.POND_RADIUS - 1.5)
 	goat := dunk(.Goat, 0)
 	wet_fox := dunk(.Fox, 0)
-	check("thrown in the pond, an animal swims for the bank: a goat or a fox gets out, a turkey only from near the edge, and one that drowns floats ashore", far_turkey.swam && far_turkey.drowned && far_turkey.ashore && near_turkey.ashore && !near_turkey.drowned && goat.ashore && !goat.drowned && wet_fox.ashore && !wet_fox.drowned && wet_fox.health == game.ENEMY_HEALTH, fmt.tprintf("turkey from the middle: swam %v, drowned %v, ashore %v; from near the edge: drowned %v (health %.0f), ashore %v; goat: drowned %v (health %.0f), ashore %v; fox: health %.0f, ashore %v", far_turkey.swam, far_turkey.drowned, far_turkey.ashore, near_turkey.drowned, near_turkey.health, near_turkey.ashore, goat.drowned, goat.health, goat.ashore, wet_fox.health, wet_fox.ashore))
+	check("thrown in the pond, an animal swims for the bank: a goat or a fox gets out, a turkey only from near the edge, and one that drowns sinks, and nothing of it comes ashore", far_turkey.swam && far_turkey.drowned && far_turkey.sank && !far_turkey.ashore && near_turkey.ashore && !near_turkey.drowned && goat.ashore && !goat.drowned && wet_fox.ashore && !wet_fox.drowned && wet_fox.health == game.ENEMY_HEALTH, fmt.tprintf("turkey from the middle: swam %v, drowned %v, sank %v; from near the edge: drowned %v (health %.0f), ashore %v; goat: drowned %v (health %.0f), ashore %v; fox: health %.0f, ashore %v", far_turkey.swam, far_turkey.drowned, far_turkey.sank, near_turkey.drowned, near_turkey.health, near_turkey.ashore, goat.drowned, goat.health, goat.ashore, wet_fox.health, wet_fox.ashore))
 
 	fresh()
 	g.enemy_count = 0
@@ -2291,4 +2404,150 @@ rules_controls :: proc() {
 	stopped := !game.sprint_latched && !p.sprinting
 	game.sprint_latched = false
 	check("a stick click sprints him until he stops", sprinting && stopped)
+}
+
+// Shaking a tree, salt washed out by water, goats he has hit, animals
+// that drown, and the fog round the meadow.
+rules_shake_salt_fog :: proc() {
+	section("trees, salt, the pond and the fog")
+	g := &game.g
+	p := &g.prosio
+
+	// Right up against an apple tree and facing it, with weak and with
+	// strong arms: the bump button shakes it instead of charging.
+	shake :: proc(arms: f32, aside: f32) -> (apples: int, power: f32, dashed: bool) {
+		g := &game.g
+		p := &g.prosio
+		fresh()
+		g.enemy_count = 0
+		tree := -1
+		for t, i in g.rounds[:g.round_count] {
+			if t.kind == .Tree && t.species == .Apple {
+				tree = i
+				break
+			}
+		}
+		t := &g.rounds[tree]
+		t.fruit = game.MAX_APPLES
+		p.trait[.Arms] = arms
+		p.stamina = 100
+		dir := game.Vec2{0, 1}
+		p.pos = t.pos - dir * (t.r + game.prosio_radius(p.kg) + 0.3)
+		p.facing = math.atan2(dir.x, dir.y) + aside
+		before := t.fruit
+		step(1, tap = {.Bump})
+		dashed = p.dash_t > 0
+		power = t.shake_power
+		step(60)
+		return before - t.fruit, power, dashed
+	}
+	weak_apples, weak_power, weak_dashed := shake(-1, 0)
+	strong_apples, strong_power, strong_dashed := shake(1, 0)
+	_, _, aside_dashed := shake(0, 0.9)
+	check("facing a tree close up, bump takes hold of it and shakes it, as hard as his arms are strong: the stronger, the more apples come down",
+		!weak_dashed && !strong_dashed && aside_dashed && strong_power > weak_power * 2 && strong_apples > weak_apples && weak_apples >= 1,
+		fmt.tprintf("weak arms: shake %.2f, %d apples; strong arms: shake %.2f, %d apples; turned 50 degrees away he charges: %v", weak_power, weak_apples, strong_power, strong_apples, aside_dashed))
+
+	// A drink washes salt out of him, but never leaves him short of it.
+	fresh()
+	p.pos = game.POND + {0, game.POND_RADIUS + 0.4}
+	p.need[.Electrolytes] = 85
+	p.need[.Water] = 100
+	was_salty := game.salty()
+	game.drink()
+	after := p.need[.Electrolytes]
+	p.pick_t = 0
+	p.need[.Electrolytes] = 30
+	p.need[.Water] = 50
+	game.drink()
+	check("a drink washes salt out of him, so the goats lose interest, but never leaves him short of salt",
+		was_salty && !game.salty() && after <= 60 && p.need[.Electrolytes] == 30,
+		fmt.tprintf("85 before, %.0f after; 30 stays %.0f", after, p.need[.Electrolytes]))
+
+	// A goat he has hit will not lick him, salty or not, until it has not
+	// seen him for a long while.
+	fresh()
+	g.enemy_count = 0
+	p.pos = {20, 20}
+	game.add_enemy(.Goat, {23, 20})
+	e := &g.enemies[0]
+	salt :: proc() {game.g.prosio.need[.Electrolytes] = 85}
+	licked_first := false
+	for _ in 0 ..< 300 {
+		salt()
+		step(1)
+		licked_first ||= e.licking
+	}
+	game.hurt_enemy(e, 5)
+	licked_after_hit := false
+	for _ in 0 ..< 600 {
+		salt()
+		step(1)
+		licked_after_hit ||= e.licking
+	}
+	p.pos = e.pos + {game.SOUR_SIGHT + 6, 0}
+	for _ in 0 ..< int(game.SOUR_FORGET * 60) + 60 {
+		salt()
+		p.pos = e.pos + {game.SOUR_SIGHT + 6, 0} // out of its sight
+		step(1)
+	}
+	forgot := !e.sour
+	p.pos = e.pos + {2.5, 0}
+	licked_again := false
+	for _ in 0 ..< 300 {
+		salt()
+		step(1)
+		licked_again ||= e.licking
+	}
+	check("a goat he hits stops licking him, salty as he is, until he has been out of its sight a long while",
+		licked_first && !licked_after_hit && forgot && licked_again,
+		fmt.tprintf("licked at first %v, after the hit %v, forgot %v, licked again %v", licked_first, licked_after_hit, forgot, licked_again))
+
+	// The same for the billy goat, bumped while it licks him: too heavy to
+	// be hurt by it, it is only pushed, but it is put off all the same.
+	fresh()
+	g.enemy_count = 0
+	p.pos = {20, 20}
+	game.add_enemy(.Billy, {23, 20})
+	billy := &g.enemies[0]
+	billy_licked := false
+	for _ in 0 ..< 300 {
+		salt()
+		step(1)
+		billy_licked ||= billy.licking
+	}
+	to := billy.pos - p.pos
+	p.facing = math.atan2(to.x, to.y)
+	p.stamina = 100
+	health := billy.health
+	step(1, tap = {.Bump})
+	for _ in 0 ..< 30 {
+		step(1)
+	}
+	billy_licked_after := false
+	for _ in 0 ..< 600 {
+		salt()
+		step(1)
+		billy_licked_after ||= billy.licking
+	}
+	check("bumping the billy goat while it licks puts it off licking, even when the bump does not hurt it",
+		billy_licked && billy.sour && !billy_licked_after,
+		fmt.tprintf("licked first %v; bumped: health %.0f to %.0f, put off %v, licked after %v", billy_licked, health, billy.health, billy.sour, billy_licked_after))
+
+	// Thrown into the fog beyond the meadow, an animal is lost.
+	fresh()
+	g.enemy_count = 0
+	p.pos = {game.WORLD_HALF.x - 3, 0}
+	game.add_enemy(.Turkey, p.pos + {1, 0})
+	t := &g.enemies[0]
+	game.launch_enemy(t, {1, 0}, 9, false)
+	t.vy = 5
+	lost := false
+	for _ in 0 ..< 240 {
+		step(1)
+		lost ||= t.state == .Gone
+	}
+	p.pos = {game.WORLD_HALF.x + 10, 0}
+	step(1)
+	check("an animal thrown out of the meadow is lost in the fog, and he cannot walk into it", lost && game.beyond_edge(p.pos) < 0, fmt.tprintf("lost %v, he stands %.1f m inside the edge", lost, -game.beyond_edge(p.pos)))
 }

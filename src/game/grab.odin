@@ -665,6 +665,7 @@ start_hold :: proc(e: ^Enemy) {
 	}
 	e.side = {math.cos(e.facing), 0, -math.sin(e.facing)}
 	e.state = .Held
+	e.impact = {}
 	e.vel = {}
 	e.vy = 0
 	e.limp = 0
@@ -1097,14 +1098,9 @@ bash_hits :: proc(e: ^Enemy, dt: f32) {
 				dir = facing_dir(p.facing)
 			}
 			o.hit_t = 0.4
-			if passed < WEAK_HIT {
-				// Too heavy to knock over: it only rocks, and stops the club dead.
-				o.state = .Dizzy
-				o.timer = 0.6
-				o.vel = dir * passed
-			} else {
-				launch_enemy(&o, dir, passed)
-				o.vy = passed * 0.3 // knocked sideways more than up
+			offend(&o)
+			if enemy_impact(&o, dir, passed) == .Launch {
+				o.vy = min(passed * 0.3, IMPACT_MAX_RISE) // sideways more than up
 				o.skip = true
 			}
 			// The club goes on with what it kept (or bounces back), and gets
@@ -1149,13 +1145,12 @@ throw_animal :: proc() {
 	rise := random_range(0.15, 0.4)
 	e.pos = p.pos + dir * (prosio_radius(p.kg) + r * 0.9)
 	collide_static(&e.pos, r, 0.5, true)
+	e.facing = math.atan2(dir.x, dir.y)
 	launch_enemy(e, dir, speed)
 	e.vel = dir * speed * math.cos(rise)
 	e.vy = speed * math.sin(rise)
 	e.y = 0.6
 	e.skip = true
-	e.facing = math.atan2(dir.x, dir.y)
-	e.spin = random_range(0, math.TAU)
 	e.limp = 0
 
 	p.vel -= dir * min(speed * kg / p.kg, 6)
@@ -1295,7 +1290,7 @@ update_thrown :: proc(dt: f32) {
 					// A pebble: it stings and startles, and a fox lets go.
 					drop_loot(&e)
 					if hurt_enemy(&e, damage) {
-						e.state, e.timer = .Dizzy, 0.7
+						enemy_impact(&e, normalize2(t.vel), IMPACT_FALL_SPEED, false)
 					} else if e.state == .Chase {
 						e.scared_t = max(e.scared_t, random_range(PEBBLE_FRIGHT.x, PEBBLE_FRIGHT.y))
 					}
@@ -1304,8 +1299,8 @@ update_thrown :: proc(dt: f32) {
 					continue
 				}
 				passed := 1.6 * t.kg / (t.kg + ENEMY_KG[e.kind]) * speed
-				launch_enemy(&e, normalize2(t.vel), passed, false)
 				hurt_enemy(&e, damage)
+				enemy_impact(&e, normalize2(t.vel), passed, false)
 				t.vel *= 0.5
 				g.shake = max(g.shake, 0.3)
 				burst({e.pos.x, 0.7, e.pos.y}, 10, 4, COLOR_STAR, 0.12)

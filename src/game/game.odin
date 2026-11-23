@@ -287,6 +287,7 @@ set_ground_layout :: proc() {
 		{forest.centre.x, forest.centre.y, forest.radius.x, forest.radius.y},
 		{hills.centre.x, hills.centre.y, hills.radius.x, hills.radius.y},
 		{POND.x, POND.y, POND_RADIUS, 0},
+		WORLD_HALF,
 	)
 }
 

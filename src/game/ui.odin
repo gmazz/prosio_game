@@ -176,6 +176,11 @@ prompt_text :: proc() -> cstring {
 			action = "Too heavy to jump the fence!     {Grab}: take this piece down"
 		}
 	}
+	if action == nil && p.carry == .Nothing {
+		if _, at_tree := tree_in_front(facing_dir(p.facing)); at_tree {
+			action = "{Bump}: shake the tree"
+		}
+	}
 	return action
 }
 

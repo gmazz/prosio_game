@@ -192,6 +192,9 @@ quad_reach :: proc(pose: ^[QUAD_MAX_BONES]Mat4, bones: []int, root, tip, target:
 // for everything but going about on its feet (see quad_moving).
 quad_action :: proc(m: ^Quad_Model, e: Enemy) -> (clip: string, t: f32, moving: bool) {
 	offset := e.home.x * 0.37 + e.home.y * 0.53 // so that a herd does not move as one
+	if e.impact.kind != .None {
+		return "Idle", g.time + offset, e.impact.phase == .Brace
+	}
 	switch e.state {
 	case .Dead:
 		return "Death", 99, false
@@ -347,6 +350,9 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 		// On its feet: standing, walking and galloping, blended by its speed
 		// on one stride cycle (e.gait).
 		pace := abs(e.motion.active ? e.motion.gait_speed : e.pace)
+		if e.impact.kind != .None {
+			pace = length2(e.vel)
+		}
 		walk, gallop := quad_mix(pace)
 		if walk > 0 {
 			strides: [2][QUAD_MAX_BONES]Mat4
@@ -382,9 +388,10 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 	}
 
 	limp := e.ko ? 1 : e.motion.limp_blend
-	if pose.held && limp > 0.001 {
-		// Reuse the slack limb pose but remove the clip's fall to the
-		// ground. The carry chain controls the body's position.
+	bend := pose.held ? limp : e.impact.bend
+	if bend > 0.001 {
+		// Reuse the slack limbs with the rotation of the fall removed.
+		// The impact or carry pose controls the body's position.
 		death: [QUAD_MAX_BONES]Mat4
 		quad_sample(m, "Death", 99, &death)
 		body := quad_bone(m, "Body")
@@ -392,23 +399,23 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 		for b in 0 ..< len(m.bones) {
 			death[b] = undo * death[b]
 		}
-		quad_blend(&bones, &death, limp, len(m.bones))
+		quad_blend(&bones, &death, bend, len(m.bones))
 	}
 	rear, front := pose.rear, pose.front
-	lying := e.state == .Dead || (e.state == .Swimming && e.ko)
+	lying := e.impact.kind == .None && (e.state == .Dead || (e.state == .Swimming && e.ko))
 	if lying {
 		// The death animation lays it down on its side: the body frame stays
 		// upright. Drowned, it floats feet up.
 		lift: f32 = 0
 		turn := Mat4(1)
 		if e.state == .Swimming {
-			lift = 0.05 + 0.03 * math.sin(g.time * 2.5 + e.pos.x)
+			lift = 0.05 + 0.03 * math.sin(g.time * 2.5 + e.pos.x) - sunk(e)
 			turn = translate({0, 0.55, 0}) * rot_z(-math.PI / 2) * translate({0, -0.55, 0})
 		}
 		rear = translate({e.pos.x, lift, e.pos.y}) * rot_y(e.facing) * scale({r, r, r}) * turn
 		front = rear
 	}
-	if e.motion.active && (e.state == .Chase || e.state == .Dizzy) {
+	if e.impact.kind == .None && e.motion.active && (e.state == .Chase || e.state == .Dizzy) {
 		// Counter-rotate the chest and let the hips follow behind the turn.
 		rear = rear * rot_y(e.motion.rear_twist) * rot_z(e.motion.lean)
 		front = front * rot_y(-e.motion.rear_twist * 0.30) * rot_z(e.motion.lean * 0.65)
@@ -445,7 +452,12 @@ quad_skin :: proc(pose: Animal_Pose, e: Enemy, skin: ^[QUAD_MAX_BONES]Mat4) -> (
 	}
 	quad_held_grips(m, &bones, pose, e.kind)
 	quad_build_skin(m, &bones, skin)
-	if e.state == .Dead || e.state == .Dizzy || (pose.held && !in_pond(e.pos)) {
+	if e.impact.kind != .None {
+		lift := impact_ground_lift(e, quad_mesh_low(m, skin))
+		for b in 0..<len(m.bones) {
+			skin[b][1, 3] += lift
+		}
+	} else if e.state == .Dead || e.state == .Dizzy || (pose.held && !in_pond(e.pos)) {
 		// The authored death pose uses a different floor from the standing
 		// mesh. Find support after deforming, with the final silhouette.
 		for _ in 0..<(pose.held ? 2 : 1) {

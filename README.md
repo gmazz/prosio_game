@@ -34,7 +34,7 @@ Keep Prosio's energy in balance. Walking, picking things up and fighting all bur
 | Action | Keys | Xbox controller |
 |---|---|---|
 | Move | `W` `A` `S` `D` or the arrow keys | left stick (pushed half way, he walks at half speed) or D-pad |
-| Bump (belly charge) | `Space` | X |
+| Bump (belly charge); right up against a tree and facing it (within 30 degrees), take hold of it and shake it | `Space` | X |
 | Jump | `J` or `X` | RT |
 | Sprint | hold `Shift` while moving | click the left stick: he sprints until he stops or runs out of breath |
 | Grab. Then: tap to put it down, or hold to wind up and let go to throw | `F` or `L` | B |
@@ -219,7 +219,7 @@ His weight on the screen is his body alone; the load is shown with the sack.
 
 **Things grow, and can be picked too early.** A new piece sprouts small and green, with a quarter of its calories, and grows to full size and colour; picked early it is worth less, and the prompt says what it is worth now ("E: pick it now (164 kcal, still growing)"). Each piece's full size also differs by up to 15% either way, so one ripe pumpkin is 350 kcal and the next 450. At the start of a game everything is at a different stage. The sack keeps the calories of each kind of thing all together, not piece by piece: three apples of 150, 100 and 50 kcal are 300 kcal of apples, and any one of them taken out is worth the average, 100. The sack shows what one piece of each kind is worth, and, for the one chosen in its menu, what it is made of: a bar of its composition, each share in per cent, and what one piece puts into him.
 
-- **Apple trees:** a ripe apple drops now and then, and lies for a minute and a half before it rots. **Bump an apple tree** (or slam an animal or throw one into it) and its apples come down, ripe or not: the harder the hit, the more.
+- **Apple trees:** a ripe apple drops now and then, and lies for a minute and a half before it rots. **Bump an apple tree** (or slam an animal or throw one into it) and its apples come down, ripe or not: the harder the hit, the more. **Standing right at a tree** (no more than 0.6 m from its trunk) **and facing it** (within 30 degrees either side), the bump button does not charge: he takes hold of the trunk with both hooves and shakes it for most of a second, for the stamina of a bump, as hard as his arms are strong (`strength`: 1 for ordinary arms, up to 1.8 when built, down to 0.6 when wasted away; see [Body and skills](#body-and-skills)). The crown shakes that much, and about two apples come down for ordinary arms, one for weak ones, up to all three for strong ones.
 - **A turkey** held by the legs and shaken with `Space` hardly ever lets an egg drop: one swing in a hundred. Eggs come from turkeys laying, and most of them from turkeys in a pen.
 
 **Rabbits and crows eat what is left standing.** Two rabbits live in burrows by the garden and two crows circle over the wheat. Every minute or three one comes out for a crop that is at least 60% grown, far from Prosio, and eats it down over 14 seconds: not away altogether, but back to a much smaller size. Within 50 m he hears it start ("Caw, caw! A crow is at my wheat!"). They run when he comes within about 5 metres, and from his wind. A pebble does it from a distance: a stone passing or landing within 2.5 m sends one off, and it then stays away two and a half times as long. So ripe crops are best picked, or guarded: with a sack of pebbles, with a scarecrow against the crows, or with a fence against the rabbits (see [Wood and the workshop](#wood-and-the-workshop)).
@@ -230,7 +230,7 @@ His weight on the screen is his body alone; the load is shown with the sack.
 
 **Honey** is in the three straw hives of the bee meadow, `E` to take a comb. Come within 3.6 m of a hive and its bees are after him, a little faster than he walks, stinging every 0.7 seconds (0.1 kg a sting) until he has been out of that 3.6 m for 5 seconds. His wind sends them back into the hive and keeps them quiet for 14 seconds, and well padded he hardly feels the stings (see [Nutrients and water](#nutrients-and-water)).
 
-**Milk** comes from a goat (not the billy goat), one jug every 3 minutes; her udder is round and full when she has some. There are two ways to get it. The gentle one: be salty. A Prosio full of electrolytes draws the goats, who trot up and stand licking the salt off him and have no mind to butt, and `E` beside a licking goat milks her where she stands. The rough one: grab her by the hind legs with `F`, and `E` milks her while he holds on, with the rest of the herd still butting him. There is a third, which takes building: a goat in a pen stands quietly, and `E` beside her milks her.
+**Milk** comes from a goat (not the billy goat), one jug every 3 minutes; her udder is round and full when she has some. There are two ways to get it. The gentle one: be salty. A Prosio full of electrolytes draws the goats, who trot up and stand licking the salt off him and have no mind to butt, and `E` beside a licking goat milks her where she stands. A drink at the pond washes a good part of the salt out of him (25 points, never below 40), which is enough for the goats to lose interest. A goat he hits (the nanny goats or the billy goat: a bump, even one that only pushes it without hurting it, a bash with a held animal, a stone, a spear, or being thrown) will not lick him again, however salty he is, until he has been out of its sight (more than 22 m off) for a minute and a half; seen again before that, it starts forgetting over. The rough one: grab her by the hind legs with `F`, and `E` milks her while he holds on, with the rest of the herd still butting him. There is a third, which takes building: a goat in a pen stands quietly, and `E` beside her milks her.
 
 **Meat** comes from a turkey or a goat that has been knocked out, which now means dead (see [Fighting](#fighting)). The body has to be dragged to the chopping block by the cooking fire, at the pond, and `E` there chops it into pieces of raw meat.
 
@@ -354,7 +354,7 @@ The **muscle bar** under the fat shows arms and legs together: wasted to the lef
 
 **Things that are not food** (wood, pebbles and what he builds) sit in the sack with the food. `Q` on a piece of fence or a scarecrow puts it up; on anything else that is not food he says what it is for. In the sack menu, `E` on such a thing chooses it and closes the menu. A fox never takes one.
 
-**Fences** stand on a grid of two-metre squares that covers the meadow, so that pieces join. With a piece chosen in the sack, a yellow mark on the ground shows where `Q` would put it: across his way, on the line of the grid nearest to the spot just in front of him (red, where it cannot go: on another piece, through a tree, a rock, a building or the pond, or along the meadow's own fence). `F` takes down the piece in front of him, back into the sack, when there is nothing to grab and no pebble or spear is chosen. What a fence does:
+**Fences** stand on a grid of two-metre squares that covers the meadow, so that pieces join. With a piece chosen in the sack, a yellow mark on the ground shows where `Q` would put it: across his way, on the line of the grid nearest to the spot just in front of him (red, where it cannot go: on another piece, through a tree, a rock, a building or the pond, or along the edge of the meadow). `F` takes down the piece in front of him, back into the sack, when there is nothing to grab and no pebble or spear is chosen. What a fence does:
 
 - Nothing on its feet gets past it: not an animal, not a rock or an animal sliding along the ground, and not Prosio.
 - **Prosio jumps over**, if his jump takes him 0.4 m up. An ordinary pig of 80 kg jumps 0.45 m, so he clears it; much heavier (about 90 kg with his sack), or with cramped legs, he cannot, and is fenced in or out until he takes a piece down with `F`. Strong legs and a light sack help. Facing a fence, the line at the bottom of the screen says which it is ("J: jump over the fence", or "Too heavy to jump the fence!").
@@ -392,7 +392,7 @@ A game starts with everything half full and water at 80%.
 
 **The system is forgiving, and what matters is what he lacks.**
 
-- **Too much of anything never ends the game.** Above 90% a store moves its surplus on six times as fast: too many carbs turn to fat, the rest passes, and a drink at the pond washes out too much fibre, vitamins or electrolytes at once. (Only too much *fat* is dangerous.)
+- **Too much of anything never ends the game.** Above 90% a store moves its surplus on six times as fast: too many carbs turn to fat, the rest passes, and a drink at the pond washes out too much fibre, vitamins or electrolytes at once (and some salt besides, even when there is not too much: see milk, under [The sack and the oven](#the-sack-and-the-oven)). (Only too much *fat* is dangerous.)
 - **Running out of carbs, protein or fibre never ends the game by itself.** His fat keeps him going; he is just the worse for it. But with **no fat and no carbs** he faints.
 - **Running right out of water, vitamins or electrolytes does**, but slowly: under 4% (for water: none left) the bar's name blinks and a countdown of **three minutes** runs beside it. Eating nothing at all, that point is over 40 minutes away.
 - **What to eat is always on the screen:** whenever he lacks something, a line under the bars says what to eat for it ("EAT: eggs, fish, meat, nuts").
@@ -449,17 +449,19 @@ The enemies are farm animals gone bad-tempered: big turkeys (16 kg) all over the
 
 ### Bump
 
-A bump hits with Prosio's momentum, weight times speed. The enemy digs in and absorbs the first part of that (its *grip*); only the rest throws it:
+A bump hits with Prosio's momentum, weight times speed. The enemy's grip absorbs the first part of the blow. Its own mass determines how much speed the rest transfers:
 
 ```
-launch speed = 0.479 x (Prosio's weight x his speed - enemy's grip) / enemy's weight
+impact speed = 0.479 x max(Prosio's weight x his speed - enemy's grip, 0) / enemy's weight
 ```
 
-Measured against a turkey (grip 560, sturdy speed 14). A bump is a blow of the speed it leaves at:
+Below 0.9 m/s the animal braces with a small push. From 0.9 m/s it takes a step to catch itself, from 2 m/s it stumbles onto its side, and from 3 m/s it leaves the ground. The blow's direction determines how it rolls or pitches. It carries that motion into the landing, tumbles and slides as it loses speed, then pauses on its side before getting up if it is still conscious.
 
-| Prosio | Turkey leaves at | Takes from its health |
+Measured against a turkey (grip 560, sturdy speed 14). A launch deals damage based on the transferred speed:
+
+| Prosio | Impact speed (m/s) | Takes from its health |
 |---|---|---|
-| 45 kg | 2.8 | nothing: Prosio bounces off |
+| 45 kg | 2.8 | none, the turkey stumbles and falls |
 | 60 kg | 8.1 | 9 |
 | 75 kg | 12.9 | 24 |
 | 90 kg | 17.0 | 41 |
@@ -468,7 +470,7 @@ Measured against a turkey (grip 560, sturdy speed 14). A bump is a blow of the s
 
 A goat (grip 450, sturdy speed 5.5) and the billy goat (grip 500, sturdy speed 3.5) need a heavier Prosio to shift at all, but lose more health for the speed they leave at. A bump out of a sprint keeps the extra speed, so it hits harder.
 
-Flying enemies bounce off walls, sail over low ones, and bowl over any enemy they hit.
+Flying enemies bounce off walls, sail over low ones, and transfer momentum to other animals they hit.
 
 ### Being shoved
 
@@ -484,7 +486,7 @@ Bruises start to mend 5 seconds after the last knock: 0.2 points a second, times
 
 `F` grabs whatever is within about an arm's length (0.85) beyond touching. Nothing has to be held down: `F` again throws it.
 
-**Into the pond.** An animal thrown into the pond lands with a splash, sits low in the water and paddles for the nearest bank, then climbs out, shakes itself and keeps well away from him for a while. How it fares depends on where it landed and what it is: a fox swims well (1.6 m/s, unharmed), a goat tires (1.1 m/s, losing 3 health a second), the billy goat more (5 a second), and a turkey is no swimmer at all (0.7 m/s, losing 16 a second). So a turkey that lands within about four metres of the bank gets out, wet and cross; one that lands further out goes bottoms up, comically: "Glub glub... oops! Bottoms up!", feet in the air, crosses for eyes, a bubble now and then. It floats slowly to the bank, and its body lies there like any other.
+**Into the pond.** An animal thrown into the pond lands with a splash, sits low in the water and paddles for the nearest bank, then climbs out, shakes itself and keeps well away from him for a while. How it fares depends on where it landed and what it is: a fox swims well (1.6 m/s, unharmed), a goat tires (1.1 m/s, losing 3 health a second), the billy goat more (5 a second), and a turkey is no swimmer at all (0.7 m/s, losing 16 a second). So a turkey that lands within about four metres of the bank gets out, wet and cross; one that lands further out goes bottoms up, comically: "Glub glub... oops! Bottoms up!", feet in the air, crosses for eyes, a bubble now and then. After a moment and a half it sinks, bubbling, and is gone: nothing of it comes ashore to be eaten (it comes back later at home, like any other animal that is gone). The same goes for a goat that drowns, or a body thrown into the pond.
 
 - **Animals.** A turkey is held up by both feet in one hoof, out to his side, and dangles head down, flapping madly (every beat of its wings jerks it about). A goat or the billy goat is caught by both hind legs, a hoof on each, and dragged along behind him as he walks. A fox is held by its tail. With an animal and a rock both in reach, `F` takes the animal; the prompt says which it will be.
   - **`Space`: bash with it.** He swings the animal like a club, roughly the way he is walking, and slams it into the ground in front of him and into anything standing there. Each swing goes a different way: over his head, round his side, or backhand across his front, landing somewhere ahead and a little to either side. Press `Space` again during a swing to queue the next one.
@@ -543,7 +545,7 @@ What a stone does to an animal it hits is the blow of an animal of that kind lan
 
 ## The meadow
 
-The meadow is 200 by 140 metres inside a fence, more than five times as big as before. Prosio's home is in the middle: a bare yard with the oven, and footpaths winding out from it to each part of the meadow. Each part has its own food, its own look on the ground, and its name in the top right corner while he is in it.
+The meadow is 200 by 140 metres, more than five times as big as before. There is no fence round it: at its edge it fades into a thick dark fog, which nobody walks into. An animal thrown out over the edge flies into the fog and is lost ("Bye bye! Into the fog..."): it comes back later at home, like any other that is gone. No shadows fall in the fog. Prosio's home is in the middle: a bare yard with the oven, and footpaths winding out from it to each part of the meadow. Each part has its own food, its own look on the ground, and its name in the top right corner while he is in it.
 
 | Where | Which way from home | What is there |
 |---|---|---|
@@ -675,6 +677,7 @@ src/
                      panel that shows it all
     outfit.odin      Prosio's clothes, how each is drawn, and the sack, outfit
                      and map menu
+    impact.odin      shared animal hit, tumble, settle and get-up motion
     enemies.odin     turkeys, goats and foxes, bumps, shoves and stomps, bodies,
                      meat and milk
     critters.odin    fish, rabbits, crows and bees
@@ -722,7 +725,7 @@ A few choices shape the rest:
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (136 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (145 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -820,7 +823,8 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | Muscle sizes, how fast traits grow and fade, what each activity trains, what each trait is worth, what waking up costs | `body.odin` (`ARMS_KG`, `LEGS_KG`, `FADE`, `WASTE`, `*_WORK`, `STRONG`, `LEG_SPEED`, `WAKE_*`, ...) |
 | Calories, recipes, baking time | `kitchen.odin` (`RAW_KCAL`, `RECIPES`, `STATION_TIME`, `KCAL_PER_KG`) |
 | Speeds, sprint, stamina costs and recovery, jump energy | `prosio.odin` (`walk_speed`, `dash_cost`, `JUMP_ENERGY`, ...) |
-| How hard bumps and shoves are, enemy weights and grips, how fast each kind goes and a goat charges | `enemies.odin` (`ENEMY_SPEED`, `GOAT_CHARGE`) |
+| How hard bumps and shoves are, enemy weights and grips, how fast each kind goes and a goat charges | `enemies.odin` (`BUMP_GAIN`, `ENEMY_KG`, `ENEMY_GRIP`, `ENEMY_SPEED`, `GOAT_CHARGE`) |
+| Impact thresholds, spin, landing friction, and time to get up | `impact.odin` (`IMPACT_*`) |
 | Throw and bash strength, lift limit, dragging grip, how fast animals go limp, rock weight | `grab.odin` |
 | World size, regions, fields, paths, how many trees and rocks | `world.odin` (`WORLD_HALF`, `REGIONS`, `PATH_ENDS`, `build_world`) |
 | How often turkeys lay, in the wild and in a pen, the chance of a shaken-out egg | `enemies.odin` (`EGG_EVERY`, `PEN_EGG_EVERY`, `SHAKE_EGG`) |
@@ -847,6 +851,10 @@ Every number that shapes the feel is a named constant or a one-line function nea
 | The animals from the animal pack: how they are reshaped, their horns and beard, their size; when they run rather than walk, their closed-eye marks | `tools/pack_quadruped.py` (`RECIPES`, then `tools/pack_quadrupeds.sh`), `quadruped.odin` (`QUAD_WALK_FROM`, `QUAD_WALK_FULL`, `QUAD_GALLOP_FROM`, `QUAD_GALLOP_FULL`, `QUAD_GALLOP_SLOWEST`, `QUAD_SHORT_STEP`, `QUAD_LONG_STEP_AT`, `QUAD_HEAD_TURN`, `QUAD_HEAD_SPEED`, `QUAD_GOAT_ACCEL`, `QUAD_TURN`, `QUAD_BACKWARDS`, `QUAD_SLOWEST`, `QUAD_SET_OFF`, `QUAD_STOP`, `QUAD_TURN_STEP`, `QUAD_EYE_SIZE`, `quad_color`) |
 | Grounded drag pose for the goat, billy goat and fox | `quadruped_drag.odin` (`QUAD_DRAG_SETTLE`, `QUAD_DRAG_HIP_*`, `QUAD_DRAG_TAIL_LIFT`) |
 | The keys and controller buttons each action starts with; the stick's dead middle, how far it goes before it counts as a direction in menus, how far a trigger is pulled to count | `controls.odin` (`DEFAULT_BINDINGS`), `platform.odin` (`STICK_DEAD`, `STICK_PRESS`, `TRIGGER_PRESS`) |
+| Shaking a tree: how close, how square on, for how long, how many apples | `world.odin` (`TREE_SHAKE_REACH`, `TREE_SHAKE_ANGLE`, `TREE_SHAKE_TIME`, `TREE_SHAKE_APPLES`) |
+| Salt washed out by a drink; how far off and how long before a goat he hit forgets it | `diet.odin` (`DRINK_SALT`, `DRINK_SALT_FLOOR`), `enemies.odin` (`SOUR_SIGHT`, `SOUR_FORGET`) |
+| How a drowned animal sinks | `enemies.odin` (`SINK_WAIT`, `SINK_SPEED`, `SINK_DEPTH`) |
+| The fog round the meadow: where it starts, how thick, how far out a thrown animal is lost | `world.odin` (`FOG_START`, `FOG_THICK`, `FOG_LOST`) |
 | How big Prosio is against the animals and the meadow | `prosio.odin` (`PROSIO_SIZE`) |
 | What each food is made of, how big each store is, where lacking, full and too much begin, how fast stores empty, and how strong every effect is | `diet.odin` (`COMPOSITION`, `FIBRE_KCAL`, `VITAMIN_KCAL`, `SALT_KCAL`, `STORE_KG`, `FRAME`, `NEED_*`, `THIRST`, `TOO_LONG`, `DEADLY`, and the numbers under "What full and lacking do") |
 | Where the pond is and how big | `world.odin` (`POND`, `POND_RADIUS`) |
