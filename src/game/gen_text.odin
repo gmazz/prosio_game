@@ -70,7 +70,7 @@ Text :: struct {
 	outfit_help: cstring,
 	menu_text: [Menu_Item]cstring,
 	bag_tab_name: [Bag_Tab]cstring,
-	// {level}: the pixel size chosen, 1 to 6
+	// {level}: the pixel size chosen; {levels}: how many there are
 	pixels: cstring,
 	// Every button, at the foot of the menu.
 	controls_line: cstring,
@@ -323,6 +323,8 @@ Text :: struct {
 	knocked_out_line: cstring,
 	wake_up: cstring,
 	wake_up_note: cstring,
+	// his weight beside the weight bar, in whole kilograms
+	kg_whole: cstring,
 	// {percent}: how full the sack is
 	sack_percent_full: cstring,
 	// {percent}: how full the larder is
@@ -474,13 +476,13 @@ TEXTS := [Language]Text {
 		outfit_help = "UP/DOWN: row    LEFT/RIGHT: change    {Sack}: panel    {Bag}: close",
 		menu_text = #partial [Menu_Item]cstring{.Play = "PLAY", .Resume = "RESUME", .Look = "", .Restart = "START OVER", .Exit_To_Menu = "EXIT TO MENU", .Quit = "QUIT"},
 		bag_tab_name = #partial [Bag_Tab]cstring{.Sack = "SACK", .Body = "BODY", .Outfit = "OUTFIT", .Map = "MAP", .Controls = "CONTROLS"},
-		pixels = "PIXELS: {level} / 6",
+		pixels = "PIXELS: {level} / {levels}",
 		controls_line = "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}",
 		title = "PROSIO",
 		paused = "PAUSED",
 		subtitle = "the pig who gathers, bakes and bumps",
 		continue_game = "CONTINUE",
-		menu_help = "Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 6",
+		menu_help = "Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 9",
 		window_title = "Prosio",
 		sack_full = "My sack is full!",
 		not_ripe = "Not ripe yet... into the sack anyway.",
@@ -707,6 +709,7 @@ TEXTS := [Language]Text {
 		knocked_out_line = "Bruised all over... the animals got the better of him.",
 		wake_up = "Press {Restart} to wake up at home",
 		wake_up_note = "(his sack is lost, and some of his muscle; what he has learnt stays)",
+		kg_whole = "{kg} kg",
 		sack_percent_full = "sack {percent}% full",
 		larder_percent_full = "larder {percent}% full",
 		fresh = "fresh",

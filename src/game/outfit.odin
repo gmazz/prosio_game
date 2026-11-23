@@ -1097,6 +1097,38 @@ draw_hat :: proc(h, band: Mat4, cheeks, head, swing: f32) {
 	}
 }
 
+// How high the top of his head is, with what is on it, above the middle of
+// his head (in his own measurements): the speech bubble goes above it. It
+// follows draw_hat and draw_hair, so it changes with the clothes.
+head_top :: proc() -> f32 {
+	top := f32(0.46 * 0.95) // his head
+	switch outfit.hair {
+	case .Tuft:
+		if shows_forelock() {
+			top = max(top, 0.54)
+		}
+	case .Long_Black, .Shaggy, .Bowl:
+		top = max(top, 0.47)
+	case .Grey, .None:
+	}
+	switch outfit.hat {
+	case .Headband, .None:
+	case .Straw_Hat:
+		top = max(top, 0.27 + 0.03 + 0.22)
+	case .Top_Hat:
+		top = max(top, 0.33 + 0.02 + 0.44)
+	case .Beanie:
+		top = max(top, 0.52 + 0.09)
+	case .Crown:
+		top = max(top, 0.43 + 0.13)
+	case .Flying_Cap:
+		top = max(top, 0.08 + 0.42)
+	case .Chef_Hat:
+		top = max(top, 0.64 + 0.2)
+	}
+	return top
+}
+
 // The tuft on his head shows unless a hat covers it.
 shows_forelock :: proc() -> bool {
 	return outfit.hat != .Top_Hat && outfit.hat != .Beanie && outfit.hat != .Flying_Cap && outfit.hat != .Chef_Hat

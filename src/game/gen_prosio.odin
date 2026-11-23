@@ -183,6 +183,8 @@ LEG_SCALE :: f32(0.86)
 TORSO_SCALE :: f32(0.84)
 // hip height in the body's own measurements
 HIP :: f32(0.47)
+// the middle of his head, above his feet
+HEAD_HEIGHT :: HIP * LEG_SCALE + (1.72 - HIP) * TORSO_SCALE
 // above his feet
 SHOULDER_HEIGHT :: HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE
 

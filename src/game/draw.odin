@@ -1147,7 +1147,7 @@ draw_prosio :: proc() {
 	// Head: cheeks get rounder too.
 	munch: f32 = p.eat_t > 0 ? math.sin(p.eat_t * 40) * 0.05 : 0
 	cheeks := head * (1 + 0.2 * t)
-	h := root * translate({0, HIP * LEG_SCALE + (1.72 - HIP) * TORSO_SCALE + munch, 0.04}) * rot_x(-0.16)
+	h := root * translate({0, HEAD_HEIGHT + munch, 0.04}) * rot_x(-0.16)
 	if picking {
 		h = h * rot_x(0.3 * stoop) // looking at what he picks up
 	}

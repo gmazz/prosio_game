@@ -13,16 +13,24 @@ CAMERA_OFFSET :: Vec3{0, 8.5, 10.6}
 FOREST_REVEAL :: f32(0.9)
 
 // ---- pixels ----
-// The world is drawn into a small image, which is then enlarged without smoothing, so it comes out as crisp pixels. How fine the pixels are: six levels, picked with the number keys 1 to 6. Each is about this many rows of pixels from top to bottom. Each game pixel is a whole number of real screen pixels (or, on a fine screen, a whole number and a half), so the actual count is the nearest that fits the window.
-PIXEL_LEVELS :: 6
-PIXEL_ROWS := [PIXEL_LEVELS]f32{180, 240, 320, 360, 420, 560}
+// The world is drawn into a small image, which is then enlarged without smoothing, so it comes out as crisp pixels. How fine the pixels are: nine levels, picked with the number keys 1 to 9 (5, 6 and 7 lie between the old 4 and 5). Each is about this many rows of pixels from top to bottom. Each game pixel is a whole number of real screen pixels (or, on a fine screen, a whole number and a half), so the actual count is the nearest that fits the window.
+PIXEL_LEVELS :: 9
+PIXEL_ROWS := [PIXEL_LEVELS]f32{180, 240, 320, 360, 405, 439, 478, 526, 560}
+// from this level (counting from 0) a pixel may be a quarter of a real pixel bigger or smaller, not only a half: the levels between the old 4 and 5
+PIXEL_QUARTERS_FROM :: 4
 PIXEL_MARGIN :: 1
 
 // ---- panels ----
-// The pictures, bars and boxes over the meadow, and the menus. The panel at the top left, made for a child: a picture for each of his six needs with a bar under it (how full it is: orange and blinking when he lacks it, red when it has run out, purple when it is too much); his weight, as a mark on a bar of coloured bands (WEIGHT_BANDS: starving, lean, chubby, huge, too fat), with a heart blinking at its end when he is in danger at either end; and his stamina. What he weighs in kilograms, and each part, are on the BODY page of the M menu; what he needs he says himself (see STATE_TEXT). Returns how wide and how tall it is.
+// The pictures, bars and boxes over the meadow, and the menus. The panel at the top left, made for a child: a picture for each of his six needs with a bar under it (how full it is: orange and blinking when he lacks it, red when it has run out, purple when it is too much); his weight, as a mark on a bar of coloured bands (WEIGHT_BANDS: starving, lean, chubby, huge, too fat), with a heart blinking at its end when he is in danger at either end; and his stamina. After the weight bar, what he weighs in whole kilograms; each part of it is on the BODY page of the M menu. What he needs he says himself (TEXT.say_low and the rest). Returns how wide and how tall it is.
 
 // how big a need's picture is, at 1280 by 720
 HUD_ICON :: f32(30)
+// the room between the top of him (head, hair or hat) and his speech bubble, at 1280 by 720
+BUBBLE_GAP :: f32(14)
+// how thick the grey edge round his speech bubble is
+BUBBLE_EDGE :: f32(2)
+// the room between the game's name on the main menu and the line under it, at 1280 by 720
+SUBTITLE_GAP :: f32(22)
 HUD_NEEDS :: [6]Need{.Carbs, .Protein, .Fibre, .Vitamins, .Electrolytes, .Water}
 // the weight bar is this many kg from end to end
 WEIGHT_SCALE :: f32(160)

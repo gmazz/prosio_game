@@ -222,11 +222,17 @@ draw_ui :: proc() {
 
 	// Speech bubble.
 	if p.bubble_t > 0 && p.fail == .None {
+		// It sits a little above the top of him, whatever is on his head,
+		// with a thin grey edge.
 		size := 20 * s
-		pos := world_to_screen({p.pos.x, p.height + 2.6 * PROSIO_SIZE, p.pos.y})
+		top := world_to_screen({p.pos.x, p.height + (HEAD_HEIGHT + head_top()) * PROSIO_SIZE, p.pos.y})
 		w := ui_text_width(p.bubble, size) + 22 * s
-		ui_round_rect(pos.x - w / 2, pos.y - size, w, size + 13 * s, UI_WHITE)
-		ui_text(p.bubble, pos.x - w / 2 + 11 * s, pos.y - size + 6.5 * s, size, UI_DARK)
+		h := size + 13 * s
+		x, y := top.x - w / 2, top.y - BUBBLE_GAP * s - h
+		edge := BUBBLE_EDGE * s
+		ui_round_rect(x - edge, y - edge, w + 2 * edge, h + 2 * edge, BUBBLE_EDGE_COLOR, 0.5)
+		ui_round_rect(x, y, w, h, UI_WHITE)
+		ui_text(p.bubble, x + 11 * s, y + 6.5 * s, size, UI_DARK)
 	}
 
 	// What he is made of, and beside it the sack.
@@ -285,7 +291,7 @@ Menu_Item :: enum {
 
 
 look_text :: proc() -> cstring {
-	return fill(TEXT.pixels, {"level", int(i32(pixel_level + 1))})
+	return fill(TEXT.pixels, {"level", int(i32(pixel_level + 1))}, {"levels", PIXEL_LEVELS})
 }
 
 // With a saved Prosio, the main menu carries on with him, or starts over
@@ -324,7 +330,10 @@ draw_menu :: proc() {
 	ui_text(title, sw / 2 - ui_text_width(title, size) / 2 + 5 * s, top + 5 * s, size, UI_DARK)
 	ui_text(title, sw / 2 - ui_text_width(title, size) / 2, top, size, scene == .Menu ? Color{250, 172, 182, 255} : UI_WHITE)
 	if scene == .Menu {
-		label_centred(TEXT.subtitle, sw / 2, top + size + 4 * s, 24 * s, UI_YELLOW)
+		// The title's letters end three quarters of the way down its line
+		// (the rest is room for tails below it); the subtitle keeps a gap
+		// under them.
+		label_centred(TEXT.subtitle, sw / 2, top + text_height(size) * 0.75 + SUBTITLE_GAP * s, 24 * s, UI_YELLOW)
 	}
 
 	y := sh * 0.5

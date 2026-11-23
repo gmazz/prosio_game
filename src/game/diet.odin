@@ -632,10 +632,16 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 		ui_rect(ix + 1 * s, by + 1 * s, (icon - 2 * s) * clamp(p.need[n] / 100, 0, 1), bar_h - 2 * s, bar)
 	}
 
-	// His weight: where his fat puts him among the bands, with a white mark.
+	// His weight: where his fat puts him among the bands, with a white mark,
+	// and at the end of it his weight in kilograms (room kept for the most
+	// he can weigh, so the bar does not jump as the number grows).
 	draw_pixels(SCALE_ICON, x, weight_y - 2 * s, 16 * s)
+	kg_size := 14 * s
+	kg_w := ui_text_width(fill(TEXT.kg_whole, {"kg", 188}), kg_size)
+	kg := fill(TEXT.kg_whole, {"kg", int(math.round(p.kg))})
+	label(kg, x + width - ui_text_width(kg, kg_size), weight_y - 1 * s, kg_size, UI_WHITE)
 	bar_x := x + 22 * s
-	bar_w := width - 22 * s - 24 * s // (room at the end for the heart)
+	bar_w := width - 22 * s - 24 * s - kg_w - 4 * s // (room at the end for the heart, and the number)
 	for band in WEIGHT_BANDS {
 		from := bar_x + bar_w * band.from / FAT_MAX
 		to := bar_x + bar_w * band.to / FAT_MAX
@@ -645,7 +651,7 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	ui_rect(mark - 3 * s, weight_y - 3 * s, 6 * s, 18 * s, UI_DARK)
 	ui_rect(mark - 1.5 * s, weight_y - 1.5 * s, 3 * s, 15 * s, UI_WHITE)
 	if (p.fat > FAT_MAX - FAT_DANGER || starving()) && blink {
-		draw_pixels(HEART_ICON, x + width - 18 * s, weight_y - 3 * s, 18 * s)
+		draw_pixels(HEART_ICON, bar_x + bar_w + 3 * s, weight_y - 3 * s, 18 * s)
 	}
 
 	// Stamina, with his bruises taking the top off it.

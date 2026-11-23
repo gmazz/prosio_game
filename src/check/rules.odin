@@ -2809,6 +2809,26 @@ rules_text :: proc() {
 	}
 	check("every button named in a text, as {Action}, is a button the game has", len(unknown) == 0, len(unknown) == 0 ? "" : fmt.tprintf("%v", unknown[:min(len(unknown), 4)]))
 
+	// His speech bubble goes above the top of him, whatever is on his head:
+	// a hat that stands up raises it, and the tallest, the chef's hat, the
+	// most.
+	was_hat := game.outfit.hat
+	bare: f32
+	tallest := game.Hat.None
+	most: f32 = 0
+	game.outfit.hat = .None
+	bare = game.head_top()
+	for hat in game.Hat {
+		game.outfit.hat = hat
+		if game.head_top() > most {
+			most, tallest = game.head_top(), hat
+		}
+	}
+	game.outfit.hat = .Chef_Hat
+	raised := game.head_top() > bare
+	game.outfit.hat = was_hat
+	check("his speech bubble sits above whatever is on his head: the chef's hat raises it most", raised && tallest == .Chef_Hat, fmt.tprintf("bare head %.2f, tallest %v at %.2f", bare, tallest, most))
+
 	// Names in small letters are filled in by name, in any order, numbers
 	// with the language's own point; a name nothing fills is left as it is.
 	a := string(game.fill("{b} and {a}, {c}", {"a", 1}, {"b", "two"}))

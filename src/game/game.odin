@@ -35,7 +35,7 @@ Options :: struct {
 	has_traits: bool,
 	outfit:     [11]u8, // what he wears, one number per row of the outfit menu
 	has_outfit: bool,
-	detail:     int, // 1 to 6: pixel density to start with (0 = default)
+	detail:     int, // 1 to PIXEL_LEVELS: pixel density to start with (0 = default)
 	seed:       u32, // builds a different meadow (0 = the usual one)
 	no_save:    bool, // neither load nor save the saved game
 }
@@ -383,7 +383,7 @@ agent_frame :: proc(down, tap: bit_set[Button]) {
 // Everything that moves on in a frame: the menus or the game, and the camera.
 update_frame :: proc(dt: f32) {
 	poll_input()
-	// The pixel size can be changed at any time with the keys 1 to 6.
+	// The pixel size can be changed at any time with the keys 1 to 9.
 	if level := level_key_pressed(); level > 0 {
 		pixel_level = level - 1
 	}

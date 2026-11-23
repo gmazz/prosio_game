@@ -119,6 +119,7 @@
     "LEG_SCALE": {"f32": 0.86, "about": "leg length, as a share of the old, longer legs"},
     "TORSO_SCALE": {"f32": 0.84, "about": "the body from hips to neck, likewise"},
     "HIP": {"f32": 0.47, "about": "hip height in the body's own measurements"},
+    "HEAD_HEIGHT": {"untyped": "HIP * LEG_SCALE + (1.72 - HIP) * TORSO_SCALE", "about": "the middle of his head, above his feet"},
     "SHOULDER_HEIGHT": {"untyped": "HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE", "about": "above his feet"}
   }
 }

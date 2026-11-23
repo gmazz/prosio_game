@@ -135,7 +135,7 @@ key_reserved :: proc(k: Key) -> bool {
 	case Key('W'), Key('A'), Key('S'), Key('D'), KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESCAPE, Key('P'), KEY_BACKSPACE:
 		return true
 	}
-	return (k >= Key('1') && k <= Key('6')) || (k >= KEY_KP_0 + 1 && k <= KEY_KP_0 + 6)
+	return (k >= Key('1') && k < Key('1') + PIXEL_LEVELS) || (k >= KEY_KP_0 + 1 && k <= KEY_KP_0 + PIXEL_LEVELS)
 }
 
 key_name :: proc(k: Key) -> string {

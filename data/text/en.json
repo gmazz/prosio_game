@@ -515,7 +515,7 @@
       "Map": "MAP",
       "Controls": "CONTROLS"
     },
-    "pixels": {"text": "PIXELS: {level} / 6", "about": "{level}: the pixel size chosen, 1 to 6"},
+    "pixels": {"text": "PIXELS: {level} / {levels}", "about": "{level}: the pixel size chosen; {levels}: how many there are"},
     "controls_line": {
       "text": "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}",
       "about": "Every button, at the foot of the menu."
@@ -524,7 +524,7 @@
     "paused": "PAUSED",
     "subtitle": "the pig who gathers, bakes and bumps",
     "continue_game": "CONTINUE",
-    "menu_help": "Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 6",
+    "menu_help": "Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 9",
     "window_title": {"text": "Prosio", "about": "the window's title"}
   },
   "speech": {
@@ -823,7 +823,8 @@
     "knocked_out": "KNOCKED OUT!",
     "knocked_out_line": "Bruised all over... the animals got the better of him.",
     "wake_up": "Press {Restart} to wake up at home",
-    "wake_up_note": "(his sack is lost, and some of his muscle; what he has learnt stays)"
+    "wake_up_note": "(his sack is lost, and some of his muscle; what he has learnt stays)",
+    "kg_whole": {"text": "{kg} kg", "about": "his weight beside the weight bar, in whole kilograms"}
   },
   "larder": {
     "_about": "The larder's page.",

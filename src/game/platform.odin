@@ -55,8 +55,8 @@ level_key_pressed :: proc() -> int {
 	if !keyboard_enabled {
 		return 0
 	}
-	KEYS := [PIXEL_LEVELS]rl.KeyboardKey{.ONE, .TWO, .THREE, .FOUR, .FIVE, .SIX}
-	PAD := [PIXEL_LEVELS]rl.KeyboardKey{.KP_1, .KP_2, .KP_3, .KP_4, .KP_5, .KP_6}
+	KEYS := [PIXEL_LEVELS]rl.KeyboardKey{.ONE, .TWO, .THREE, .FOUR, .FIVE, .SIX, .SEVEN, .EIGHT, .NINE}
+	PAD := [PIXEL_LEVELS]rl.KeyboardKey{.KP_1, .KP_2, .KP_3, .KP_4, .KP_5, .KP_6, .KP_7, .KP_8, .KP_9}
 	for i in 0 ..< PIXEL_LEVELS {
 		if rl.IsKeyPressed(KEYS[i]) || rl.IsKeyPressed(PAD[i]) {
 			return i + 1
@@ -405,15 +405,22 @@ begin_pixel_view :: proc(eye, target: Vec3, fov_y: f32) -> (Vec3, Vec3, f32) {
 	// as far as the window allows. Where a game pixel is several real pixels
 	// wide (a high-resolution screen), it may also be a whole number and a
 	// half: the pixels then alternate by one real pixel, too little to see,
-	// and there is room for levels between the whole sizes.
+	// and there is room for levels between the whole sizes. Between two and
+	// a half and three and a half real pixels, where the levels a player
+	// likes best are, the levels from PIXEL_QUARTERS_FROM on may also be a
+	// quarter (3.25, 3, 2.75).
 	device: f32 = 1e9
 	for level in 0 ..= pixel_level {
 		want := rh / PIXEL_ROWS[level]
 		size := math.round(want)
 		step: f32 = 1
-		if want >= 3.5 {
+		switch {
+		case want >= 3.5:
 			size = math.round(want * 2) / 2
 			step = 0.5
+		case want >= 2.5 && level >= PIXEL_QUARTERS_FROM:
+			size = math.round(want * 4) / 4
+			step = 0.25
 		}
 		device = max(1, min(size, device - step))
 	}
@@ -1028,6 +1035,16 @@ when FONT_NAME == "pixelify" {
 	FONT_ASCENT :: f32(768)
 	FONT_SIZE :: f32(11) // the text size (as the game asks for it) drawn one screen pixel to each pixel of the font: from 14 it is drawn one and a half to each
 	FONT_BOLD :: i32(0)
+	// Letters drawn here instead of the font's own, which are too like
+	// another: its M is an H with a notch (MEADOW read HEADOW), its a an o
+	// with a pixel of tail (and read ond). The same height as the font's.
+	FONT_REDRAWN :: [?]struct {
+		letter: rune,
+		rows:   []string,
+	} {
+		{'M', {"##...##", "###.###", "#######", "##.#.##", "##...##", "##...##", "##...##", "##...##"}},
+		{'a', {".####.", "....##", ".#####", "##..##", "##..##", ".#####"}},
+	}
 }
 pixel_font: rl.Font
 
@@ -1062,6 +1079,8 @@ init_font :: proc() {
 	per := f32(HI) / FONT_EM // pixels of the large letters to a design unit
 	count := int(loaded)
 	glyphs := ([^]rl.GlyphInfo)(rl.MemAlloc(u32(count * size_of(rl.GlyphInfo))))
+	tallest: i32 = 0 // the most rows a letter has, its tail below the line and all
+	widen: [COUNT]i32 // how much wider a redrawn letter is than the font's
 	for i in 0 ..< count {
 		big := big_glyphs[i]
 		w, h := f32(big.image.width), f32(big.image.height)
@@ -1073,6 +1092,7 @@ init_font :: proc() {
 		c0, c1 := i32(math.floor(left)), i32(math.ceil(right))
 		r0, r1 := i32(math.floor(bottom)), i32(math.ceil(top))
 		cols, rows := max(c1 - c0, 1), max(r1 - r0, 1)
+		tallest = max(tallest, rows)
 		image := rl.GenImageColor(cols + FONT_BOLD, rows, rl.BLANK)
 		if w > 0 && h > 0 {
 			for r in r0 ..< r1 {
@@ -1091,18 +1111,40 @@ init_font :: proc() {
 				}
 			}
 		}
+		when FONT_NAME != "pixelify" {
+			for fix in FONT_REDRAWN {
+				if fix.letter != big.value || i32(len(fix.rows)) != rows {
+					continue
+				}
+				wide := i32(len(fix.rows[0]))
+				rl.UnloadImage(image)
+				image = rl.GenImageColor(wide, rows, rl.BLANK)
+				for line, r in fix.rows {
+					for c in 0 ..< len(line) {
+						if line[c] == '#' {
+							rl.ImageDrawPixel(&image, i32(c), i32(r), rl.WHITE)
+						}
+					}
+				}
+				widen[i] = wide - cols
+			}
+		}
 		rl.ImageFormat(&image, .UNCOMPRESSED_GRAYSCALE) // (as the atlas below reads them)
 		glyphs[i] = {
 			value    = big.value,
 			offsetX  = c0 + i32(math.round(FONT_ORIGIN.x / FONT_GRID)),
 			offsetY  = i32(math.round((FONT_ASCENT - FONT_ORIGIN.y) / FONT_GRID)) - r1,
-			advanceX = i32(math.round(f32(big.advanceX) / per / FONT_GRID)) + (big.value == ' ' ? 0 : FONT_BOLD),
+			advanceX = i32(math.round(f32(big.advanceX) / per / FONT_GRID)) + (big.value == ' ' ? 0 : FONT_BOLD) + widen[i],
 			image    = image,
 		}
 	}
 	size := i32(math.round(FONT_EM / FONT_GRID))
 	recs: [^]rl.Rectangle
-	atlas := rl.GenImageFontAtlas(glyphs, &recs, i32(count), size, 1, 0)
+	// The atlas packs the letters in rows as high as the size it is told: told
+	// the font's size, the tails of p, g, y and the comma, which reach below
+	// it, would run into the row beneath and be drawn over by the letters
+	// there. So it is told the tallest letter.
+	atlas := rl.GenImageFontAtlas(glyphs, &recs, i32(count), max(size, tallest), 1, 0)
 	pixel_font = {
 		baseSize    = size,
 		glyphCount  = i32(count),

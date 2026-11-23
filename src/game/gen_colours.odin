@@ -9,6 +9,8 @@ package game
 
 UI_WHITE :: Color{255, 255, 255, 255}
 UI_DARK :: Color{30, 34, 40, 255}
+// the edge round his speech bubble
+BUBBLE_EDGE_COLOR :: Color{150, 150, 158, 255}
 UI_PANEL :: Color{20, 30, 24, 150}
 UI_RED :: Color{226, 70, 70, 255}
 UI_GREEN :: Color{110, 200, 90, 255}
