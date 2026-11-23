@@ -2,23 +2,6 @@ package game
 
 import "core:math"
 
-MAX_ENEMIES :: 40
-EGG_EVERY :: Vec2{600, 1200} // a turkey lays an egg every so many seconds, at random in this range: only now and then
-SHAKE_EGG :: f32(0.01) // chance that shaking a held turkey shakes an egg out of it: hardly ever
-PEN_EGG_EVERY :: Vec2{60, 120} // a penned turkey, settled and fed, lays far more often
-AWAKE :: f32(42) // animals further than this from Prosio rest
-
-// A bump hits with Prosio's momentum: his weight times his speed. An enemy
-// digs in and soaks up the first part of that (its grip); only what is left
-// over throws it:
-//
-//   launch speed = BUMP_GAIN * (weight * speed - grip) / enemy's weight
-//
-// So a lean Prosio just bounces off, and the throw grows quickly with weight.
-BUMP_GAIN :: f32(0.479)
-// How hard an enemy shoves Prosio: speed = BONK * enemy's weight / Prosio's weight
-BONK :: f32(31)
-
 // Bad-tempered turkeys live in Turkey Meadow and roam the open meadow, laying
 // eggs as they go; goats keep to the goat hills, led by a big billy goat;
 // and foxes lurk in the forest, after what is in his sack.
@@ -108,94 +91,10 @@ Enemy :: struct {
 	loot_kcal: f32,
 }
 
-// A big farm turkey, a goat, and the billy goat, who weighs more than an
-// ordinary Prosio.
-ENEMY_KG := [Enemy_Kind]f32 {
-	.Turkey = 16,
-	.Goat   = 55,
-	.Billy  = 95,
-	.Fox    = 20,
-}
-ENEMY_RADIUS := [Enemy_Kind]f32 {
-	.Turkey = 0.42,
-	.Goat   = 0.62,
-	.Billy  = 0.78,
-	.Fox    = 0.45,
-}
-ENEMY_SPEED := [Enemy_Kind]f32 {
-	.Turkey = 2.8,
-	.Goat   = 3.2, // (faster than a turkey: a goat is a runner)
-	.Billy  = 2.9,
-	.Fox    = 3.4,
-}
-GOAT_CHARGE :: f32(1.8) // how many times its own speed a goat charges at
-ENEMY_GRIP := [Enemy_Kind]f32 {
-	.Turkey = 560,
-	.Goat   = 450,
-	.Billy  = 500,
-	.Fox    = 600,
-}
-// Knocked out, a turkey or a goat is dead: its body lies where it fell for
-// BODY_LIFE, and chopped up at the fire it gives this many pieces of meat. A
-// fox only slinks off for a while. Another animal takes a dead one's place,
-// but not for a good while (seconds, somewhere in this range): so hunting
-// thins the flock, and with it the eggs.
-MEAT_FROM := [Enemy_Kind]int {
-	.Turkey = 2,
-	.Goat   = 5,
-	.Billy  = 8,
-	.Fox    = 0,
-}
-RESPAWN := [Enemy_Kind]Vec2 {
-	.Turkey = {300, 480},
-	.Goat   = {480, 720},
-	.Billy  = {600, 900},
-	.Fox    = {60, 120},
-}
-BODY_LIFE :: f32(240)
-// Thrown into the pond, an animal swims for the nearest bank, this fast (m/s)
-// and losing this much health a second while it does: a fox swims well, a
-// goat tires, and a turkey is no swimmer at all, so one that lands far out
-// goes bottoms up (comically: feet in the air, cross eyes, bubbles), then
-// sinks out of sight: nothing of it comes ashore.
-SWIM_SPEED := [Enemy_Kind]f32{.Turkey = 0.7, .Goat = 1.1, .Billy = 0.9, .Fox = 1.6}
-DROWN_RATE := [Enemy_Kind]f32{.Turkey = 16, .Goat = 3, .Billy = 5, .Fox = 0}
-SWIM_SINK := [Enemy_Kind]f32{.Turkey = 0.16, .Goat = 0.62, .Billy = 0.75, .Fox = 0.3} // how far down it sits in the water
-SINK_WAIT :: f32(1.5) // seconds a drowned one floats bottoms up,
-SINK_SPEED :: f32(0.5) // then sinks this fast (m/s)
-SINK_DEPTH :: f32(1.4) // until it is this deep, and gone
 // How far down a drowned animal has sunk.
 sunk :: proc(e: Enemy) -> f32 {
 	return max(e.drowned_t - SINK_WAIT, 0) * SINK_SPEED
 }
-
-// A goat he has hit will not lick him, however salty he is, until it has
-// not seen him (he is further off than SOUR_SIGHT) for SOUR_FORGET seconds.
-SOUR_SIGHT :: f32(22)
-SOUR_FORGET :: f32(90)
-MILK_EVERY :: f32(180) // seconds until a milked goat has milk again
-FOX_NOTICE :: f32(13) // how far off a fox scents his sack
-FOX_REST :: f32(25) // seconds a fox keeps away after a theft or a fright
-FOX_PATIENCE :: f32(30) // seconds it carries what it took before eating it wherever it is
-// Every animal has the same measure of health, ENEMY_HEALTH, and every kind
-// of blow takes from it: being thrown, bumped, bashed on the ground, hit by
-// a rock or by another animal, stomped on. What a blow takes goes with the
-// square of its speed, measured against how sturdy that kind is: a blow at
-// its sturdy speed takes HARD_BLOW. A heavy animal is the less sturdy, since
-// it comes down that much harder: a toss a turkey shrugs off would break a
-// billy goat. With no health left it is knocked out for good. Left alone
-// for HEAL_AFTER seconds it starts to mend, HEAL_RATE a second.
-ENEMY_HEALTH :: f32(100)
-HARD_BLOW :: f32(28)
-ENEMY_STURDY := [Enemy_Kind]f32 {
-	.Turkey = 14,
-	.Goat   = 5.5,
-	.Billy  = 3.5,
-	.Fox    = 12,
-}
-HEAL_RATE :: f32(1.2)
-HEAL_AFTER :: f32(8)
-HURT_SLOW :: f32(0.6) // how fast it still goes with almost no health left, as a share
 
 blow_damage :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
 	share := speed / ENEMY_STURDY[kind]
@@ -242,34 +141,13 @@ threat :: proc(kind: Enemy_Kind) -> f32 {
 	return clamp(blow_damage(kind, speed) / ENEMY_HEALTH, 0, 1)
 }
 
-// A small, weak Prosio they know they can beat, and they press him harder:
-// faster, from further off, more of them at once. This is 1 when he is no
-// danger to them at all (threat under FEARLESS_BELOW) and 0 once he is
-// (RESPECT_ABOVE and over), which the pig he starts as already is.
-FEARLESS_BELOW :: f32(0.04)
-RESPECT_ABOVE :: f32(0.16)
-BOLD_SPEED :: f32(0.3) // how much faster the boldest are
-BOLD_NOTICE :: f32(0.4) // and from how much further off they come for him
 boldness :: proc(kind: Enemy_Kind) -> f32 {
 	return 1 - smooth(clamp((threat(kind) - FEARLESS_BELOW) / (RESPECT_ABOVE - FEARLESS_BELOW), 0, 1))
 }
 
-// A big, strong Prosio they fear: from threat WARY_FROM they dart in less,
-// and hardly at all from WARY_FULL.
-WARY_FROM :: f32(0.45)
-WARY_FULL :: f32(0.75)
 wariness :: proc(kind: Enemy_Kind) -> f32 {
 	return smooth(clamp((threat(kind) - WARY_FROM) / (WARY_FULL - WARY_FROM), 0, 1))
 }
-
-// When one of a flock takes a real blow, the others nearby may run for it:
-// each with a chance that goes with how dangerous he is (threat times
-// SCATTER), so from a strong Prosio nearly all of them scatter and from a
-// weak one hardly any. The one that was hit may run too, once it is up.
-ALARM_BLOW :: f32(8) // a blow at least this hard is noticed
-ALARM_RANGE :: f32(11)
-SCATTER :: f32(1.6)
-FRIGHT :: Vec2{6, 12} // seconds they keep away
 
 same_flock :: proc(a, b: Enemy_Kind) -> bool {
 	goat :: proc(k: Enemy_Kind) -> bool {return k == .Goat || k == .Billy}
@@ -290,16 +168,6 @@ alarm_flock :: proc(hurt: ^Enemy) {
 		hurt.scared_t = max(hurt.scared_t, random_range(FRIGHT.x, FRIGHT.y) + 3)
 	}
 }
-
-// An animal that has chased him this far from its home gives up, and
-// ambles back for GIVE_UP seconds whatever he does.
-LEASH := [Enemy_Kind]f32 {
-	.Turkey = 30,
-	.Goat   = 26,
-	.Billy  = 26,
-	.Fox    = 1000,
-}
-GIVE_UP :: f32(8)
 
 add_enemy :: proc(kind: Enemy_Kind, home: Vec2) {
 	g.enemies[g.enemy_count] = Enemy {
@@ -1219,20 +1087,6 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 	} else {
 		say("Pow!", 0.6)
 	}
-}
-
-// Prosio comes down on an animal: the blow is his weight times the height
-// he came down from (the top of his jump), times STOMP_K. Every Prosio hits
-// as hard, since a heavy one cannot jump as high: weight times jump height
-// is always 36 (more with a rock in his arms). It takes from the animal's
-// health like any blow: all of it at ENEMY_TOUGH, so a turkey is done for
-// by two stomps, a goat by four and the billy goat by five.
-STOMP_K :: f32(1)
-ENEMY_TOUGH := [Enemy_Kind]f32 {
-	.Turkey = 50,
-	.Goat   = 110,
-	.Billy  = 160,
-	.Fox    = 60,
 }
 
 // Checked as he falls: if he comes down on an animal, it takes the blow and

@@ -20,29 +20,7 @@ import "core:math/linalg"
 // The eyes come from the mesh, with separate marks for dizzy and dead poses.
 QUAD_ANIMALS :: #config(QUAD_ANIMALS, true) // false draws the goats as before, from shapes
 PACK_FOX :: #config(PACK_FOX, true) // the fox from the pack; false draws the asset pilot's fox instead (-define:PACK_FOX=false)
-QUAD_EYE_SIZE :: f32(0.047) // small closed or crossed eye marks in this rig's units
-QUAD_GRAB_KICK :: f32(0.40)
-QUAD_GRAB_TWIST :: f32(0.16)
 QUAD_FLOOR_EPSILON :: f32(0.0001)
-// How it goes from standing to walking to galloping, by its speed (m/s):
-// each blends into the next, on one stride cycle, so nothing jumps.
-QUAD_WALK_FROM :: f32(0.08) // it starts to walk,
-QUAD_WALK_FULL :: f32(0.4) // and is walking from here;
-QUAD_GALLOP_FROM :: f32(3.2) // the gallop starts to take over (only a charge is this fast: chasing, backing off or trotting up it walks, briskly),
-QUAD_GALLOP_FULL :: f32(4.2) // and has from here
-QUAD_GALLOP_SLOWEST :: f32(0.65) // a gallop's legs never go slower than this share of their own pace
-QUAD_SHORT_STEP :: f32(0.6) // going slowly it takes shorter steps: this share of the walk's own, quicker for it,
-QUAD_LONG_STEP_AT :: f32(2.5) // growing to the full step at this speed (m/s)
-QUAD_HEAD_TURN :: f32(0.9) // how far (radians) a packed animal turns its head to watch him,
-QUAD_HEAD_SPEED :: f32(3.5) // how fast it turns it (radians a second; with him behind it, it looks ahead)
-// A goat on four legs cannot slide sideways (see quad_steer):
-QUAD_GOAT_ACCEL :: f32(12) // how fast it gets up to speed, or stops (m/s each second; the drawn ones 10),
-QUAD_TURN :: f32(4.5) // how fast it turns (radians a second),
-QUAD_BACKWARDS :: f32(1.1) // how fast it backs off, facing him (m/s),
-QUAD_SLOWEST :: f32(0.8) // it walks no slower than this (m/s): it stands, or walks;
-QUAD_SET_OFF :: f32(0.3) // standing, it sets off once it wants to go this fast, and walking it stops below
-QUAD_STOP :: f32(0.12) // this (so it does not creep, its legs barely moving),
-QUAD_TURN_STEP :: f32(0.25) // turning on the spot, its hooves step as if it walked this far (m) for each radian
 
 Quad_Vertex :: [17]f32 // position, flat normal, smooth normal, four bones, four weights
 Quad_Group :: struct {

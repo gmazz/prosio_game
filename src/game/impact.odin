@@ -3,33 +3,6 @@ package game
 import "core:math"
 import "core:math/linalg"
 
-// Speed transferred to the animal, after its grip and mass have absorbed the blow.
-IMPACT_STUMBLE_SPEED :: f32(0.9)
-IMPACT_FALL_SPEED :: f32(2)
-IMPACT_LAUNCH_SPEED :: f32(3)
-IMPACT_MIN_PUSH :: f32(0.22)
-IMPACT_MAX_RISE :: f32(6.5)
-IMPACT_RISE_SHARE :: f32(0.55)
-IMPACT_SPIN_PER_SPEED :: f32(1.1)
-IMPACT_MAX_SPIN :: f32(7.5)
-IMPACT_REBOUND_SPEED :: f32(6)
-IMPACT_RESTITUTION :: f32(0.22)
-IMPACT_LANDING_KEEP :: f32(0.72)
-IMPACT_TUMBLE_TIME :: f32(0.42)
-IMPACT_FALL_TIP_TIME :: f32(0.36)
-IMPACT_SETTLE_TIME :: f32(0.48)
-IMPACT_DOWN_TIME :: f32(0.55)
-IMPACT_GET_UP_TIME :: f32(0.72)
-IMPACT_TUMBLE_DRAG :: f32(5.5)
-IMPACT_SLIDE_DRAG :: f32(1.3)
-IMPACT_BRACE_DRAG :: f32(6.5)
-IMPACT_SPIN_DRAG :: f32(8)
-IMPACT_BRACE_TIME := #partial [Impact_Kind]f32{.Push = 0.33, .Stumble = 0.56}
-IMPACT_BRACE_LEAN := #partial [Impact_Kind]f32{.Push = 0.11, .Stumble = 0.42}
-IMPACT_BEND_TIME :: f32(0.32)
-IMPACT_SIDE_ANGLE :: f32(1.44)
-IMPACT_GROUND_BLEND_HEIGHT :: f32(0.75)
-IMPACT_SIDE_BIAS :: f32(0.35)
 IMPACT_UP :: quaternion128(1)
 
 Impact_Kind :: enum {None, Push, Stumble, Fall, Launch}

@@ -3,20 +3,6 @@ package game
 import "core:math"
 import "core:math/linalg"
 
-// Pitch and roll of the fallen clip, measured so the head, ribs and
-// forelegs share the ground instead of balancing on a low ear.
-QUAD_DRAG_SETTLE := [Quad_Kind]Vec2{
-	.Goat = {0.25, 0.30},
-	.Billy = {0.25, 0.25},
-	.Packfox = {-0.075, 0.275},
-}
-QUAD_DRAG_HIP_PITCH :: f32(0.48)
-QUAD_DRAG_HIP_ROLL :: f32(0.28)
-QUAD_DRAG_HIP_PULL :: f32(0.08)
-QUAD_DRAG_HIGH_TAIL :: f32(1.50) // grip height in fox radii before the hips lift more
-QUAD_DRAG_TAIL_LIFT :: f32(0.56)
-QUAD_DRAG_REACH_MARGIN :: f32(0.995)
-
 Quad_Drag_Grip :: struct {
 	first, second: []int,
 	root, hinge, tip, hand: Vec3,

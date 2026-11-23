@@ -3,16 +3,6 @@ package game
 import "core:math"
 import "core:math/linalg"
 
-// Feed the authored gaits from actual travel and turns after collisions.
-QUAD_BODY_FOLLOW :: f32(10)
-QUAD_REAR_TWIST_MAX :: f32(0.28)
-QUAD_BODY_LEAN_MAX :: f32(0.12)
-QUAD_YIELD_TIME :: f32(0.38)
-QUAD_YIELD_SPEED :: f32(2.2)
-QUAD_YIELD_MIN_SPEED :: f32(0.20)
-QUAD_YIELD_OVERLAP :: f32(0.035)
-QUAD_STRUGGLE_RATE :: f32(18) // phase radians a second
-
 Quad_Motion :: struct {
 	active: bool,
 	last_pos: Vec2,
