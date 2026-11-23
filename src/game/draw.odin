@@ -5,18 +5,6 @@ import "core:math/linalg"
 
 // Everything is drawn from a handful of simple shapes placed with matrices.
 
-IMPACT_QUAD_PIVOT :: f32(1.1)
-IMPACT_TURKEY_PIVOT :: f32(1.18)
-IMPACT_STEP_ANGLE :: f32(0.43)
-IMPACT_HIND_TUCK :: f32(-0.7)
-IMPACT_FRONT_TUCK :: f32(0.65)
-IMPACT_LEG_SPLAY :: f32(0.24)
-
-GRASS_SIZE :: f32(1.25) // how big a clump of grass is drawn, against its model (0.4 m tall)
-SHRUB_SIZE :: f32(0.6) // a low bush under the forest trees (1.2 m tall as modelled)
-LOG_LENGTH :: f32(1.9) // a fallen log, from end to end
-FERN_SIZE :: f32(0.95) // and a fern
-
 // A darker or lighter version of a colour.
 shade :: proc(c: Color, f: f32) -> Color {
 	return {u8(min(f32(c.r) * f, 255)), u8(min(f32(c.g) * f, 255)), u8(min(f32(c.b) * f, 255)), c.a}
@@ -235,8 +223,6 @@ foliage :: proc(t: Tree_Shape) -> (low, high: f32) {
 	}
 	return t.canopy_y - t.canopy * 1.15, t.canopy_y + t.canopy * 1.45
 }
-
-FOREST_REVEAL :: f32(0.9) // in the forest, how much further round him the trees turn see-through (in crowns)
 
 // A tree standing between the camera and Prosio fades to a see-through
 // pattern where it covers him, so he never disappears behind it.

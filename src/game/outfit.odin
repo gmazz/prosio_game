@@ -273,7 +273,6 @@ bag_tab: Bag_Tab
 bag_row: Outfit_Row
 bag_item: Item
 bag_facing: f32 // which way Prosio faced; he turns round to show his outfit
-SACK_COLUMNS :: 9
 
 open_bag :: proc() {
 	scene = .Bag

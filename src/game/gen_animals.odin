@@ -188,3 +188,13 @@ IMPACT_SIDE_ANGLE :: f32(1.44)
 IMPACT_GROUND_BLEND_HEIGHT :: f32(0.75)
 IMPACT_SIDE_BIAS :: f32(0.35)
 
+// ---- impact_pose ----
+// How a knocked animal's body and legs are drawn while it stumbles and falls.
+
+IMPACT_QUAD_PIVOT :: f32(1.1)
+IMPACT_TURKEY_PIVOT :: f32(1.18)
+IMPACT_STEP_ANGLE :: f32(0.43)
+IMPACT_HIND_TUCK :: f32(-0.7)
+IMPACT_FRONT_TUCK :: f32(0.65)
+IMPACT_LEG_SPLAY :: f32(0.24)
+

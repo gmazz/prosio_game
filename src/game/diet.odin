@@ -645,8 +645,6 @@ weight_text :: proc(format: cstring) -> cstring {
 	return ui_format2(format, sum / 10, sum % 10)
 }
 
-WEIGHT_SCALE :: f32(160) // the weight bar is this many kg from end to end
-
 // His weight as its parts laid end to end, each in its own colour.
 draw_weight_stack :: proc(x, y, w, h, s: f32) {
 	ui_rect(x - 2 * s, y - 2 * s, w + 4 * s, h + 4 * s, UI_DARK)
@@ -658,17 +656,6 @@ draw_weight_stack :: proc(x, y, w, h, s: f32) {
 		at += wide
 	}
 }
-
-// The panel at the top left, made for a child: a picture for each of his
-// six needs with a bar under it (how full it is: orange and blinking when he
-// lacks it, red when it has run out, purple when it is too much); his weight,
-// as a mark on a bar of coloured bands (WEIGHT_BANDS: starving, lean, chubby,
-// huge, too fat), with a heart blinking at its end when he is in danger at
-// either end; and his stamina. What he weighs in kilograms, and each part,
-// are on the BODY page of the M menu; what he needs he says himself (see
-// STATE_TEXT). Returns how wide and how tall it is.
-HUD_ICON :: f32(30) // how big a need's picture is, at 1280 by 720
-HUD_NEEDS :: [6]Need{.Carbs, .Protein, .Fibre, .Vitamins, .Electrolytes, .Water}
 
 draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	p := &g.prosio
@@ -736,13 +723,6 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 Weight_Band :: struct {
 	from, to: f32,
 	color:    Color,
-}
-WEIGHT_BANDS := [5]Weight_Band {
-	{0, FAT_DANGER, {226, 70, 70, 255}},
-	{FAT_DANGER, FAT_LEAN, {170, 214, 110, 255}},
-	{FAT_LEAN, FAT_HUGE, {110, 190, 80, 255}},
-	{FAT_HUGE, FAT_MAX - FAT_DANGER, {244, 150, 60, 255}},
-	{FAT_MAX - FAT_DANGER, FAT_MAX, {226, 70, 70, 255}},
 }
 
 // Pictures for his needs on the screen, a letter a pixel (see icon_color):

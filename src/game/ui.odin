@@ -2,7 +2,6 @@ package game
 
 import "core:math"
 
-REGION_ABOUT_TIME :: f32(5) // seconds the line about a part of the meadow shows after he gets there
 CONTROLS :: "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}"
 
 // Text with a dark edge all round, a pixel of the font wide, so it reads on

@@ -84,9 +84,6 @@ Game :: struct {
 	opts:          Options,
 }
 
-// Where the camera sits, relative to the point it looks at.
-CAMERA_OFFSET :: Vec3{0, 8.5, 10.6}
-
 g: Game
 
 // Which screen is showing. Kept outside Game so that starting a new game

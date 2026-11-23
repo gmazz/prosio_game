@@ -140,3 +140,13 @@ MAX_PARTICLES :: 256
 MAX_DECOR :: 5000
 MAX_FIELDS :: 8
 
+// ---- plants ----
+// How big the grass clumps, ferns, low bushes and fallen logs are drawn.
+
+GRASS_SIZE :: f32(1.25) // how big a clump of grass is drawn, against its model (0.4 m tall)
+SHRUB_SIZE :: f32(0.6) // a low bush under the forest trees (1.2 m tall as modelled)
+// a fallen log, from end to end
+LOG_LENGTH :: f32(1.9)
+// and a fern
+FERN_SIZE :: f32(0.95)
+

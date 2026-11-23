@@ -1,0 +1,25 @@
+package game
+
+// Made by tools/gen_data from data/tuning/controls.json: do not edit; edit that file.
+
+// The keys and Xbox controller buttons each action starts with (the Controls page of the M menu changes them, and keeps the changes in their own file), which can be changed there, and how the controller is read.
+
+// ---- buttons ----
+// The Controls panel of the M menu: a row for each action, and a last row that puts everything back. The columns are the controller button and the two keys. Choosing a cell waits for the new button.
+
+//  Each action: up to two keys (Key('A') is the A key; KEY_NONE is none) and one controller button.
+DEFAULT_BINDINGS :: [Button]Binding{.Left = {keys = {Key('A'), KEY_LEFT}, pad = .D_Left}, .Right = {keys = {Key('D'), KEY_RIGHT}, pad = .D_Right}, .Up = {keys = {Key('W'), KEY_UP}, pad = .D_Up}, .Down = {keys = {Key('S'), KEY_DOWN}, pad = .D_Down}, .Jump = {keys = {Key('J'), Key('X')}, pad = .RT}, .Sprint = {keys = {KEY_LEFT_SHIFT, KEY_RIGHT_SHIFT}, pad = .L_Stick}, .Bump = {keys = {KEY_SPACE, KEY_NONE}, pad = .X}, .Action = {keys = {Key('E'), Key('K')}, pad = .A}, .Grab = {keys = {Key('F'), Key('L')}, pad = .B}, .Eat = {keys = {Key('Q'), KEY_NONE}, pad = .Y}, .Sack_Prev = {keys = {Key('Z'), KEY_NONE}, pad = .LB}, .Sack_Next = {keys = {Key('C'), KEY_NONE}, pad = .RB}, .Bag = {keys = {Key('M'), KEY_NONE}, pad = .View}, .Gas = {keys = {Key('G'), Key('V')}, pad = .LT}, .Restart = {keys = {KEY_ENTER, Key('R')}, pad = .A}, .Menu = {keys = {KEY_ESCAPE, Key('P')}, pad = .Start}, .Confirm = {keys = {KEY_ENTER, KEY_SPACE}, pad = .A}}
+// The actions the Controls panel can change, in its order, and what it calls them.
+REMAPPABLE := [?]Button{.Jump, .Sprint, .Bump, .Action, .Grab, .Eat, .Sack_Prev, .Sack_Next, .Bag, .Gas}
+// The controller buttons an action may be given.
+PAD_ASSIGNABLE :: bit_set[Pad]{.A, .B, .X, .Y, .LB, .RB, .LT, .RT, .View, .L_Stick, .R_Stick}
+// seconds it waits for a button before giving up
+CONTROLS_WAIT :: f32(6)
+
+// ---- controller ----
+// the stick's middle, where it does nothing
+STICK_DEAD :: f32(0.2)
+// how far the stick goes before it counts as a direction in menus
+STICK_PRESS :: f32(0.5)
+TRIGGER_PRESS :: f32(0.4)
+

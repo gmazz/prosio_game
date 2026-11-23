@@ -1398,8 +1398,6 @@ draw_pixels :: proc(rows: [12]string, x, y, size: f32) {
 	}
 }
 
-SACK_SLOTS :: 6 // boxes shown at most; beyond that the sack scrolls round
-
 // The sack, at the top of the screen from x: a box for each kind of thing
 // in it, with how many under the box, and the chosen one's name and
 // calories above. With more kinds than fit, the boxes go round in a circle,

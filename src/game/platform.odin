@@ -48,15 +48,6 @@ Button :: enum {
 	Confirm,
 }
 
-// The world is drawn into a small image, which is then enlarged without
-// smoothing, so it comes out as crisp pixels.
-//
-// How fine the pixels are: six levels, picked with the number keys 1 to 6.
-// Each is about this many rows of pixels from top to bottom. Each game pixel
-// is a whole number of real screen pixels (or, on a fine screen, a whole
-// number and a half), so the actual count is the nearest that fits the window.
-PIXEL_LEVELS :: 6
-PIXEL_ROWS := [PIXEL_LEVELS]f32{180, 240, 320, 360, 420, 560}
 pixel_level := 3 // 0 to PIXEL_LEVELS - 1
 
 // The number key (1 to PIXEL_LEVELS) pressed this frame, or 0.
@@ -96,7 +87,6 @@ pixel_view: struct {
 	clear:      Color,
 }
 @(private = "file")
-PIXEL_MARGIN :: 1
 
 // Share the lighting and paint code between desktop OpenGL and WebGL.
 VERTEX_BODY :: #load("shaders/scene.vert", string)
@@ -693,10 +683,6 @@ stick: Vec2
 key_hit, key_hit_frame: Key
 @(private = "file")
 pad_hit: Pad
-
-STICK_DEAD :: f32(0.2) // the stick's middle, where it does nothing
-STICK_PRESS :: f32(0.5) // how far the stick goes before it counts as a direction in menus
-TRIGGER_PRESS :: f32(0.4)
 
 // Reads the keyboard queue and the controller, once at the start of a frame.
 poll_input :: proc() {

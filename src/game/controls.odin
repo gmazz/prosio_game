@@ -84,39 +84,13 @@ PAD_NAME := [Pad]string {
 	.Stick_Right = "STICK RIGHT",
 }
 
-// The controller buttons an action may be given.
-PAD_ASSIGNABLE :: bit_set[Pad]{.A, .B, .X, .Y, .LB, .RB, .LT, .RT, .View, .L_Stick, .R_Stick}
-
 Binding :: struct {
 	keys: [2]Key,
 	pad:  Pad,
 }
 
-DEFAULT_BINDINGS :: [Button]Binding {
-	.Left      = {{Key('A'), KEY_LEFT}, .D_Left},
-	.Right     = {{Key('D'), KEY_RIGHT}, .D_Right},
-	.Up        = {{Key('W'), KEY_UP}, .D_Up},
-	.Down      = {{Key('S'), KEY_DOWN}, .D_Down},
-	.Jump      = {{Key('J'), Key('X')}, .RT},
-	.Sprint    = {{KEY_LEFT_SHIFT, KEY_RIGHT_SHIFT}, .L_Stick},
-	.Bump      = {{KEY_SPACE, KEY_NONE}, .X},
-	.Action    = {{Key('E'), Key('K')}, .A},
-	.Grab      = {{Key('F'), Key('L')}, .B},
-	.Eat       = {{Key('Q'), KEY_NONE}, .Y},
-	.Sack_Prev = {{Key('Z'), KEY_NONE}, .LB},
-	.Sack_Next = {{Key('C'), KEY_NONE}, .RB},
-	.Bag       = {{Key('M'), KEY_NONE}, .View},
-	.Gas       = {{Key('G'), Key('V')}, .LT},
-	.Restart   = {{KEY_ENTER, Key('R')}, .A},
-	.Menu      = {{KEY_ESCAPE, Key('P')}, .Start},
-	.Confirm   = {{KEY_ENTER, KEY_SPACE}, .A},
-}
-
 bindings := DEFAULT_BINDINGS
 
-// The actions the Controls panel can change, in its order, and what it
-// calls them.
-REMAPPABLE := [?]Button{.Jump, .Sprint, .Bump, .Action, .Grab, .Eat, .Sack_Prev, .Sack_Next, .Bag, .Gas}
 CONTROL_NAME := [Button]string {
 	.Left      = "Left",
 	.Right     = "Right",
@@ -478,10 +452,6 @@ load_controls :: proc() {
 	}
 }
 
-// The Controls panel of the M menu: a row for each action, and a last row
-// that puts everything back. The columns are the controller button and the
-// two keys. Choosing a cell waits for the new button.
-CONTROLS_WAIT :: f32(6) // seconds it waits for a button before giving up
 controls_row: int // 0 to len(REMAPPABLE): the last is "back to the defaults"
 controls_col: int // 0 the controller, 1 the key, 2 the other key
 controls_waiting: bool
