@@ -2,38 +2,6 @@ package game
 
 import "core:math"
 
-// Prosio's fat, in kilograms. (His weight is this and the rest of him, added
-// up in diet.odin.) Running out of it and of his carbs as well, or carrying
-// too much fat, is a fail.
-FAT_MAX :: f32(100) // heart gives up
-FAT_START :: f32(45)
-FAT_LEAN :: f32(30) // below this he is lean
-FAT_HUGE :: f32(70) // above this he is huge
-FAT_DANGER :: f32(7) // warning zone width at each end
-KG_START :: f32(80) // what he weighs at the start; walking and running burn in proportion to this
-KG_SLIM :: f32(35) // the weight at which he is at his narrowest
-
-STAMINA_MAX :: f32(100)
-DASH_TIME :: f32(0.28)
-PICK_TIME :: f32(0.5) // stooping to pick something up and putting it in the sack
-
-// Everything he does burns some of his weight, a little for everyday things
-// and more for fighting. Walking and running burn in proportion to his
-// weight: these are for an 80 kg Prosio.
-WALK_BURN :: f32(0.02) // kg per second of walking
-SPRINT_BURN :: f32(0.06) // kg per second of sprinting
-LOAD_EASE :: f32(0.6) // the share of the sack's weight his legs feel (it is on his back, well packed)
-LOAD_TRAIN :: f32(3) // so with 16 kg in the sack his legs train 1.36 times as fast
-LOAD_HEAVY :: f32(0.3) // a sack this share of his weight, and he says so
-GATHER_BURN :: f32(0.03) // kg per thing picked up
-JUMP_BURN :: f32(0.06) // kg per jump
-FIGHT_BURN :: f32(0.2) // kg per bump, grab, bash or throw
-
-// Ordinary legs put the same energy into every jump, so height = energy /
-// weight: a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3. Strong
-// legs put in more (see LEG_SPRING in body.odin).
-JUMP_ENERGY :: f32(36)
-
 Fail :: enum {
 	None,
 	Fainted,
@@ -138,12 +106,6 @@ fatness :: proc() -> f32 {
 	return clamp(g.prosio.fat / FAT_MAX, 0, 1)
 }
 
-// How big Prosio is drawn, against the animals and the meadow: his body
-// is modelled in its own measurements, and everything that comes from them
-// (his size on the ground, where his hands and shoulders are, how long his
-// arms are, how high he lifts and throws) is scaled by this.
-PROSIO_SIZE :: f32(0.75)
-
 // Prosio's size on the ground. The hands swing beyond this torso radius.
 prosio_radius :: proc(kg: f32) -> f32 {
 	return (0.42 + (kg - KG_SLIM) * 0.0055) * PROSIO_SIZE
@@ -236,25 +198,6 @@ reset_prosio :: proc() {
 		g.prosio.knows[r.dish] = true
 	}
 }
-
-// A knock from an animal, or a sting, leaves a bruise: no weight is lost,
-// but the top of his stamina comes down by that much until it mends, so a
-// battered Prosio cannot sprint or fight for long and has to get away. The
-// bruises never take more than BRUISE_MOST, which leaves him BRUISE_FLOOR of
-// his stamina to run with; bruised that far, the next thing is that he is
-// knocked out, and wakes up at home.
-BRUISE_FLOOR :: f32(0.25)
-BRUISE_MOST :: STAMINA_MAX * (1 - BRUISE_FLOOR)
-BRUISE := [Enemy_Kind]f32 {
-	.Turkey = 3,
-	.Goat   = 6,
-	.Billy  = 9,
-	.Fox    = 0,
-}
-BRUISE_STING :: f32(0.8)
-BRUISE_MEND :: f32(0.2) // points a second, times 0.5 (lacking protein and vitamins) to 2 (plenty of both)
-BRUISE_REST :: f32(5) // seconds after a knock before they start to mend
-BRUISE_WARN :: f32(0.7) // from this share of the most, he says so
 
 bruise :: proc(points: f32) {
 	p := &g.prosio

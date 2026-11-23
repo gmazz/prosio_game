@@ -73,56 +73,6 @@ TRAIT_GIVES := [Trait]cstring {
 	.Dairy    = "more butter and cheese (+0% to +25%)",
 }
 
-// His muscles, in kg: wasted away, ordinary, and the most they can be.
-ARMS_KG :: [3]f32{3, 5, 12}
-LEGS_KG :: [3]f32{5, 8, 18}
-
-FADE :: f32(0.00064) // the share of a trait lost every second it is not used: half in 18 minutes
-WASTE :: f32(0.0015) // how fast muscle wastes each second without protein, or starving: ordinary to wasted in 11 minutes
-RECOVER :: f32(0.002) // and how fast wasted muscle comes back to ordinary once he is fed
-BULK :: f32(2) // full of protein, muscle builds this much faster
-BASAL :: f32(0.00023) // kg of energy each kg of muscle burns every second: 0.18 kg a minute for ordinary muscle, 0.41 at the most, 0.11 wasted
-
-// How much each thing he does trains (a trait gains this share of what it
-// still lacks).
-CARRY_WORK :: f32(0.004) // arms: each second of holding something of his own weight
-SWING_WORK :: f32(0.02) // arms: each bash or throw of something of his own weight
-SPRINT_WORK :: f32(0.004) // legs and lungs: each second of sprinting
-WALK_WORK :: f32(0.0006) // legs: each second of walking
-JUMP_WORK :: f32(0.015) // legs: each jump
-DRAG_WORK :: f32(0.002) // legs: each second of dragging a body
-KNOCK_WORK :: f32(0.04) // hide: each peck or butt
-STING_WORK :: f32(0.01) // hide: each sting
-GUT_WORK :: f32(0.2) // gut: each kg of fibre eaten
-PICK_WORK :: f32(0.02) // hooves: each thing picked
-FISH_WORK :: f32(0.04) // hooves: each grab for a fish
-MILK_WORK :: f32(0.05) // hooves: each milking
-COOK_WORK :: f32(0.06) // baking, grilling, dairy: each thing made (half way after 11, nearly all after 50)
-
-// What each trait is worth at its most (and a muscle at its worst).
-STRONG :: f32(1.8) // arms: how much more he lifts and how much harder he throws,
-NOODLE_ARMS :: f32(0.6) // and with arms wasted away
-LEG_SPEED :: f32(1.3) // legs: how much faster he walks and runs,
-LEG_SPRING :: f32(2) // and how much more goes into a jump;
-WEAK_LEGS :: f32(0.75) // both, with legs wasted away
-LUNG_DRAIN :: f32(0.55) // lungs: the share of the usual stamina a sprint costs,
-LUNG_REGEN :: f32(1.6) // and how much faster it comes back
-THIN_SKIN :: f32(1.5) // the share of a knock he feels with no fat on him,
-PADDED :: f32(0.5) // with all the fat he can carry,
-TOUGH_HIDE :: f32(0.5) // and, on top of that, with the toughest hide
-GUT_CONTROL :: f32(0.4) // gut: from this level he holds his wind until G is pressed,
-GUT_HOLD :: f32(2) // seconds between two of them then,
-GUT_REACH :: f32(1.5) // and how much further his wind reaches at the most
-DEFT_PICK :: f32(0.5) // hooves: the share of the usual time picking takes,
-DEFT_REACH :: f32(1.4) // and how much further he reaches for a fish or a leg
-COOK_QUICK :: f32(0.5) // baking, grilling, dairy: the share of the usual time it takes at the most (the calories are in COOK_RANGE in kitchen.odin)
-
-// Waking up at home after the game was over: his fat is brought back inside
-// these, he has lost this share of the muscle he had built, and his sack is
-// gone. What he has learnt stays.
-WAKE_FAT :: Vec2{25, 70}
-WAKE_MUSCLE_LOSS :: f32(0.35)
-
 is_muscle :: proc(t: Trait) -> bool {
 	return t == .Arms || t == .Legs
 }
