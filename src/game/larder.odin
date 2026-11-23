@@ -2,11 +2,6 @@ package game
 
 import "core:math"
 
-LARDER_KEEPS :: f32(5) // food keeps this many times as long in a larder
-LARDER_LITRES :: f32(100)
-LARDER_RADIUS :: f32(0.6)
-MAX_LARDERS :: 4
-
 Larder :: struct {
 	used:  bool,
 	round: int, // its round in g.rounds, for bumping into

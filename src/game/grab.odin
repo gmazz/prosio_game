@@ -46,27 +46,6 @@ import "core:math/linalg"
 // seesaws and when he lands. A dragged animal stands on its own feet, so it
 // does not.
 
-// Rocks and stones: his arms put the same energy into every throw,
-// THROW_ENERGY joules for each kilogram of him (times the strength of his
-// arms), so the speed is the square root of twice that over the stone's
-// weight. A heavy rock is a short, slow lob; a light stone would fly faster
-// than an arm can move, and leaves at ARM_SPEED (times the root of his
-// strength) at the most.
-THROW_ENERGY :: f32(8)
-ARM_SPEED :: f32(22)
-PEBBLE_KG :: f32(0.3)
-PEBBLE_RADIUS :: f32(0.07)
-PEBBLE_COST :: f32(3) // stamina to throw one
-// What a thrown stone does to an animal it hits is the blow of an animal of
-// that kind landing with the stone's energy, counted STONE_HARD times over
-// (a stone does not give). A stone under LIGHT_STONE kg knocks nothing over:
-// it stings, startles (the animal runs for PEBBLE_FRIGHT seconds) and makes
-// a fox drop what it stole.
-STONE_HARD :: f32(2)
-LIGHT_STONE :: f32(2)
-PEBBLE_FRIGHT :: Vec2{3, 6}
-AIM_RANGE :: f32(16) // how far off he can pick something out to throw at
-
 stone_speed :: proc(kg: f32) -> f32 {
 	return min(math.sqrt(2 * THROW_ENERGY * strength() * g.prosio.kg / kg), ARM_SPEED * math.sqrt(strength()))
 }
@@ -226,33 +205,7 @@ throw_stone :: proc() {
 	}
 	answer("Wait... too many in the air!")
 }
-ANIMAL_THROW_GAIN :: f32(3.2) // for animals, which he can wind up
-MAX_THROW :: f32(22)
-MAX_THROWN :: 4
-GRAB_REACH :: f32(0.85) // how far beyond touching he can reach: about an arm
-LIFT_TIME :: f32(0.35) // seconds to lift something of his own weight
-CARRY_DRAIN :: f32(5) // stamina per second for holding his own weight
-LIFT_LIMIT :: f32(0.9) // he can swing or throw up to this share of his own weight
-ROCK_LIMIT :: f32(2) // he can lift a rock of up to twice his own weight
-// A rock of radius 0.3 weighs about 10 kg, 0.6 about 82 kg, and the big
-// boulders (0.9) about 280 kg: liftable only by a heavy, rested Prosio.
-ROCK_DENSITY :: f32(380)
-DIG :: f32(1.5) // an animal on its feet digs in: it resists like this many times its weight
-DRAG_SLIDE :: f32(0.6) // a limp animal slides along the grass: it resists like this share of its weight
-PROSIO_GRIP :: f32(1.5) // and Prosio digs his heels in too
-LUNGE_SPEED :: f32(3) // how much faster a dragged animal pulls when it lunges
-SKIP_KEEP :: f32(0.82) // share of forward speed kept at each skip
-SKIP_BOUNCE :: f32(0.55) // share of falling speed that bounces back up
-SKIP_SPIN :: f32(0.18) // share of falling speed the spin turns into forward speed
-ARM_LEN :: f32(0.55) * PROSIO_SIZE // from his shoulder to his hoof, arm outstretched
 HOLD_SIDE :: f32(1) // which hand holds an animal by the leg: +1 is the side his model's +x points to
-FOLLOW_THROUGH :: f32(0.12) // seconds his arm stays down after a swing lands
-// What a slam takes from a held animal's health: so much, plus so much for
-// each m/s it hit at, and never more than SLAM_MOST. (His arm sets the speed,
-// whatever he holds, so this does not go by how sturdy the animal is.)
-SLAM_BLOW :: Vec2{4, 1.2}
-SLAM_MOST :: f32(30)
-LIMP_MOST :: f32(8) // seconds an animal bashed about hangs limp, at most
 
 Carry :: enum {
 	Nothing,
@@ -600,13 +553,6 @@ update_grab :: proc(dt: f32, can_act: bool) {
 	case .Nothing:
 	}
 }
-
-// What F does with something in his hands. A tap (let go within WIND_TAP
-// seconds) puts it down. Held longer, he winds up: the throw has WIND_LEAST
-// of its full speed at first and all of it after WIND_FULL seconds.
-WIND_TAP :: f32(0.2)
-WIND_FULL :: f32(1.0)
-WIND_LEAST :: f32(0.35)
 
 Let_Go :: enum {
 	Nothing,
@@ -1058,19 +1004,6 @@ slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 	}
 }
 
-// Whatever the swung animal hits takes a share of its speed set by their
-// weights, as when two balls collide. But the club is floppy: only part of
-// its body (CLUB_SHARE of its weight) is behind the blow, and it squashes
-// rather than bounces (restitution BASH_BOUNCE). For a club of weight m
-// moving at v, striking something of weight M:
-//
-//     it flies off at   (1 + e) * m' / (m' + M) * v,   with m' = CLUB_SHARE * m
-//     the club goes on  (m' - e * M) / (m' + M) * v
-//
-// So a turkey swung into a turkey knocks it about half as fast as it was
-// swung, and swung into the billy goat it barely rocks it and bounces back.
-CLUB_SHARE :: f32(0.6)
-BASH_BOUNCE :: f32(0.35)
 bash_hits :: proc(e: ^Enemy, dt: f32) {
 	p := &g.prosio
 	r := ENEMY_RADIUS[e.kind]
@@ -1339,14 +1272,6 @@ update_thrown :: proc(dt: f32) {
 		}
 	}
 }
-
-// A rock of radius r with its middle at m, drawn from one of the rock
-// models (see tools/pack_trees.sh): which one goes by the rock's number in
-// the world (index), so it keeps its shape when he lifts and throws it, and
-// a mossy rock keeps its moss. No taller than ROCK_TALL times its radius.
-ROCK_PLAIN := [?]Tree_Model_Kind{.Rock2, .Rock3, .Rock4, .Rock5}
-ROCK_MOSSY := [?]Tree_Model_Kind{.Rockmoss1, .Rockmoss2, .Rockmoss3, .Rockmoss4}
-ROCK_TALL :: f32(1.5)
 
 draw_rock :: proc(m: Mat4, r: f32, index := -1) {
 	mossy := index >= 0 && index < g.round_count && g.rounds[index].mossy
