@@ -73,7 +73,7 @@ The screen is kept simple, for a child:
 
 ### Menus
 
-The game opens on a main menu (Play, the pixel size, and Quit on the desktop). `Esc` pauses, with Resume, Start over and Exit to menu.
+The game opens on a main menu (Play, the pixel size, the language, and Quit on the desktop). `Esc` pauses, with Resume, the pixel size, the language, Start over and Exit to menu. The game is in English and Polish: choosing the language on either menu changes every word at once, and the choice is kept with the controls (the line `LANGUAGE pl` in the controls file, or in the browser's storage), so the game opens in it next time.
 
 **Saving.** A Prosio saved by an earlier version of the game (before pebbles, before wood and the workbench, before gates, larders and the three kitchen skills, or before the campfire) is carried over as he was; his one old cooking skill becomes all three kitchen skills. Prosio is saved every 15 seconds of play, when the game is paused, when it goes back to the menu, and the moment he goes down (as the pig who will wake up at home, so leaving the game while he lies there does not undo it): his fat, muscles and skills, his nutrient levels, his sack, his outfit, the recipes and plans he knows, what he has uncovered of the map, and what he has built in the meadow: his fences and gates (open or shut), his scarecrows, his larders with what is in them, his campfire, and the animals in his pens (up to 240 pieces of fence, 8 scarecrows, 4 larders and 12 animals); and how fresh the food in his sack is. On the desktop this is the file `prosio.sav` beside the program; in the browser it is kept in the browser's own storage for the page. With a saved Prosio the main menu says Continue instead of Play, and has Start over, which begins again with a new pig. The rest of the meadow starts afresh each sitting: food, the other animals, a spear left lying and what is in the oven are not saved.
 
@@ -651,7 +651,8 @@ Everything is built in code from simple shapes; the game loads no image files.
 ```
 data/
   tuning/            the numbers that shape the game, a JSON file to a subject
-  text/              every word the game shows, a JSON file to a language
+  text/              every word the game shows, a JSON file to a language:
+                     en.json (English, every text) and pl.json (Polish)
 tools/gen_data/      turns data/ into src/game/gen_*.odin at build time
 src/
   game/              the game itself
@@ -699,7 +700,8 @@ src/
     ui.odin          bars, prompts, speech bubbles, menus
     controls.odin    which keys and controller buttons do what, the
                      button names in texts, and the Controls panel
-    text.odin        filling numbers and names into texts (fill)
+    text.odin        filling numbers and names into texts (fill), and the
+                     language chosen (set_language)
     pad_darwin.odin  the controller on a Mac, through Apple's framework
     pad_other.odin   (elsewhere raylib reads it, in platform.odin)
     util.odin        small maths helpers and a random number generator
@@ -755,6 +757,8 @@ tools/check.sh autoplay --minutes 30 --seed 3
 ```bash
 tools/tour.sh
 ```
+
+In another language: `TOUR_LANG=pl tools/tour.sh build/tour_pl`.
 
 **Playing a step at a time** is for a program that can run shell commands but cannot react sixty times a second: any coding agent, whoever made it. The game runs in its own window and stands still until it is sent a command; it then runs that many frames with those buttons down, stops, and says in words what happened. So the player can take as long as it likes over each move, and a person can watch the window.
 
@@ -817,6 +821,7 @@ The desktop build takes options that script a run, save a picture and quit. As i
 | `--traits 0.9,0.2,0.8,1,0.5,0.3,0.6` | his muscles and skills at the start, 0 to 1 (the first two may go down to -1): arms, legs, lungs, hide, gut, hooves, cooking |
 | `--outfit 1` | what he wears: one digit per row of the outfit menu, 0 being the first choice. The first digit is the whole outfit (`1` is the metalhead, `5` the space pirate); further digits change single rows after it, in the order hair, hat, glasses, face, rings, neck, shirt, on top, legs, feet (`00000002200` is a red T-shirt under a long coat) |
 | `--detail 4` | pixel size: 1 chunkiest to 9 finest (default 4) |
+| `--lang pl` | the language, by the name of its file in `data/text` (`en`, `pl`); without it, the one last chosen |
 
 Button letters: `l r u d` to move, `b` bump, `j` jump, `s` sprint, `a` pick up, oven, mill or drink, `g` grab or throw, `q` eat from the sack, `z` `c` choose in the sack, `e` enter, `m` the sack and outfit menu, `w` wind.
 
@@ -849,7 +854,7 @@ The game never reads these files: `tools/gen_data` (run by the build scripts and
 | `building.json` | Wood and the workbench (`wood_and_bench`); the fence grid, jumping over, pens, lifting animals over (`fences`); scarecrow, rod and spear (`scarecrow_rod_spear`); the larder (`larder`); the campfire (`campfire`) |
 | `world.json` | The meadow's size, home, the pond, paths, the map, how far he sees (`meadow`); the fog (`fog`); how much food there is and how fast it grows and comes back, apples, berries, eggs (`growing`); salt rocks and pebble patches (`salt_and_pebbles`); the forest, its clearings and trails, how trees hide things, shaking a tree (`forest`); trees from models: heights, crowns, models, how they vary, leaf colours (`trees`); grass, ferns, bushes and logs (`plants`); how many of each thing the game keeps room for (`limits`) |
 | `outfit.json` | The whole outfits (`outfits`); what each shirt and top is like, and how thick a layer is (`clothes`) |
-| `screen.json` | The camera (`camera`); trees going see-through round him (`forest_view`); the pixel sizes (`pixels`); the need pictures, weight bar and health bars (`panels`); how many sack boxes show (`sack`); the sack page's grid (`menus`); how long the line about a place shows (`places`) |
+| `screen.json` | The camera (`camera`); trees going see-through round him (`forest_view`); the pixel sizes (`pixels`); the need pictures, weight bar and health bars (`panels`); how many sack boxes show (`sack`); the sack page's grid and where the main and pause menus' choices go (`menus`); how long the line about a place shows (`places`) |
 | `colours.json` | Every colour, by where it is used |
 | `controls.json` | The keys and Xbox buttons each action starts with, which can be changed (`buttons`); the controller's dead zones (`controller`) |
 
@@ -880,7 +885,13 @@ Names in braces are filled in as the text is shown:
 - **With a capital, a button**: `{Action}`, `{Grab}`, `{Eat}` and the other actions' words (`BUTTON_WORD` in `controls.odin`), and `{Move}`, `{Aim}`, `{Sack}` and `{Close}`, become the key or controller button that does it just now ("E: pick it", "A: pick it"). A rule checks that every one named is a button the game has.
 - **In small letters, a number or a name the game puts in**: `{kcal}`, `{kg}`, `{percent}`, `{thing}`... (`fill` in `text.odin`). They go in by name, so a language may put them in whatever order it needs. Each text with one says in its `"about"` what fills it. Numbers with a point use the language's own (`decimal_point`).
 
-The files of other languages will sit beside `en.json` (`pl.json`), each naming its language in `"_language"` (`"Polish"`) and how the menu shows it in `"_name"`. A language may leave out any text, and the English stands in for it; a name English does not have stops the build, as a misspelling.
+Other languages sit beside it: `data/text/pl.json` is the game in Polish. Each names its language in `"_language"` (`"Polish"`) and how the menu shows it in `"_name"` (`"POLSKI"`); the menus offer every language there is a file for. A language may leave out any text, and the English stands in for it; a name English does not have stops the build, as a misspelling. A table keeps its `"_of"` (and `"_some"`), and a text with a note may be a plain string in a translation. The rules check each language as they check English: the same names in braces as the English text (none lost or misspelt), only buttons the game has, and only letters both fonts have.
+
+Letters beyond plain ASCII (ą, ć, ę, ł, ń, ó, ś, ź, ż and their capitals) are found by `tools/gen_data` in the text files (`TEXT_LETTERS`), and the font is made with them as well; a language with other letters needs nothing more, if the font has them. Numbers use the language's own point (`1,25 kg` in Polish).
+
+Some words are longer in Polish, so the places that hold a word from a list measure it rather than assume an English one: the sack menu's tabs get smaller when they would not fit across it, the BODY page's skill bars start after the longest skill's name, and the workbench's parts start after its longest line. Elsewhere a translation is written to fit: check it with the tour in that language.
+
+Prosio speaks of himself as a boy in Polish (*zmęczony*, *głodny*); the line at the bottom speaks to the player (*weź*, *otwórz*). Carbs are *CUKRY* on the screen, as *WĘGLOWODANY* is too long for the BODY page's columns.
 
 A few words stay in the code, as they are not read as words: the codes the controls file names controller buttons by (`PAD_CODE`, so a file written in one language reads in another), the actions' words in braces (`BUTTON_WORD`), the names of files, bones, animations and shader parts, and the prints on two T-shirts.
 
@@ -897,7 +908,6 @@ A few words stay in the code, as they are not read as words: the codes the contr
 - Saving in the browser was checked piece by piece (the page's storage code, and the game reading it at start-up), not by playing a whole sitting in a browser and coming back.
 - No gamepad or touch controls.
 - Linux and Windows builds are untested.
-- Text uses raylib's built-in pixel font.
 - The game is checked by rules, a playing bot and screenshots (see [Testing without playing](#testing-without-playing)); balance and feel still need real play. In the bot's hands Prosio loses weight steadily: over 30 minutes of constant gathering he went from 80 kg to between 32 and 56 kg, with his carbs lacking or run out about half the time. That was while knocks still burned weight, which was a third of all he burned. Now that they bruise him instead, he ends 30 minutes between 60 and 70 kg, and is knocked out by bruises once or twice on some meadows (the bot walks into every flock). Picking (0.08 kg a time, about a fifth of what he burns) still costs more than a small mushroom or a young bunch of berries gives, and that wants looking at.
 - Bruises are not saved: leaving the game and coming back mends them.
 - The numbers of animal health, boldness, scattering and bruises come from scripted runs and the bot, not from children playing.
@@ -914,5 +924,5 @@ A few words stay in the code, as they are not read as words: the codes the contr
 - A dead body in the water floats straight to the nearest bank, through lily pads and all; the pond has no current. The bot gathers wood, builds, and puts fences up at random, but never builds a whole pen: pens are covered by the rules only.
 - The trees, rocks, grass and ferns come from Quaternius' nature packs, whose pages say CC0; his site now also shows a "Quaternius Asset License", which allows them in a game but not handing the model files on as they are (the packed data in `assets/trees/` is the models' shapes). The original files stay outside the repository.
 - The goats and the fox come from an animal pack whose licence has not been confirmed. A charging goat uses the gallop pose with ground contacts. Its head charge still needs a dedicated anticipation pose.
-- The letters are **Cute Pixel** by zK4rim (`assets/fonts/CutePixel.ttf`; its author's terms, free for personal and commercial use, in `assets/fonts/CutePixel-LICENSE.txt`). When the game starts it is turned into a true pixel font (`init_font` in `platform.odin`): each letter is sampled once for each pixel of the font's own 16-pixel grid, and text is drawn a whole number of display pixels to each (on a fine screen, in half steps), never smoothed, so it is crisp at every size. Every label has a dark edge all round. Rows of text that stack (the BODY page) are spaced by the font's own line height (`text_height`). `-define:FONT=pixelify` draws the letters in Pixelify Sans instead (`assets/fonts/PixelifySans.ttf`, SIL Open Font License, made bold). Two of its letters are drawn by the game instead (`FONT_REDRAWN` in `platform.odin`), as the font's own were too like another at this size: its M was an H with a notch, its a an o with a pixel of tail.
+- The letters are **Cute Pixel** by zK4rim (`assets/fonts/CutePixel.ttf`; its author's terms, free for personal and commercial use, in `assets/fonts/CutePixel-LICENSE.txt`). When the game starts it is turned into a true pixel font (`init_font` in `platform.odin`): each letter is sampled once for each pixel of the font's own 16-pixel grid, and text is drawn a whole number of display pixels to each (on a fine screen, in half steps), never smoothed, so it is crisp at every size. Every label has a dark edge all round. Rows of text that stack (the BODY page) are spaced by the font's own line height (`text_height`). `-define:FONT=pixelify` draws the letters in Pixelify Sans instead (`assets/fonts/PixelifySans.ttf`, SIL Open Font License, made bold). Five of its letters are drawn by the game instead (`FONT_REDRAWN` in `platform.odin`), as the font's own were too like another at this size: its M was an H with a notch, its a an o with a pixel of tail, its ą a q, and its ł and Ł a t with a lump.
 - The story is deliberately not written yet.

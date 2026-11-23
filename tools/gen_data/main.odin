@@ -574,7 +574,16 @@ get_key :: proc(n: Node, key: string) -> Node {
 	return {}
 }
 
+// The letters past plain ASCII that the texts use (ą, ł, ó...): the game's
+// font is made with these as well.
+text_letters: map[rune]bool
+
 write_text_string :: proc(b: ^strings.Builder, s: string) {
+	for r in s {
+		if r > 126 {
+			text_letters[r] = true
+		}
+	}
 	strings.write_byte(b, '"')
 	for c in transmute([]u8)s {
 		switch c {
@@ -739,6 +748,10 @@ generate_text :: proc(dir: string) -> (code: string, ok: bool) {
 		write_text_string(&b, lang.name != "" ? lang.name : lang.enum_)
 		strings.write_string(&b, ",\n")
 	}
+	strings.write_string(&b, "}\n\n// The name of each language's file, as the saved settings keep it.\nLANGUAGE_CODE := [Language]string {\n")
+	for lang in langs {
+		fmt.sbprintfln(&b, "\t.%s = \"%s\",", lang.enum_, strings.trim_suffix(filepath.base(lang.file), ".json"))
+	}
 	strings.write_string(&b, "}\n\n// Every text the game shows.\nText :: struct {\n")
 	for key in english.order {
 		f := english.fields[key]
@@ -779,6 +792,17 @@ generate_text :: proc(dir: string) -> (code: string, ok: bool) {
 			fmt.sbprintf(&b, "%s\"%s\"", count > 0 ? ", " : "", key)
 			count += 1
 		}
+	}
+	strings.write_string(&b, "}\n")
+	// The letters past ASCII, in order, for the font.
+	letters: [dynamic]rune
+	for r in text_letters {
+		append(&letters, r)
+	}
+	slice.sort(letters[:])
+	strings.write_string(&b, "\n// The letters the texts use besides plain ASCII: the font is made with them too.\nTEXT_LETTERS := [?]rune{")
+	for r, i in letters {
+		fmt.sbprintf(&b, "%s'%r'", i > 0 ? ", " : "", r)
 	}
 	strings.write_string(&b, "}\n")
 	return strings.to_string(b), ok

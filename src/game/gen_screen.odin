@@ -44,6 +44,10 @@ SACK_SLOTS :: 6
 
 // ---- menus ----
 SACK_COLUMNS :: 9
+// where the main and pause menus' first choice is, as a share of the screen's height
+MENU_TOP :: f32(0.44)
+// from one of their choices to the next, at 1280 by 720
+MENU_STEP :: f32(56)
 
 // ---- places ----
 // seconds the line about a part of the meadow shows after he gets there

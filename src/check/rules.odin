@@ -2775,39 +2775,94 @@ rules_text :: proc() {
 	}
 	check("English has every text the game shows (a table only some things have is marked \"_some\")", len(missing) == 0, len(missing) == 0 ? "" : fmt.tprintf("missing %v", missing[:min(len(missing), 8)]))
 
-	// Every button named in braces is one the game knows: none is left in
-	// braces when the text is drawn.
+	// Every button named in braces is one the game knows, in every language:
+	// none is left in braces when the text is drawn.
 	unknown: [dynamic]string
-	for f in reflect.struct_fields_zipped(game.Text) {
-		at := rawptr(uintptr(english) + f.offset)
-		ti := reflect.type_info_base(f.type)
-		texts: []cstring
-		#partial switch v in ti.variant {
-		case reflect.Type_Info_String:
-			texts = ([^]cstring)(at)[:1]
-		case reflect.Type_Info_Enumerated_Array:
-			if reflect.type_info_base(v.elem).id == cstring {
-				texts = ([^]cstring)(at)[:v.count]
-			}
-		case reflect.Type_Info_Array:
-			if reflect.type_info_base(v.elem).id == cstring {
-				texts = ([^]cstring)(at)[:v.count]
-			}
-		}
-		for text in texts {
-			if text == nil {
-				continue
-			}
-			drawn := string(game.expand_keys(text))
-			for i := 0; i + 1 < len(drawn); i += 1 {
-				if drawn[i] == '{' && drawn[i + 1] >= 'A' && drawn[i + 1] <= 'Z' {
-					append(&unknown, fmt.tprintf("%s: %s", f.name, drawn))
-					break
+	for &texts, lang in game.TEXTS {
+		for f in reflect.struct_fields_zipped(game.Text) {
+			for text in texts_of(&texts, f) {
+				if text == nil {
+					continue
+				}
+				drawn := string(game.expand_keys(text))
+				for i := 0; i + 1 < len(drawn); i += 1 {
+					if drawn[i] == '{' && drawn[i + 1] >= 'A' && drawn[i + 1] <= 'Z' {
+						append(&unknown, fmt.tprintf("%v %s: %s", lang, f.name, drawn))
+						break
+					}
 				}
 			}
 		}
 	}
-	check("every button named in a text, as {Action}, is a button the game has", len(unknown) == 0, len(unknown) == 0 ? "" : fmt.tprintf("%v", unknown[:min(len(unknown), 4)]))
+	check("every button named in a text, as {Action}, is a button the game has, in every language", len(unknown) == 0, len(unknown) == 0 ? "" : fmt.tprintf("%v", unknown[:min(len(unknown), 4)]))
+
+	// Each language's text has the same names in braces as the English one:
+	// none of what the game fills in, or of the buttons, is lost or misspelt
+	// in a translation.
+	differ: [dynamic]string
+	for &texts, lang in game.TEXTS {
+		for f in reflect.struct_fields_zipped(game.Text) {
+			theirs, ours := texts_of(&texts, f), texts_of(english, f)
+			for text, i in theirs {
+				if brace_names(text) != brace_names(ours[i]) {
+					append(&differ, fmt.tprintf("%v %s: %q (English %q)", lang, f.name, text, ours[i]))
+				}
+			}
+		}
+	}
+	check("every language fills in the same names in braces as English ({kcal}, {Action})", len(differ) == 0, len(differ) == 0 ? fmt.tprintf("%d languages", len(game.Language)) : fmt.tprintf("%v", differ[:min(len(differ), 3)]))
+
+	// Every letter of every text, in every language, is in the font files:
+	// a letter the font lacks would be drawn as nothing.
+	CUTE_PIXEL :: #load("../../assets/fonts/CutePixel.ttf")
+	PIXELIFY :: #load("../../assets/fonts/PixelifySans.ttf")
+	lacking: [dynamic]string
+	letters := 0
+	for &texts, lang in game.TEXTS {
+		for f in reflect.struct_fields_zipped(game.Text) {
+			for text in texts_of(&texts, f) {
+				for r in string(text) {
+					letters += 1
+					if r < ' ' || !font_has(CUTE_PIXEL, r) || !font_has(PIXELIFY, r) {
+						append(&lacking, fmt.tprintf("%v %s: %q", lang, f.name, r))
+					}
+				}
+			}
+		}
+	}
+	extra_ok := true
+	for r in game.TEXT_LETTERS {
+		extra_ok &&= font_has(CUTE_PIXEL, r)
+	}
+	check("every letter of every text, in every language, is in both fonts (the game loads ą, ł, ó... with ASCII)", len(lacking) == 0 && extra_ok && !font_has(CUTE_PIXEL, 0x4E00), len(lacking) == 0 ? fmt.tprintf("%d letters, %d past ASCII", letters, len(game.TEXT_LETTERS)) : fmt.tprintf("%v", lacking[:min(len(lacking), 4)]))
+
+	// The language is chosen on the main and pause menus, and kept with the
+	// controls: a file written in Polish reads back as Polish.
+	was_language, was_scene := game.language, game.scene
+	offered := true
+	labelled := true
+	for lang in game.Language {
+		game.set_language(lang)
+		for scene in ([]game.Scene{.Menu, .Paused}) {
+			game.scene = scene
+			has := false
+			for item in game.menu_items() {
+				has ||= item == .Language
+				labelled &&= len(string(game.menu_item_text(item))) > 0
+			}
+			offered &&= has || len(game.Language) < 2
+		}
+	}
+	game.scene = was_scene
+	data: [game.CONTROLS_TEXT_ROOM]u8
+	last := game.Language(len(game.Language) - 1)
+	game.set_language(last)
+	n := game.encode_controls(data[:])
+	game.set_language(.English)
+	game.decode_controls(data[:n])
+	kept := game.language == last && n < len(data)
+	game.set_language(was_language)
+	check("the language is on the main and pause menus, every choice there says something, and the controls file keeps the language", offered && labelled && kept, fmt.tprintf("%v kept: %v, the file %d of %d bytes", last, kept, n, len(data)))
 
 	// His speech bubble goes above the top of him, whatever is on his head:
 	// a hat that stands up raises it, and the tallest, the chef's hat, the
@@ -2834,6 +2889,115 @@ rules_text :: proc() {
 	a := string(game.fill("{b} and {a}, {c}", {"a", 1}, {"b", "two"}))
 	b := string(game.fill("{kg} kg, {small} kg, {less} kg, {whole}", {"kg", game.Decimal{125, 2}}, {"small", game.Decimal{5, 2}}, {"less", game.Decimal{-15, 1}}, {"whole", game.Decimal{7, 0}}))
 	check("texts are filled in by name: numbers, names and decimals", a == "two and 1, {c}" && b == "1.25 kg, 0.05 kg, -1.5 kg, 7", fmt.tprintf("%q, %q", a, b))
+}
+
+// Every text of one field of a language's texts, in order: a string, a
+// list, a table, or a table of structs of them. A field's texts are in the
+// same order in every language.
+texts_of :: proc(texts: ^game.Text, f: reflect.Struct_Field) -> []cstring {
+	out: [dynamic]cstring
+	gather_texts(rawptr(uintptr(texts) + f.offset), f.type, &out)
+	return out[:]
+}
+
+gather_texts :: proc(at: rawptr, ti: ^reflect.Type_Info, out: ^[dynamic]cstring) {
+	base := reflect.type_info_base(ti)
+	if base.id == cstring {
+		append(out, (^cstring)(at)^)
+		return
+	}
+	#partial switch v in base.variant {
+	case reflect.Type_Info_Enumerated_Array:
+		for i in 0 ..< v.count {
+			gather_texts(rawptr(uintptr(at) + uintptr(i * v.elem_size)), v.elem, out)
+		}
+	case reflect.Type_Info_Array:
+		for i in 0 ..< v.count {
+			gather_texts(rawptr(uintptr(at) + uintptr(i * v.elem_size)), v.elem, out)
+		}
+	case reflect.Type_Info_Struct:
+		for f in reflect.struct_fields_zipped(base.id) {
+			gather_texts(rawptr(uintptr(at) + f.offset), f.type, out)
+		}
+	}
+}
+
+// The names in braces in a text, in order, as one string: "{kcal}{Action}".
+brace_names :: proc(text: cstring) -> string {
+	b := strings.builder_make(context.temp_allocator)
+	s := string(text)
+	for i := 0; i < len(s); i += 1 {
+		if s[i] != '{' {
+			continue
+		}
+		end := strings.index_byte(s[i:], '}')
+		if end < 0 {
+			break
+		}
+		strings.write_string(&b, s[i:i + end + 1])
+		i += end
+	}
+	// In order of the names, so that a language may put them in another.
+	names := strings.split(strings.to_string(b), "}", context.temp_allocator)
+	slice_sort_strings(names)
+	return strings.join(names, "}", context.temp_allocator)
+}
+
+slice_sort_strings :: proc(s: []string) {
+	for i in 1 ..< len(s) {
+		for j := i; j > 0 && s[j] < s[j - 1]; j -= 1 {
+			s[j], s[j - 1] = s[j - 1], s[j]
+		}
+	}
+}
+
+// Whether a font file has a letter, from its table of letters (its "cmap",
+// in either of the two forms fonts use for it).
+font_has :: proc(font: []u8, r: rune) -> bool {
+	u16_at :: proc(d: []u8, at: int) -> int {return int(d[at]) << 8 | int(d[at + 1])}
+	u32_at :: proc(d: []u8, at: int) -> int {return u16_at(d, at) << 16 | u16_at(d, at + 2)}
+	cmap := -1
+	for i in 0 ..< u16_at(font, 4) {
+		entry := 12 + 16 * i
+		if string(font[entry:entry + 4]) == "cmap" {
+			cmap = u32_at(font, entry + 8)
+		}
+	}
+	if cmap < 0 {
+		return false
+	}
+	for i in 0 ..< u16_at(font, cmap + 2) {
+		table := cmap + u32_at(font, cmap + 4 + 8 * i + 4)
+		switch u16_at(font, table) {
+		case 4:
+			segments := u16_at(font, table + 6) / 2
+			ends, starts := table + 14, table + 16 + 2 * segments
+			deltas, ranges := starts + 2 * segments, starts + 4 * segments
+			for s in 0 ..< segments {
+				first, last := u16_at(font, starts + 2 * s), u16_at(font, ends + 2 * s)
+				if int(r) < first || int(r) > last || first == 0xFFFF {
+					continue
+				}
+				glyph := 0
+				if offset := u16_at(font, ranges + 2 * s); offset == 0 {
+					glyph = (int(r) + u16_at(font, deltas + 2 * s)) & 0xFFFF
+				} else {
+					glyph = u16_at(font, ranges + 2 * s + offset + 2 * (int(r) - first))
+				}
+				if glyph != 0 {
+					return true
+				}
+			}
+		case 12:
+			for g in 0 ..< u32_at(font, table + 12) {
+				group := table + 16 + 12 * g
+				if int(r) >= u32_at(font, group) && int(r) <= u32_at(font, group + 4) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // The string literals in a line of Odin, leaving out what follows a //.

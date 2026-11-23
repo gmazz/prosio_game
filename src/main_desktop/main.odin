@@ -37,7 +37,8 @@ main :: proc() {
 	//   --stock           start with a sack full of food
 	//   --outfit 23101211 what he wears: one digit per row (hat, glasses, face,
 	//                     earrings, shirt, on top, legs, feet), 0 the first choice
-	//   --detail 4        pixel size: 1 chunkiest ... 6 finest (default 4)
+	//   --detail 4        pixel size: 1 chunkiest ... 9 finest (default 4)
+	//   --lang pl         the language of the texts: a file in data/text (en, pl)
 	//   --agent FILE      played by a program, a step at a time: commands are read
 	//                     from FILE as lines are added to it (- for standard
 	//                     input), answers are printed; see agent.odin and tools/play.sh
@@ -91,6 +92,11 @@ main :: proc() {
 		case "--detail":
 			if i + 1 < len(args) {
 				opts.detail, _ = strconv.parse_int(args[i + 1])
+				i += 1
+			}
+		case "--lang":
+			if i + 1 < len(args) {
+				opts.language = args[i + 1]
 				i += 1
 			}
 		case "--crowd":

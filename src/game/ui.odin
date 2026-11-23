@@ -284,6 +284,7 @@ Menu_Item :: enum {
 	Play,
 	Resume,
 	Look,
+	Language,
 	Restart,
 	Exit_To_Menu,
 	Quit,
@@ -294,19 +295,36 @@ look_text :: proc() -> cstring {
 	return fill(TEXT.pixels, {"level", int(i32(pixel_level + 1))}, {"levels", PIXEL_LEVELS})
 }
 
+language_text :: proc() -> cstring {
+	return fill(TEXT.language_line, {"name", LANGUAGE_NAME[language]})
+}
+
+// What a choice on the main or pause menu says.
+menu_item_text :: proc(item: Menu_Item) -> cstring {
+	#partial switch item {
+	case .Look:
+		return look_text()
+	case .Language:
+		return language_text()
+	case .Play:
+		if has_save {
+			return TEXT.continue_game
+		}
+	}
+	return TEXT.menu_text[item]
+}
+
 // With a saved Prosio, the main menu carries on with him, or starts over
 // with a new one. (The browser has nothing to quit to.)
-MENU_MAIN := [?]Menu_Item{.Play, .Look, .Restart, .Quit}
-MENU_PAUSE := [?]Menu_Item{.Resume, .Look, .Restart, .Exit_To_Menu}
+// The language can be changed there too, when the game has more than one.
+MENU_MAIN := [?]Menu_Item{.Play, .Look, .Language, .Restart, .Quit}
+MENU_PAUSE := [?]Menu_Item{.Resume, .Look, .Language, .Restart, .Exit_To_Menu}
 
 menu_items :: proc() -> []Menu_Item {
-	if scene == .Paused {
-		return MENU_PAUSE[:]
-	}
-	@(static) list: [len(MENU_MAIN)]Menu_Item
+	@(static) list: [max(len(MENU_MAIN), len(MENU_PAUSE))]Menu_Item
 	n := 0
-	for item in MENU_MAIN {
-		if (item == .Restart && !has_save) || (item == .Quit && IS_WEB) {
+	for item in (scene == .Paused ? MENU_PAUSE[:] : MENU_MAIN[:]) {
+		if (item == .Restart && !has_save && scene != .Paused) || (item == .Quit && IS_WEB) || (item == .Language && len(Language) < 2) {
 			continue
 		}
 		list[n] = item
@@ -336,13 +354,10 @@ draw_menu :: proc() {
 		label_centred(TEXT.subtitle, sw / 2, top + text_height(size) * 0.75 + SUBTITLE_GAP * s, 24 * s, UI_YELLOW)
 	}
 
-	y := sh * 0.5
+	y := sh * MENU_TOP
 	for i in 0 ..< menu_length() {
 		item := menu_items()[i]
-		text := item == .Look ? look_text() : TEXT.menu_text[item]
-		if item == .Play && has_save {
-			text = TEXT.continue_game
-		}
+		text := menu_item_text(item)
 		chosen := i == menu_choice
 		text_size := (chosen ? 44 : 36) * s
 		w := ui_text_width(text, text_size)
@@ -352,7 +367,7 @@ draw_menu :: proc() {
 		} else {
 			label_centred(text, sw / 2, y, text_size)
 		}
-		y += 64 * s
+		y += MENU_STEP * s
 	}
 
 	label_centred(TEXT.menu_help, sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)

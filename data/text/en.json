@@ -503,6 +503,7 @@
       "Play": "PLAY",
       "Resume": "RESUME",
       "Look": "",
+      "Language": "",
       "Restart": "START OVER",
       "Exit_To_Menu": "EXIT TO MENU",
       "Quit": "QUIT"
@@ -516,6 +517,7 @@
       "Controls": "CONTROLS"
     },
     "pixels": {"text": "PIXELS: {level} / {levels}", "about": "{level}: the pixel size chosen; {levels}: how many there are"},
+    "language_line": {"text": "LANGUAGE: {name}", "about": "{name}: the language chosen, in itself (ENGLISH, POLSKI)"},
     "controls_line": {
       "text": "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}",
       "about": "Every button, at the foot of the menu."

@@ -1384,6 +1384,17 @@ draw_cook_menu :: proc() {
 		label_centred(TEXT.station_about[cook_at], sw / 2, py + 70 * s, 20 * s, UI_YELLOW)
 	}
 
+	// Where what each needs starts: after the longest line saying what a plan
+	// is for (longer in some languages), while two parts and the count still
+	// fit after it.
+	needs_x := px + (cook_at == .Bench ? 500 : 330) * s // (a plan has few parts, and a line saying what it is for)
+	if cook_at == .Bench {
+		for r in recipes {
+			needs_x = max(needs_x, px + 94 * s + ui_text_width(TEXT.plan_about[r.dish], 14 * s) + 16 * s)
+		}
+		needs_x = min(needs_x, px + pw - 144 * s - 2 * 112 * s)
+	}
+
 	y := py + 108 * s
 	for r, i in recipes {
 		chosen := i == cook_choice
@@ -1405,7 +1416,7 @@ draw_cook_menu :: proc() {
 		}
 		// What it needs, for as many as are chosen.
 		times := chosen ? cook_count : 1
-		x := px + (r.at == .Bench ? 500 : 330) * s // (a plan has few parts, and a line saying what it is for)
+		x := needs_x
 		for need in r.needs {
 			if need.count == 0 {
 				continue

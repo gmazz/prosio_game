@@ -1037,13 +1037,17 @@ when FONT_NAME == "pixelify" {
 	FONT_BOLD :: i32(0)
 	// Letters drawn here instead of the font's own, which are too like
 	// another: its M is an H with a notch (MEADOW read HEADOW), its a an o
-	// with a pixel of tail (and read ond). The same height as the font's.
+	// with a pixel of tail (and read ond), its ą a q, its ł and Ł a t with
+	// a lump. The same height as the font's, starting where its start.
 	FONT_REDRAWN :: [?]struct {
 		letter: rune,
 		rows:   []string,
 	} {
 		{'M', {"##...##", "###.###", "#######", "##.#.##", "##...##", "##...##", "##...##", "##...##"}},
 		{'a', {".####.", "....##", ".#####", "##..##", "##..##", ".#####"}},
+		{'ą', {".####.", "....##", ".#####", "##..##", "##..##", ".#####", "....#.", "....##"}},
+		{'ł', {".##..", ".##..", ".##.#", ".###.", "###..", ".##..", ".##..", ".##.."}},
+		{'Ł', {".##....", ".##....", ".##.#..", ".###...", "###....", ".##....", ".######", ".######"}},
 	}
 }
 pixel_font: rl.Font
@@ -1072,9 +1076,17 @@ init_font :: proc() {
 	// (The letters only, with no picture of them all together: the browser's
 	// memory is small.)
 	HI :: 96 // the size the letters are first drawn at, to be sampled (about 7 pixels to each of the font's)
-	COUNT :: 95 // the printable ASCII letters
+	ASCII :: 95 // the printable ASCII letters, and after them the others the texts use (ą, ł, ó...)
+	COUNT :: ASCII + len(TEXT_LETTERS)
+	letters: [COUNT]rune
+	for i in 0 ..< ASCII {
+		letters[i] = rune(32 + i)
+	}
+	for r, i in TEXT_LETTERS {
+		letters[ASCII + i] = r
+	}
 	loaded: i32
-	big_glyphs := rl.LoadFontData(raw_data(FONT_FILE), i32(len(FONT_FILE)), HI, nil, COUNT, .DEFAULT, &loaded)
+	big_glyphs := rl.LoadFontData(raw_data(FONT_FILE), i32(len(FONT_FILE)), HI, &letters[0], COUNT, .DEFAULT, &loaded)
 	defer rl.UnloadFontData(big_glyphs, loaded)
 	per := f32(HI) / FONT_EM // pixels of the large letters to a design unit
 	count := int(loaded)

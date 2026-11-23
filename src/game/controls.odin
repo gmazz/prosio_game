@@ -353,6 +353,7 @@ reset_controls :: proc() {
 // The changeable controls as text, a line for each: its word, its two keys
 // and its controller button, as in "Jump 74 88 RT".
 CONTROLS_TEXT_ROOM :: 512
+LANGUAGE_LINE :: "LANGUAGE" // how the controls file names the language's line (it is not shown)
 
 encode_controls :: proc(out: []u8) -> int {
 	n := 0
@@ -375,6 +376,11 @@ encode_controls :: proc(out: []u8) -> int {
 		put(out, &n, PAD_CODE[bindings[b].pad])
 		put(out, &n, "\n")
 	}
+	// And the language, by its file's name.
+	put(out, &n, LANGUAGE_LINE)
+	put(out, &n, " ")
+	put(out, &n, LANGUAGE_CODE[language])
+	put(out, &n, "\n")
 	return n
 }
 
@@ -391,6 +397,12 @@ decode_controls :: proc(data: []u8) {
 				fields[count] = field
 			}
 			count += 1
+		}
+		if count == 2 && fields[0] == LANGUAGE_LINE {
+			if l, found := language_of(fields[1]); found {
+				set_language(l)
+			}
+			continue
 		}
 		if count != 4 {
 			continue

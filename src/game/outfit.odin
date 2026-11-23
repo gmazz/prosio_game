@@ -278,16 +278,28 @@ draw_bag :: proc() {
 	w, h := 520 * s, sh - 48 * s
 	ui_round_rect(x, y, w, h, {28, 36, 32, 225}, 0.05)
 
-	// The tabs.
+	// The tabs: smaller when their names, in some language, would not fit
+	// across the panel.
+	tab_size := 20 * s
+	for tab_size > 12 * s {
+		across: f32 = 0
+		for tab in Bag_Tab {
+			across += ui_text_width(TEXT.bag_tab_name[tab], tab_size) + 26 * s
+		}
+		if across <= w - 34 * s {
+			break
+		}
+		tab_size -= 1 * s
+	}
 	tx := x + 20 * s
 	for tab in Bag_Tab {
 		name := TEXT.bag_tab_name[tab]
-		tw := ui_text_width(name, 20 * s) + 20 * s
+		tw := ui_text_width(name, tab_size) + 20 * s
 		if tab == bag_tab {
 			ui_round_rect(tx, y + 16 * s, tw, 40 * s, {250, 172, 182, 235}, 0.4)
-			ui_text(name, tx + 10 * s, y + 27 * s, 20 * s, UI_DARK)
+			ui_text(name, tx + 10 * s, y + 27 * s, tab_size, UI_DARK)
 		} else {
-			label(name, tx + 10 * s, y + 27 * s, 20 * s, {200, 200, 200, 255})
+			label(name, tx + 10 * s, y + 27 * s, tab_size, {200, 200, 200, 255})
 		}
 		tx += tw + 6 * s
 	}
@@ -588,9 +600,14 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 		label(TEXT.getting_thinner, x + w - 108 * s, y + 5 * s, 13 * s, UI_GREEN)
 	}
 
+	// The bars start after the longest name (longer in some languages), and
+	// end in the same place.
 	ry := y + 94 * s
 	bar_x := x + 108 * s
-	bar_w := 190 * s
+	for t in Trait {
+		bar_x = max(bar_x, x + ui_text_width(TEXT.trait_name[t], 15 * s) + 10 * s)
+	}
+	bar_w := 190 * s - (bar_x - (x + 108 * s))
 	for t in Trait {
 		if t == .Arms {
 			label(TEXT.muscle, x, ry, 15 * s, UI_ORANGE)

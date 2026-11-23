@@ -6,6 +6,7 @@
 #
 #   tools/tour.sh
 #   tools/tour.sh some/folder
+#   TOUR_LANG=pl tools/tour.sh build/tour_pl     (in another language: a file in data/text)
 #
 # It builds the desktop game first and runs it once for each picture, which
 # opens a window for a moment each time; the whole tour takes about a minute.
@@ -24,7 +25,7 @@ shot_at() {
 	about="$3"
 	shift 3
 	rm -f "$OUT/$name.png" "$OUT/$name.txt" # so that an old picture is never taken for a new one
-	./build/desktop/prosio "$@" --shot "$OUT/$name.png" --frame "$frame" 2>/dev/null | grep -v "^INFO\|^WARNING" > "$OUT/$name.txt" || true
+	./build/desktop/prosio "$@" ${TOUR_LANG:+--lang "$TOUR_LANG"} --shot "$OUT/$name.png" --frame "$frame" 2>/dev/null | grep -v "^INFO\|^WARNING" > "$OUT/$name.txt" || true
 	if [ -f "$OUT/$name.png" ]; then
 		echo "$name.png: $about" >> "$OUT/index.txt"
 	else

@@ -96,6 +96,25 @@ fill :: proc(format: cstring, args: ..Arg) -> cstring {
 	return cstring(raw_data(buf[:]))
 }
 
+// The language the texts are in: chosen on the menu, and kept with the
+// controls (see encode_controls).
+language: Language
+
+set_language :: proc(l: Language) {
+	language = l
+	TEXT = &TEXTS[l]
+}
+
+// A language, by the name of its file (LANGUAGE_CODE: "en", "pl").
+language_of :: proc(code: string) -> (l: Language, found: bool) {
+	for c, each in LANGUAGE_CODE {
+		if c == code {
+			return each, true
+		}
+	}
+	return
+}
+
 // A whole number, as a text.
 number_text :: proc(n: int) -> cstring {
 	return fill("{n}", {"n", n})

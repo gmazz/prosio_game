@@ -431,8 +431,7 @@ agent_look :: proc(radius: f32) {
 	case .Menu, .Paused:
 		fmt.printfln("The %s is open. u and d choose, e selects%s.", agent_scene_name(), game.scene == .Paused ? ", p closes it" : "")
 		for item, i in game.menu_items() {
-			text := item == .Look ? game.look_text() : game.TEXT.menu_text[item]
-			fmt.printfln("  %s %s", i == game.menu_choice ? ">" : " ", text)
+			fmt.printfln("  %s %s", i == game.menu_choice ? ">" : " ", game.menu_item_text(item))
 		}
 		return
 	case .Oven:

@@ -36,6 +36,7 @@ Options :: struct {
 	outfit:     [11]u8, // what he wears, one number per row of the outfit menu
 	has_outfit: bool,
 	detail:     int, // 1 to PIXEL_LEVELS: pixel density to start with (0 = default)
+	language:   string, // the language of the texts, by its file's name (LANGUAGE_CODE); "" keeps the saved one
 	seed:       u32, // builds a different meadow (0 = the usual one)
 	no_save:    bool, // neither load nor save the saved game
 }
@@ -105,6 +106,9 @@ init :: proc(opts: Options) {
 	g.opts = opts
 	keyboard_enabled = opts.shot_path == nil && !opts.agent
 	load_controls()
+	if l, found := language_of(opts.language); found {
+		set_language(l)
+	}
 	if opts.detail > 0 {
 		pixel_level = clamp(opts.detail - 1, 0, PIXEL_LEVELS - 1)
 	}
@@ -314,6 +318,11 @@ update_menu :: proc() {
 		pixel_level = (pixel_level + 1) % PIXEL_LEVELS // stays on the menu
 		return
 	}
+	if choice == .Language {
+		set_language(Language((int(language) + 1) % len(Language))) // stays on the menu
+		save_controls()
+		return
+	}
 	menu_choice = 0
 	switch choice {
 	case .Play:
@@ -331,7 +340,7 @@ update_menu :: proc() {
 		scene = .Menu
 	case .Quit:
 		g.quit = true
-	case .Look:
+	case .Look, .Language:
 	}
 }
 
