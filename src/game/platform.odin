@@ -74,8 +74,6 @@ level_key_pressed :: proc() -> int {
 	return 0
 }
 
-// Dark cartoon outlines around solid shapes, about one pixel wide.
-OUTLINE_COLOR :: Color{52, 40, 44, 255}
 outline_width: f32
 outlines_enabled := true
 
@@ -146,7 +144,6 @@ set_fade :: proc(amount: f32) {
 // falls on, only darker, whatever its shape, and where shadows overlap they
 // are no darker than one.
 SUN :: Vec3{-0.62, 0.89, 0.43} // towards the sun; must match scene.frag
-SHADOW_INK :: Color{150, 150, 166, 255} // how much of the light a shadow lets through
 @(private = "file")
 shadow_pass: bool
 @(private = "file")

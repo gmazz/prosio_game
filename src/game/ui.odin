@@ -2,16 +2,6 @@ package game
 
 import "core:math"
 
-UI_WHITE :: Color{255, 255, 255, 255}
-UI_DARK :: Color{30, 34, 40, 255}
-UI_PANEL :: Color{20, 30, 24, 150}
-UI_RED :: Color{226, 70, 70, 255}
-UI_GREEN :: Color{110, 200, 90, 255}
-UI_YELLOW :: Color{246, 206, 70, 255}
-UI_ORANGE :: Color{244, 150, 60, 255}
-UI_BLUE :: Color{80, 170, 240, 255}
-UI_BRUISE :: Color{132, 84, 160, 255}
-
 REGION_ABOUT_TIME :: f32(5) // seconds the line about a part of the meadow shows after he gets there
 CONTROLS :: "Move: {Move}   Bump: {Bump}   Jump: {Jump}   Sprint: {Sprint}   Grab / throw: {Grab}   Pick up / use / drink: {Action}   Sack: {Sack}   Eat: {Eat}   Sack, outfit, map: {Bag}   Menu: {Menu}"
 
@@ -194,7 +184,6 @@ prompt_text :: proc() -> cstring {
 	}
 	return action
 }
-
 
 draw_ui :: proc() {
 	sw, sh := screen_size()

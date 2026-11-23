@@ -375,15 +375,6 @@ draw_bag :: proc() {
 	}
 }
 
-MAP_FOG :: Color{24, 28, 34, 255}
-MAP_GRASS :: Color{98, 152, 76, 255}
-MAP_FOREST :: Color{58, 96, 56, 255}
-MAP_HILLS :: Color{156, 152, 104, 255}
-MAP_PATH :: Color{196, 172, 124, 255}
-MAP_SOIL :: Color{132, 96, 64, 255}
-MAP_WHEAT :: Color{214, 178, 88, 255}
-MAP_WATER :: Color{80, 150, 210, 255}
-
 // The meadow from above. Only what Prosio has seen is shown; the rest is
 // dark. On what he has seen: the ground of each part of the meadow, paths
 // and fields, and where the trees, bushes, rocks, pumpkins and the oven are,
@@ -746,34 +737,6 @@ draw_bag_outfit :: proc(x, y, w, s: f32) {
 	}
 }
 
-// Colours of his clothes.
-STRAW :: Color{232, 200, 120, 255}
-HAT_BLACK :: Color{48, 44, 52, 255}
-WOOL :: Color{86, 140, 210, 255}
-GLASS_FRAME :: Color{52, 44, 48, 255}
-HAIR :: Color{122, 78, 58, 255}
-HAIR_BLACK :: Color{42, 38, 46, 255}
-HAIR_GREY :: Color{176, 176, 184, 255}
-LIPSTICK :: Color{214, 40, 70, 255}
-TSHIRT :: Color{214, 72, 62, 255}
-SAILOR :: Color{246, 244, 236, 255}
-NAVY :: Color{50, 70, 130, 255}
-GILET :: Color{142, 96, 62, 255}
-COAT :: Color{82, 116, 88, 255}
-DENIM :: Color{76, 104, 156, 255}
-SKIRT :: Color{226, 120, 150, 255}
-SNEAKER :: Color{246, 244, 238, 255}
-BOOT :: Color{112, 74, 52, 255}
-LEATHER :: Color{46, 42, 50, 255}
-TRENCH :: Color{198, 166, 114, 255}
-CORDS :: Color{150, 100, 62, 255}
-CHECKS :: Color{170, 172, 182, 255}
-TEE_BLACK :: Color{40, 38, 46, 255}
-TEE_CREAM :: Color{238, 228, 204, 255}
-CAPE_RED :: Color{176, 42, 50, 255}
-TRAINER :: Color{152, 156, 166, 255}
-SOLE :: Color{70, 60, 60, 255}
-
 LAYER :: f32(0.02) // how much bigger each layer of clothes is than what is under it
 
 Sleeves :: enum {
@@ -816,16 +779,6 @@ OVER_LOOK := [Over]Over_Look {
 	.Trench  = {TRENCH, .Long},
 	.Cape    = {LEATHER, .None},
 	.Apron   = {SAILOR, .None},
-}
-
-LEG_COLOR := [Legwear]Color {
-	.Shorts  = COLOR_SHORTS,
-	.None    = {},
-	.Jeans   = DENIM,
-	.Skirt   = SKIRT,
-	.Leather = LEATHER,
-	.Cords   = CORDS,
-	.Checks  = CHECKS,
 }
 
 long_trousers :: proc() -> bool {

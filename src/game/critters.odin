@@ -142,8 +142,6 @@ grab_fish :: proc() {
 	}
 }
 
-FISH_ORANGE :: Color{240, 136, 64, 255}
-
 // Seen through the water: flat, with a tail that beats as it swims.
 draw_fish :: proc() {
 	if !on_screen(POND, POND_RADIUS) {
@@ -321,9 +319,6 @@ update_pests :: proc(dt: f32) {
 	}
 }
 
-RABBIT_COAT :: Color{184, 160, 138, 255}
-CROW_BLACK :: Color{52, 50, 62, 255}
-
 draw_pests :: proc() {
 	for c, i in g.pests {
 		if c.kind == .Rabbit {
@@ -439,9 +434,6 @@ calm_bees :: proc() {
 		}
 	}
 }
-
-HIVE_STRAW :: Color{226, 182, 96, 255}
-HONEY_GOLD :: Color{246, 190, 60, 255}
 
 // A straw hive on a stump, honey running from its door when there is some
 // to take.

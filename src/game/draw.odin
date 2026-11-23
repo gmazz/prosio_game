@@ -12,40 +12,10 @@ IMPACT_HIND_TUCK :: f32(-0.7)
 IMPACT_FRONT_TUCK :: f32(0.65)
 IMPACT_LEG_SPLAY :: f32(0.24)
 
-COLOR_SKY :: Color{159, 181, 157, 255}
-COLOR_OUTSIDE :: Color{93, 130, 105, 255}
-COLOR_TUFT :: Color{76, 126, 58, 255}
-COLOR_FERN :: Color{58, 106, 54, 255}
 GRASS_SIZE :: f32(1.25) // how big a clump of grass is drawn, against its model (0.4 m tall)
 SHRUB_SIZE :: f32(0.6) // a low bush under the forest trees (1.2 m tall as modelled)
 LOG_LENGTH :: f32(1.9) // a fallen log, from end to end
 FERN_SIZE :: f32(0.95) // and a fern
-COLOR_FENCE :: Color{174, 145, 99, 255}
-COLOR_SKIN :: Color{249, 181, 160, 255}
-COLOR_SKIN_DARK :: Color{222, 136, 127, 255}
-COLOR_BLUSH :: Color{230, 136, 125, 255}
-COLOR_NOSTRIL :: Color{116, 67, 71, 255}
-COLOR_SHIRT :: Color{222, 163, 64, 255}
-COLOR_SHORTS :: Color{60, 106, 111, 255}
-COLOR_HEADBAND :: Color{178, 65, 52, 255}
-COLOR_HOOF :: Color{96, 62, 57, 255}
-COLOR_WHITE :: Color{255, 248, 226, 255}
-COLOR_BLACK :: Color{49, 43, 46, 255}
-COLOR_STAR :: Color{255, 226, 80, 255}
-COLOR_GOLD :: Color{255, 196, 40, 255}
-COLOR_DUST :: Color{232, 220, 188, 255}
-COLOR_SWEAT :: Color{130, 200, 255, 255}
-COLOR_CRUMB :: Color{240, 190, 120, 255}
-COLOR_HEART :: Color{235, 50, 70, 255}
-COLOR_LEAF :: Color{96, 164, 80, 255}
-COLOR_LEAF_DARK :: Color{66, 134, 76, 255}
-COLOR_LEAF_LIGHT :: Color{146, 190, 90, 255}
-COLOR_TRUNK :: Color{120, 99, 77, 255}
-COLOR_ROCK :: Color{137, 150, 143, 255}
-COLOR_ROCK_LIGHT :: Color{157, 166, 146, 255}
-COLOR_PLANK :: Color{214, 168, 110, 255}
-
-FLOWER_COLORS := [?]Color{{255, 120, 150, 255}, {255, 236, 120, 255}, {250, 250, 255, 255}, {190, 150, 255, 255}}
 
 // A darker or lighter version of a colour.
 shade :: proc(c: Color, f: f32) -> Color {
@@ -293,8 +263,6 @@ tree_fade :: proc(pos: Vec2, t: Tree_Shape) -> f32 {
 	return strength * cover * smooth((pos.y - p.pos.y + 0.5) / 1.0)
 }
 
-BERRY_COLOR :: Color{196, 40, 76, 255}
-
 // Trees are built from a trunk and clusters of round leafy lumps, so they
 // match everything else and sit correctly however the camera looks at them.
 draw_tree :: proc(pos: Vec2, index: int) {
@@ -400,10 +368,6 @@ draw_bush :: proc(b: Round, index: int) {
 		}
 	}
 }
-
-WHEAT :: Color{230, 190, 88, 255}
-UNRIPE_GREEN :: Color{132, 178, 74, 255}
-APPLE_RED :: Color{222, 44, 48, 255}
 
 // A colour part of the way from one to another.
 blend :: proc(a, b: Color, t: f32) -> Color {
@@ -683,7 +647,6 @@ draw_enemy_marks :: proc(e: Enemy, head: Vec3) {
 }
 
 HEALTH_BAR :: f32(0.9) // metres wide
-HEALTH_GOOD :: Color{120, 210, 90, 255}
 
 // The frame that carries one half of a held animal's body: the model point a
 // goes to the world point wa, the model direction from a to b points from wa
@@ -757,19 +720,6 @@ held_pose :: proc(e: Enemy) -> (pose: Animal_Pose) {
 	}
 	return
 }
-
-ANIMAL_CREAM :: Color{248, 222, 178, 255}
-ANIMAL_INK :: Color{58, 47, 48, 255}
-ANIMAL_BLUSH :: Color{255, 150, 165, 255}
-
-TURKEY_BRONZE :: Color{124, 86, 60, 255}
-TURKEY_DARK :: Color{78, 56, 46, 255}
-TURKEY_RUST :: Color{176, 100, 58, 255}
-TURKEY_TIP :: Color{240, 222, 182, 255}
-TURKEY_SKIN :: Color{156, 200, 238, 255}
-TURKEY_RED :: Color{222, 58, 58, 255}
-TURKEY_LEG :: Color{216, 152, 134, 255}
-BEAK :: Color{242, 198, 96, 255}
 
 // A big, cross farm turkey: a round bronze body on two pink legs, a fan of
 // barred tail feathers it spreads when it means trouble, and a bare blue head
@@ -863,20 +813,6 @@ draw_turkey :: proc(pose: Animal_Pose, e: Enemy) {
 		}
 	}
 }
-
-GOAT_WHITE :: Color{240, 234, 222, 255}
-GOAT_PATCH :: Color{168, 146, 128, 255}
-BILLY_COAT :: Color{156, 132, 106, 255}
-BILLY_DARK :: Color{98, 82, 68, 255}
-GOAT_HOOF :: Color{62, 52, 50, 255}
-GOAT_HORN :: Color{216, 202, 170, 255}
-GOAT_PINK :: Color{240, 182, 172, 255}
-
-// A goat: a barrel of a body on four thin legs, a short perky tail, floppy
-// ears, a little beard and horns. The billy goat is bigger and brown, with a
-// long beard and great curling horns. Held, one hind leg runs to Prosio's
-// hand.
-UDDER_PINK :: Color{246, 176, 180, 255}
 
 // How far to his own side each of his two hooves is from the middle of his
 // hold, when he holds something with both: a little apart.
@@ -1003,8 +939,6 @@ LEG_SCALE :: f32(0.86) // leg length, as a share of the old, longer legs
 TORSO_SCALE :: f32(0.84) // the body from hips to neck, likewise
 HIP :: f32(0.47) // hip height in the body's own measurements
 SHOULDER_HEIGHT :: HIP * LEG_SCALE + (1.30 - HIP) * TORSO_SCALE // above his feet
-
-HIDE_TAN :: Color{214, 146, 116, 255}
 
 draw_prosio :: proc() {
 	p := &g.prosio
@@ -1320,9 +1254,6 @@ draw_particles :: proc() {
 	outlines_enabled = true
 }
 
-FOX_COAT :: Color{212, 116, 55, 255}
-FOX_FEET :: Color{84, 60, 52, 255}
-
 // A fox: a slim rust-red body, dark feet, a bushy white-tipped tail and a
 // big head with pointed ears. With something stolen, it carries it in its
 // mouth. Held, it hangs by its tail from Prosio's hand.
@@ -1386,8 +1317,6 @@ draw_fox :: proc(pose: Animal_Pose, e: Enemy) {
 		draw_smile(h * translate({0, -0.2, 0.62}), 0.06)
 	}
 }
-
-SALT_PINK :: Color{250, 196, 212, 255}
 
 // A big grey rock with rock salt growing on it: a white crust all the time,
 // and big pink crystals standing up out of it when there is some to take.

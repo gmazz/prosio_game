@@ -623,9 +623,6 @@ spear_lands :: proc(t: ^Thrown_Rock, at: Vec2) {
 	}
 }
 
-PLANK_DARK :: Color{176, 128, 80, 255}
-SACKCLOTH :: Color{226, 200, 150, 255}
-
 // One piece of fence: a post at each end and two rails between. The matrix
 // puts its start on the ground, with the piece running along +z.
 draw_fence_piece :: proc(m: Mat4) {

@@ -161,24 +161,6 @@ GATHER_TEXT := #partial [Item]cstring {
 	.Spear    = "Got my spear back!",
 }
 
-// The colour of each, for the thing in his hoof as he picks it up.
-ITEM_COLOR := #partial [Item]Color {
-	.Apple    = {222, 44, 48, 255},
-	.Berries  = {196, 40, 76, 255},
-	.Mushroom = {196, 64, 46, 255},
-	.Pumpkin  = {232, 128, 40, 255},
-	.Cabbage  = {150, 200, 110, 255},
-	.Nuts     = {160, 112, 70, 255},
-	.Salt     = {244, 222, 226, 255},
-	.Fish     = {240, 140, 70, 255},
-	.Honey    = {246, 190, 60, 255},
-	.Pebble   = {150, 152, 150, 255},
-	.Wheat    = {230, 190, 88, 255},
-	.Egg      = {246, 236, 214, 255},
-	.Wood     = {150, 108, 70, 255},
-	.Spear    = {150, 108, 70, 255},
-}
-
 EAT_TEXT := [Item]cstring {
 	.Apple         = "Crunch! Yum!",
 	.Berries       = "Berries! Yum!",
@@ -686,10 +668,6 @@ update_stations :: proc(dt: f32) {
 	}
 }
 
-BRICK :: Color{190, 96, 70, 255}
-BRICK_DARK :: Color{142, 66, 52, 255}
-BRICK_LINE :: Color{168, 80, 60, 255}
-
 // A round brick oven on a stone base, its mouth facing the camera, with a
 // chimney and a pile of logs.
 draw_oven :: proc() {
@@ -734,10 +712,6 @@ draw_oven :: proc() {
 	tube(m, {-0.4, 1.25, -0.35}, 0.17, 0.9, BRICK_DARK)
 	tube(m, {-0.4, 2.1, -0.35}, 0.22, 0.08, BRICK_DARK)
 }
-
-FLAME :: Color{246, 120, 40, 255}
-FLAME_HOT :: Color{255, 220, 90, 255}
-STEEL :: Color{190, 196, 204, 255}
 
 // The cooking fire, by the pond: a ring of stones round the fire, a spit
 // over it on two forked sticks, and a chopping block with a cleaver, where
@@ -811,9 +785,6 @@ draw_churn :: proc() {
 		draw_dish(stool * translate({0, 0.36, 0}), o.dish)
 	}
 }
-
-CRUST :: Color{230, 182, 108, 255}
-CRUST_DARK :: Color{190, 130, 66, 255}
 
 // A baked dish, as it comes out of the oven.
 draw_dish :: proc(m: Mat4, dish: Item) {
@@ -1427,7 +1398,6 @@ draw_pixels :: proc(rows: [12]string, x, y, size: f32) {
 	}
 }
 
-SACK_BOX :: Color{246, 236, 214, 255}
 SACK_SLOTS :: 6 // boxes shown at most; beyond that the sack scrolls round
 
 // The sack, at the top of the screen from x: a box for each kind of thing
@@ -1639,9 +1609,6 @@ update_mill :: proc(dt: f32) {
 		}
 	}
 }
-
-MILL_WALL :: Color{238, 230, 212, 255}
-MILL_ROOF :: Color{176, 88, 66, 255}
 
 // A little windmill: a round whitewashed tower, a red cap, four sails that
 // turn (fast when it is grinding), and the sacks of flour by the door.

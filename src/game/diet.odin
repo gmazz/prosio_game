@@ -106,19 +106,6 @@ NUTRIENT_NAME := [Nutrient]cstring {
 	.Electrolytes = "ELECTROLYTES",
 }
 
-// The colour of each in the bar of what a food is made of, as in the panel
-// of what he is made of.
-NUTRIENT_COLOR := [Nutrient]Color {
-	.Carbs        = {244, 150, 60, 255},
-	.Fat          = {246, 206, 70, 255},
-	.Protein      = {236, 150, 190, 255},
-	.Fibre        = {120, 196, 96, 255},
-	.Vitamins     = VITAMIN_COLOR,
-	.Electrolytes = SALT_COLOR,
-}
-VITAMIN_COLOR :: Color{250, 230, 110, 255}
-SALT_COLOR :: Color{236, 236, 240, 255}
-
 // Shares in per cent, in the order of Nutrient (index it with int(n)).
 Composition :: [len(Nutrient)]f32
 
@@ -517,8 +504,6 @@ update_diet :: proc(dt: f32) {
 	}
 }
 
-GAS_GREEN :: Color{176, 204, 96, 255}
-
 // A mighty wind: a green cloud behind him, a little hop forwards, and every
 // animal near enough takes to its heels.
 pass_gas :: proc() {
@@ -592,10 +577,6 @@ drink :: proc() {
 	burst({at.x, 0.2, at.y}, 10, 2, POND_SPLASH, 0.07)
 }
 
-NEED_POWER :: Color{176, 140, 250, 255}
-NEED_SILLY :: Color{240, 150, 220, 255}
-MUSCLE_RED :: Color{232, 110, 96, 255}
-
 // The parts his weight is made of, each with its own colour wherever it is
 // shown.
 Part :: enum {
@@ -615,15 +596,6 @@ PART_NAME := [Part]cstring {
 	.Fibre   = "FIBRE",
 	.Water   = "WATER",
 	.Frame   = "BONES",
-}
-PART_COLOR := [Part]Color {
-	.Fat     = {246, 206, 70, 255},
-	.Muscle  = MUSCLE_RED,
-	.Carbs   = {244, 150, 60, 255},
-	.Protein = {236, 150, 190, 255},
-	.Fibre   = {120, 196, 96, 255},
-	.Water   = {80, 170, 240, 255},
-	.Frame   = {168, 168, 178, 255},
 }
 PART_NEED := #partial [Part]Need {
 	.Carbs   = .Carbs,
@@ -771,16 +743,6 @@ WEIGHT_BANDS := [5]Weight_Band {
 	{FAT_LEAN, FAT_HUGE, {110, 190, 80, 255}},
 	{FAT_HUGE, FAT_MAX - FAT_DANGER, {244, 150, 60, 255}},
 	{FAT_MAX - FAT_DANGER, FAT_MAX, {226, 70, 70, 255}},
-}
-
-// Each need's bar, when all is well.
-NEED_BAR := [Need]Color {
-	.Carbs        = {240, 160, 60, 255},
-	.Protein      = {232, 120, 150, 255},
-	.Fibre        = {110, 190, 80, 255},
-	.Water        = {90, 160, 240, 255},
-	.Vitamins     = {246, 206, 70, 255},
-	.Electrolytes = {220, 220, 220, 255},
 }
 
 // Pictures for his needs on the screen, a letter a pixel (see icon_color):

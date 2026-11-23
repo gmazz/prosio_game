@@ -7,8 +7,6 @@ beyond_edge :: proc(pos: Vec2) -> f32 {
 	return max(abs(pos.x) - WORLD_HALF.x, abs(pos.y) - WORLD_HALF.y)
 }
 
-POND_SPLASH :: Color{150, 206, 232, 255}
-
 // How many of a thing the budget allows.
 budget_count :: proc(item: Item) -> int {
 	budget := item == .Mushroom ? MUSHROOM_BUDGET : FOOD_BUDGET
