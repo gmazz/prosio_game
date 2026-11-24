@@ -37,6 +37,8 @@ Prosio :: struct {
 	dazed_t:      f32, // time left seeing stars
 	safe_t:       f32, // time left during which enemies cannot shove him again
 	eat_t:        f32, // time left in the munching animation
+	meal_fill, meal_target, meal_hold_t: f32, // temporary visual fullness after a meal
+	gas_pose_t, hiccup_pose_t, tipsy_pose_t: f32, // transient reaction poses
 	pick_t:       f32, // time left picking something up
 	shake_t:      f32, // time left shaking a tree he has hold of
 	shake_power:  f32, // and how hard: the strength of his arms
@@ -213,6 +215,7 @@ update_prosio :: proc(dt: f32) {
 	p.dazed_t -= dt
 	p.safe_t -= dt
 	p.eat_t -= dt
+	update_prosio_reactions(p, dt)
 	p.pick_t -= dt
 	p.shake_t -= dt
 	if p.pick_t <= 0 {

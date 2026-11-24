@@ -23,7 +23,9 @@ SALT_KCAL :: f32(1)
 // ---- levels ----
 // Where each level starts, where lacking, full and too much begin, and how fast levels go down.
 
+// where each level but water starts; above it, vitamins and electrolytes go in more slowly the fuller he is
 NEED_START :: f32(50)
+// where his water level starts
 WATER_START :: f32(80)
 // below this he has run out
 NEED_EMPTY :: f32(4)
@@ -33,6 +35,7 @@ NEED_LOW :: f32(15)
 NEED_HIGH :: f32(70)
 // above this it is too much
 NEED_OVER :: f32(90)
+// below this he lacks water (water has its own line, higher than NEED_LOW)
 WATER_LOW :: f32(25)
 // the share of each level used up every second, at rest: half of it in 11 minutes
 NEED_FADE :: f32(0.001)
@@ -42,6 +45,7 @@ SHED :: f32(6)
 THIRST :: f32(0.1)
 // seconds without water, vitamins or electrolytes before the game is over
 TOO_LONG :: f32(180)
+// seconds a drink takes
 DRINK_TIME :: f32(0.9)
 // electrolytes the goats lick off him each second
 LICK :: f32(0.25)
@@ -79,7 +83,9 @@ ACHE_TIME :: f32(1)
 EAGLE_SIGHT :: f32(1.8)
 // and how far the camera pulls back
 EAGLE_ZOOM :: f32(1.3)
+// lacking vitamins: how far he sees, as a share of the usual,
 DIM_SIGHT :: f32(0.6)
+// and how far the camera pulls back, as a share of the usual (under 1 brings it in)
 DIM_ZOOM :: f32(0.85)
 // salty: how much faster he gets thirsty
 SALTY_THIRST :: f32(2.5)

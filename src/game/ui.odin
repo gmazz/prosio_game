@@ -313,7 +313,7 @@ draw_ui :: proc() {
 		// It sits a little above the top of him, whatever is on his head,
 		// with a thin grey edge.
 		size := 20 * s
-		top := world_to_screen({p.pos.x, p.height + (HEAD_HEIGHT + head_top()) * PROSIO_SIZE, p.pos.y})
+		top := world_to_screen({p.pos.x, p.height + (HEAD_HEIGHT + prosio_base_head_lift() + head_top()) * PROSIO_SIZE, p.pos.y})
 		w := ui_text_width(p.bubble, size) + 22 * s
 		h := size + 13 * s
 		x, y := top.x - w / 2, top.y - BUBBLE_GAP * s - h
@@ -330,7 +330,7 @@ draw_ui :: proc() {
 
 	// Where he is: the part of the meadow, and, for a few seconds after he
 	// gets there, what is found there.
-	if g.in_region {
+	if g.in_region && !(scene == .Playing && g.opts.lab && g.lab.visible) {
 		fade := clamp(g.region_t * 2, 0, 1)
 		name_color := UI_YELLOW
 		name_color.a = u8(255 * fade)

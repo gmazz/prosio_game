@@ -227,7 +227,9 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	outline_location = rl.GetShaderLocation(material.shader, "outlineExpansion")
 	uniforms.fog = rl.GetShaderLocation(material.shader, "fog")
 	init_quad_meshes()
+	when PROSIO_BASE { init_prosio_base_mesh() }
 	init_tree_meshes()
+	when PROSIO_CHARACTER { init_prosio_character_mesh() }
 	init_font()
 }
 
@@ -327,6 +329,13 @@ frame_time :: proc() -> f32 {
 
 screen_size :: proc() -> (w, h: f32) {
 	return f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())
+}
+
+lab_pointer :: proc() -> (pos: Vec2, pressed, down, toggle: bool) {
+	if !keyboard_enabled {
+		return
+	}
+	return rl.GetMousePosition(), rl.IsMouseButtonPressed(.LEFT), rl.IsMouseButtonDown(.LEFT), rl.IsKeyPressed(.F1)
 }
 
 begin_frame :: proc(clear: Color) {
@@ -469,6 +478,11 @@ end_world :: proc() {
 }
 
 draw_shape :: proc(shape: Shape, transform: Mat4, color: Color) {
+	when PROSIO_BASE_EXPORT {
+		if prosio_base_exporting {
+			return
+		}
+	}
 	if shadow_pass {
 		if shape != .Terrain && shape != .Plane {
 			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(SHADOW_INK)
@@ -511,6 +525,128 @@ quad_new_mesh :: proc(n: int) -> (mesh: rl.Mesh) {
 	mesh.normals = cast([^]f32)rl.MemAlloc(u32(n * 3 * size_of(f32)))
 	rl.UploadMesh(&mesh, true)
 	return
+}
+
+when PROSIO_BASE {
+	@(private = "file")
+	prosio_base_mesh: rl.Mesh
+	@(private = "file")
+	prosio_base_paint_location: i32
+	@(private = "file")
+	prosio_base_outline_bias_location: i32
+
+	init_prosio_base_mesh :: proc() {
+		mesh := &prosio_base_mesh
+		mesh.vertexCount = i32(len(PROSIO_BASE_VERTICES))
+		mesh.triangleCount = i32(len(PROSIO_BASE_INDICES) / 3)
+		bytes := u32(len(PROSIO_BASE_VERTICES) * size_of(Vec3))
+		mesh.vertices = cast([^]f32)rl.MemAlloc(bytes)
+		mesh.normals = cast([^]f32)rl.MemAlloc(bytes)
+		mesh.colors = cast([^]u8)rl.MemAlloc(u32(len(PROSIO_BASE_PAINT) * size_of(Color)))
+		mesh.indices = cast([^]u16)rl.MemAlloc(u32(len(PROSIO_BASE_INDICES) * size_of(u16)))
+		copy(mesh.indices[:len(PROSIO_BASE_INDICES)], PROSIO_BASE_INDICES)
+		copy((cast([^]Color)mesh.colors)[:len(PROSIO_BASE_PAINT)], PROSIO_BASE_PAINT)
+		rl.UploadMesh(mesh, true)
+		prosio_base_paint_location = rl.GetShaderLocation(material.shader, "useMeshPaint")
+		prosio_base_outline_bias_location = rl.GetShaderLocation(material.shader, "outlineDepthBias")
+	}
+
+	draw_prosio_base_mesh :: proc(skin: Color) {
+		mesh := prosio_base_mesh
+		bytes := i32(len(PROSIO_BASE_VERTICES) * size_of(Vec3))
+		rl.UpdateMeshBuffer(mesh, 0, &prosio_base_positions[0], bytes, 0)
+		if shadow_pass {
+			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(SHADOW_INK)
+			rl.DrawMesh(mesh, material, rl.Matrix(FLATTEN))
+			return
+		}
+		rl.UpdateMeshBuffer(mesh, 2, &prosio_base_normals[0], bytes, 0)
+		set_surface(.Solid)
+		if outlines_enabled && outline_width > 0 {
+			width := outline_width * PROSIO_BASE_OUTLINE.x
+			bias, zero := PROSIO_BASE_OUTLINE.y, f32(0)
+			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(OUTLINE_COLOR)
+			flash := flash_value
+			if flash > 0 { set_hit_flash(0) }
+			rl.SetShaderValue(material.shader, outline_location, &width, .FLOAT)
+			rl.SetShaderValue(material.shader, prosio_base_outline_bias_location, &bias, .FLOAT)
+			rlgl.SetCullFace(.FRONT)
+			rl.DrawMesh(mesh, material, rl.Matrix(IDENTITY))
+			rlgl.SetCullFace(.BACK)
+			rl.SetShaderValue(material.shader, outline_location, &zero, .FLOAT)
+			rl.SetShaderValue(material.shader, prosio_base_outline_bias_location, &zero, .FLOAT)
+			if flash > 0 { set_hit_flash(flash) }
+		}
+		on, off := i32(1), i32(0)
+		rl.SetShaderValue(material.shader, prosio_base_paint_location, &on, .INT)
+		tint := skin
+		base_color := COLOR_SKIN
+		for channel in 0..<3 {
+			tint[channel] = u8(clamp(f32(skin[channel]) * 255 / f32(base_color[channel]), 0, 255))
+		}
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(tint)
+		rl.DrawMesh(mesh, material, rl.Matrix(IDENTITY))
+		rl.SetShaderValue(material.shader, prosio_base_paint_location, &off, .INT)
+	}
+}
+
+when PROSIO_CHARACTER {
+	@(private = "file")
+	prosio_character_mesh: rl.Mesh
+	@(private = "file")
+	prosio_paint_location: i32
+	prosio_outline_bias_location: i32
+
+	init_prosio_character_mesh :: proc() {
+		mesh := &prosio_character_mesh
+		mesh.vertexCount = i32(len(PROSIO_VERTICES))
+		mesh.triangleCount = i32(len(PROSIO_INDICES) / 3)
+		mesh.vertices = cast([^]f32)rl.MemAlloc(u32(len(PROSIO_VERTICES)*size_of(Vec3)))
+		mesh.normals = cast([^]f32)rl.MemAlloc(u32(len(PROSIO_VERTICES)*size_of(Vec3)))
+		mesh.colors = cast([^]u8)rl.MemAlloc(u32(len(PROSIO_PAINT)*size_of(Color)))
+		mesh.indices = cast([^]u16)rl.MemAlloc(u32(len(PROSIO_INDICES)*size_of(u16)))
+		colors := cast([^]Color)mesh.colors
+		for v, i in PROSIO_PAINT { colors[i] = v }
+		for index, i in PROSIO_INDICES { mesh.indices[i] = index }
+		rl.UploadMesh(mesh,true)
+		prosio_paint_location = rl.GetShaderLocation(material.shader,"useMeshPaint")
+		prosio_outline_bias_location = rl.GetShaderLocation(material.shader, "outlineDepthBias")
+	}
+
+	draw_prosio_character_mesh :: proc(root: Mat4) {
+		mesh := prosio_character_mesh
+		n := i32(len(PROSIO_VERTICES)*size_of(Vec3))
+		rl.UpdateMeshBuffer(mesh,0,&prosio_skin_positions[0],n,0)
+		if shadow_pass {
+			mesh.triangleCount = i32(prosio_body_indices() / 3)
+			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(SHADOW_INK)
+			rl.DrawMesh(mesh,material,rl.Matrix(FLATTEN * root))
+			return
+		}
+		rl.UpdateMeshBuffer(mesh,2,&prosio_skin_normals[0],n,0)
+		set_surface(.Solid)
+		if outlines_enabled && outline_width > 0 {
+			hull := mesh
+			hull.triangleCount = i32(prosio_body_indices() / 3)
+			width, bias, zero := outline_width, PROSIO_MESH_OUTLINE_BIAS, f32(0)
+			material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.Color(OUTLINE_COLOR)
+			flash := flash_value
+			if flash > 0 { set_hit_flash(0) }
+			rl.SetShaderValue(material.shader,outline_location,&width,.FLOAT)
+			rl.SetShaderValue(material.shader, prosio_outline_bias_location, &bias, .FLOAT)
+			rlgl.SetCullFace(.FRONT)
+			rl.DrawMesh(hull,material,rl.Matrix(root))
+			rlgl.SetCullFace(.BACK)
+			rl.SetShaderValue(material.shader,outline_location,&zero,.FLOAT)
+			rl.SetShaderValue(material.shader, prosio_outline_bias_location, &zero, .FLOAT)
+			if flash > 0 { set_hit_flash(flash) }
+		}
+		on, off := i32(1), i32(0)
+		rl.SetShaderValue(material.shader,prosio_paint_location,&on,.INT)
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = rl.WHITE
+		rl.DrawMesh(mesh,material,rl.Matrix(root))
+		rl.SetShaderValue(material.shader,prosio_paint_location,&off,.INT)
+	}
 }
 
 // Draws the bent animal: its shadow; or its outline (the whole of it pushed

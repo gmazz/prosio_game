@@ -50,7 +50,8 @@
           "feet": "Sneakers"
         },
         "Bare": {"hair": "Tuft", "hat": "None", "neck": "None", "shirt": "None", "legs": "None"}
-      }
+      },
+      "about": "each outfit by name, with what it changes from the explorer's"
     }
   },
   "clothes": {
@@ -69,7 +70,8 @@
         "White_Shirt": {"color": "SAILOR", "hem": "SAILOR", "sleeves": "Long", "long": true, "surface": "Solid"},
         "Pirate_Top": {"color": "LEATHER", "hem": "LEATHER", "sleeves": "Long", "long": true, "surface": "Solid"},
         "Chef_Jacket": {"color": "SAILOR", "hem": "SAILOR", "sleeves": "Long", "long": true, "surface": "Solid"}
-      }
+      },
+      "about": "what each shirt is like: its colour, its hem's colour, its sleeves, whether it covers his belly, and its surface"
     },
     "OVER_LOOK": {
       "[Over]Over_Look": {
@@ -82,7 +84,8 @@
         "Trench": {"color": "TRENCH", "sleeves": "Long"},
         "Cape": {"color": "LEATHER", "sleeves": "None"},
         "Apron": {"color": "SAILOR", "sleeves": "None"}
-      }
+      },
+      "about": "what each top worn over the shirt is like: its colour, and its sleeves"
     }
   }
 }

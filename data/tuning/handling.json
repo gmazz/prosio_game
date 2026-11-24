@@ -5,26 +5,26 @@
       "f32": 8,
       "about": "Rocks and stones: his arms put the same energy into every throw, THROW_ENERGY joules for each kilogram of him (times the strength of his arms), so the speed is the square root of twice that over the stone's weight. A heavy rock is a short, slow lob; a light stone would fly faster than an arm can move, and leaves at ARM_SPEED (times the root of his strength) at the most."
     },
-    "ARM_SPEED": {"f32": 22},
-    "PEBBLE_KG": {"f32": 0.3},
-    "PEBBLE_RADIUS": {"f32": 0.07},
+    "ARM_SPEED": {"f32": 22, "about": "the fastest a stone or a spear leaves his hoof, m/s, for arms of ordinary strength"},
+    "PEBBLE_KG": {"f32": 0.3, "about": "what a pebble weighs, in kg"},
+    "PEBBLE_RADIUS": {"f32": 0.07, "about": "how big a pebble is, in metres"},
     "PEBBLE_COST": {"f32": 3, "about": "stamina to throw one"},
     "STONE_HARD": {
       "f32": 2,
       "about": "What a thrown stone does to an animal it hits is the blow of an animal of that kind landing with the stone's energy, counted STONE_HARD times over (a stone does not give). A stone under LIGHT_STONE kg knocks nothing over: it stings, startles (the animal runs for PEBBLE_FRIGHT seconds) and makes a fox drop what it stole."
     },
-    "LIGHT_STONE": {"f32": 2},
-    "PEBBLE_FRIGHT": {"Vec2": [3, 6], "const": true},
+    "LIGHT_STONE": {"f32": 2, "about": "in kg: a stone lighter than this only stings and startles"},
+    "PEBBLE_FRIGHT": {"Vec2": [3, 6], "const": true, "about": "seconds, at random in this range, an animal a pebble startles runs off for"},
     "AIM_RANGE": {"f32": 16, "about": "how far off he can pick something out to throw at"},
     "ANIMAL_THROW_GAIN": {"f32": 3.2, "about": "for animals, which he can wind up"},
-    "MAX_THROW": {"f32": 22},
-    "MAX_THROWN": {"untyped": 4},
+    "MAX_THROW": {"f32": 22, "about": "the fastest anything he throws or swings can go, m/s"},
+    "MAX_THROWN": {"untyped": 4, "about": "stones and spears in the air at once, a count"},
     "WIND_TAP": {
       "f32": 0.2,
       "about": "What F does with something in his hands. A tap (let go within WIND_TAP seconds) puts it down. Held longer, he winds up: the throw has WIND_LEAST of its full speed at first and all of it after WIND_FULL seconds."
     },
-    "WIND_FULL": {"f32": 1.0},
-    "WIND_LEAST": {"f32": 0.35}
+    "WIND_FULL": {"f32": 1.0, "about": "seconds of winding up for a throw at full speed"},
+    "WIND_LEAST": {"f32": 0.35, "about": "the share of full speed a throw has with no winding up at all"}
   },
   "holding": {
     "_about": "Grabbing, lifting and holding.",
@@ -56,13 +56,13 @@
       "const": true,
       "about": "What a slam takes from a held animal's health: so much, plus so much for each m/s it hit at, and never more than SLAM_MOST. (His arm sets the speed, whatever he holds, so this does not go by how sturdy the animal is.)"
     },
-    "SLAM_MOST": {"f32": 30},
+    "SLAM_MOST": {"f32": 30, "about": "the most health one slam can take"},
     "LIMP_MOST": {"f32": 8, "about": "seconds an animal bashed about hangs limp, at most"},
     "CLUB_SHARE": {
       "f32": 0.6,
       "about": "Whatever the swung animal hits takes a share of its speed set by their weights, as when two balls collide. But the club is floppy: only part of its body (CLUB_SHARE of its weight) is behind the blow, and it squashes rather than bounces (restitution BASH_BOUNCE). For a club of weight m moving at v, striking something of weight M: it flies off at   (1 + e) * m' / (m' + M) * v,   with m' = CLUB_SHARE * m the club goes on  (m' - e * M) / (m' + M) * v So a turkey swung into a turkey knocks it about half as fast as it was swung, and swung into the billy goat it barely rocks it and bounces back."
     },
-    "BASH_BOUNCE": {"f32": 0.35}
+    "BASH_BOUNCE": {"f32": 0.35, "about": "how bouncy the swung animal is when it strikes (e in the sums above, 0 to 1): raise it and what it hits flies off faster and it bounces back more"}
   },
   "rocks": {
     "_about": "How rocks are drawn: which models, and how tall one may be against its radius.",
@@ -70,7 +70,7 @@
       "[?]Tree_Model_Kind": ["Rock2", "Rock3", "Rock4", "Rock5"],
       "about": "A rock of radius r with its middle at m, drawn from one of the rock models (see tools/pack_trees.sh): which one goes by the rock's number in the world (index), so it keeps its shape when he lifts and throws it, and a mossy rock keeps its moss. No taller than ROCK_TALL times its radius."
     },
-    "ROCK_MOSSY": {"[?]Tree_Model_Kind": ["Rockmoss1", "Rockmoss2", "Rockmoss3", "Rockmoss4"]},
-    "ROCK_TALL": {"f32": 1.5}
+    "ROCK_MOSSY": {"[?]Tree_Model_Kind": ["Rockmoss1", "Rockmoss2", "Rockmoss3", "Rockmoss4"], "about": "the models a mossy rock is drawn from"},
+    "ROCK_TALL": {"f32": 1.5, "about": "a rock is drawn no taller than this many times its radius"}
   }
 }

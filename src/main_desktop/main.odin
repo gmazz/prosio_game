@@ -25,6 +25,8 @@ main :: proc() {
 	//   --tap2-at 90      ...on this frame
 	//   --menu            show the menu instead of starting the game
 	//   --crowd           put turkeys and goats round Prosio at the start
+	//   --tipsy           preview the stagger in a fresh meadow without saves
+	//   --lab             open the panel for tuning and spawning test fixtures
 	//   --far             with --near: five metres off, to throw at
 	//   --pebbles         start with six pebbles, chosen in the sack
 	//   --choose Spear    this is chosen in the sack at the start, if he has any (a
@@ -42,7 +44,7 @@ main :: proc() {
 	//   --agent FILE      played by a program, a step at a time: commands are read
 	//                     from FILE as lines are added to it (- for standard
 	//                     input), answers are printed; see agent.odin and tools/play.sh
-	opts: game.Options
+	opts := game.Options{lab = #config(PROSIO_LAB, false)}
 	agent_path: string
 	args := os.args
 	for i := 1; i < len(args); i += 1 {
@@ -188,6 +190,11 @@ main :: proc() {
 				opts.no_save = true // a program playing never touches the saved game
 				i += 1
 			}
+		case "--tipsy":
+			opts.start_tipsy = true
+			opts.no_save = true
+		case "--lab":
+			opts.lab = true
 		case "--tap":
 			if i + 1 < len(args) {
 				opts.tap = buttons(args[i + 1])

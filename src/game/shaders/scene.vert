@@ -1,6 +1,7 @@
 ATTR vec3 vertexPosition;
 ATTR vec3 vertexNormal;
 ATTR vec2 vertexTexCoord;
+ATTR vec4 vertexColor;
 uniform mat4 mvp;
 uniform mat4 matNormal;
 uniform mat4 matModel;
@@ -8,18 +9,22 @@ uniform mat4 matView;
 uniform mat4 matProjection;
 uniform float windTime;
 uniform float outlineExpansion;
+uniform float outlineDepthBias;
 uniform float sway; // how far the top of the shape moves in the wind
 VARY vec3 normal;
 VARY vec3 position;
 VARY vec3 local;
 VARY vec2 uv;
+VARY vec3 meshPaint;
 void main() {
     local = vertexPosition;
     uv = vertexTexCoord;
+    meshPaint = vertexColor.rgb;
     normal = normalize((matNormal * vec4(vertexNormal, 0.0)).xyz);
     position = (matModel * vec4(local, 1.0)).xyz;
     if (outlineExpansion > 0.0) {
         gl_Position = matProjection * matView * vec4(position + normal * outlineExpansion, 1.0);
+        gl_Position.z += outlineDepthBias * gl_Position.w;
     } else if (sway > 0.0) {
         // Leaves move in the wind; the higher on the shape, the more.
         float phase = position.x * 0.37 + position.z * 0.29;

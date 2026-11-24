@@ -1,7 +1,16 @@
 {
   "_about": "How the game looks on the screen: the camera, the pixel sizes, and the sizes and timings of what is drawn over the meadow.",
   "camera": {
-    "CAMERA_OFFSET": {"Vec3": [0, 8.5, 10.6], "const": true, "about": "Where the camera sits, relative to the point it looks at."}
+    "CAMERA_OFFSET": {"Vec3": [0, 8.5, 10.6], "const": true, "about": "Where the camera sits, relative to the point it looks at."},
+    "LAB_CAMERA": {"[4]f32": [0.29, 2.6, 1.37, 0.31], "const": true, "about": "test meadow portrait distance, camera rise, target height and side angle"},
+    "LAB_ZOOM": {"Vec2": [0.44, 1.5], "const": true, "about": "closest and widest test meadow play camera"}
+  },
+  "test_meadow": {
+    "LAB_PLACEMENT_STEPS": {"untyped": 16, "about": "candidate directions to place a fixture around Prosio"},
+    "LAB_PLACEMENT_GAP": {"f32": 0.34, "about": "clear ground left between Prosio or a landmark and a test fixture"},
+    "LAB_APPLE_RADIUS": {"f32": 0.25, "about": "clearance for an apple fixture"},
+    "LAB_ROCK_RADIUS": {"f32": 0.62, "about": "radius of the liftable test rock"},
+    "LAB_NOTICE_SECONDS": {"f32": 2, "about": "duration of the unavailable-action notice"}
   },
   "forest_view": {
     "FOREST_REVEAL": {"f32": 0.9, "about": "in the forest, how much further round him the trees turn see-through (in crowns)"}
@@ -11,9 +20,9 @@
       "untyped": 9,
       "about": "The world is drawn into a small image, which is then enlarged without smoothing, so it comes out as crisp pixels. How fine the pixels are: nine levels, picked with the number keys 1 to 9 (5, 6 and 7 lie between the old 4 and 5). Each is about this many rows of pixels from top to bottom. Each game pixel is a whole number of real screen pixels (or, on a fine screen, a whole number and a half), so the actual count is the nearest that fits the window."
     },
-    "PIXEL_ROWS": {"[PIXEL_LEVELS]f32": [180, 240, 320, 360, 405, 439, 478, 526, 560]},
+    "PIXEL_ROWS": {"[PIXEL_LEVELS]f32": [180, 240, 320, 360, 405, 439, 478, 526, 560], "about": "rows of pixels from top to bottom at each of the nine levels: fewer rows, bigger pixels"},
     "PIXEL_QUARTERS_FROM": {"untyped": 4, "about": "from this level (counting from 0) a pixel may be a quarter of a real pixel bigger or smaller, not only a half: the levels between the old 4 and 5"},
-    "PIXEL_MARGIN": {"untyped": 1}
+    "PIXEL_MARGIN": {"untyped": 1, "about": "a border this many game pixels wide drawn round the small image, just past the window's edge"}
   },
   "panels": {
     "_about": "The pictures, bars and boxes over the meadow, and the menus. The panel at the top left, made for a child: a picture for each of his six needs with a bar under it (how full it is: orange and blinking when he lacks it, red when it has run out, purple when it is too much); his weight, as a mark on a bar of coloured bands (WEIGHT_BANDS: starving, lean, chubby, huge, too fat), with a heart blinking at its end when he is in danger at either end; and his stamina. After the weight bar, what he weighs in whole kilograms; each part of it is on the BODY page of the M menu. What he needs he says himself (TEXT.say_low and the rest). Returns how wide and how tall it is.",
@@ -21,10 +30,11 @@
     "BUBBLE_GAP": {"f32": 14, "about": "the room between the top of him (head, hair or hat) and his speech bubble, at 1280 by 720"},
     "BUBBLE_EDGE": {"f32": 2, "about": "how thick the grey edge round his speech bubble is"},
     "SUBTITLE_GAP": {"f32": 22, "about": "the room between the game's name on the main menu and the line under it, at 1280 by 720"},
-    "HUD_NEEDS": {"[6]Need": ["Carbs", "Protein", "Fibre", "Vitamins", "Electrolytes", "Water"], "const": true},
+    "HUD_NEEDS": {"[6]Need": ["Carbs", "Protein", "Fibre", "Vitamins", "Electrolytes", "Water"], "const": true, "about": "the six needs on the panel, in order from left to right"},
     "WEIGHT_SCALE": {"f32": 160, "about": "the weight bar is this many kg from end to end"},
     "WEIGHT_BANDS": {
-      "[5]Weight_Band": [[0, "FAT_DANGER", [226, 70, 70, 255]], ["FAT_DANGER", "FAT_LEAN", [170, 214, 110, 255]], ["FAT_LEAN", "FAT_HUGE", [110, 190, 80, 255]], ["FAT_HUGE", "FAT_MAX - FAT_DANGER", [244, 150, 60, 255]], ["FAT_MAX - FAT_DANGER", "FAT_MAX", [226, 70, 70, 255]]]
+      "[5]Weight_Band": [[0, "FAT_DANGER", [226, 70, 70, 255]], ["FAT_DANGER", "FAT_LEAN", [170, 214, 110, 255]], ["FAT_LEAN", "FAT_HUGE", [110, 190, 80, 255]], ["FAT_HUGE", "FAT_MAX - FAT_DANGER", [244, 150, 60, 255]], ["FAT_MAX - FAT_DANGER", "FAT_MAX", [226, 70, 70, 255]]],
+      "about": "the weight bar's bands: from what fat to what fat (kg), and the colour of each"
     },
     "HEALTH_BAR": {"f32": 0.9, "about": "metres wide"}
   },
@@ -32,7 +42,7 @@
     "SACK_SLOTS": {"untyped": 6, "about": "boxes shown at most; beyond that the sack scrolls round"}
   },
   "menus": {
-    "SACK_COLUMNS": {"untyped": 9},
+    "SACK_COLUMNS": {"untyped": 9, "about": "boxes in each row of the sack page of the M menu"},
     "MENU_TOP": {"f32": 0.44, "about": "where the main and pause menus' first choice is, as a share of the screen's height"},
     "MENU_STEP": {"f32": 56, "about": "from one of their choices to the next, at 1280 by 720"},
     "SQUEEZE_MOST": {"f32": 0.85, "about": "the BODY page's lines are brought closer together when a short window would push them past the help at its bottom: down to this share of their usual spacing, and no closer"},

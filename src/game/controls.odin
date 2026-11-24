@@ -429,7 +429,7 @@ decode_controls :: proc(data: []u8) {
 }
 
 save_controls :: proc() {
-	if !keyboard_enabled {
+	if !keyboard_enabled || g.opts.lab {
 		return // test runs never touch the real settings
 	}
 	data: [CONTROLS_TEXT_ROOM]u8
@@ -438,7 +438,7 @@ save_controls :: proc() {
 }
 
 load_controls :: proc() {
-	if !keyboard_enabled {
+	if !keyboard_enabled || g.opts.lab {
 		return
 	}
 	data: [CONTROLS_TEXT_ROOM]u8

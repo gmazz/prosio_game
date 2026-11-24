@@ -9,6 +9,7 @@ package game
 WOOD_LYING :: 36
 // where the workbench stands, from home: across the yard from the oven, between the paths to the fields and the garden
 BENCH_PLACE :: Vec2{1.5, 7}
+// how big the workbench is, in metres: what he bumps into, and how near he must be to use it (it is STATION_RADIUS for the bench in food.json)
 BENCH_RADIUS :: f32(0.8)
 
 // ---- fences ----
@@ -18,12 +19,15 @@ BENCH_RADIUS :: f32(0.8)
 FENCE_LEN :: f32(2)
 // squares across: the meadow's width over FENCE_LEN
 FENCE_W :: 100
+// squares from top to bottom: the meadow's height over FENCE_LEN
 FENCE_H :: 70
+// points of the grid, a count worked out from FENCE_W and FENCE_H
 FENCE_POINTS :: (FENCE_W + 1) * (FENCE_H + 1)
 // pieces standing at once (as many as are saved)
 MAX_FENCES :: 240
 // anything with its feet higher than this is over it; a jump this high takes him over (at 80 kg he jumps 0.45 m)
 FENCE_TOP :: f32(0.4)
+// how far, in metres, either side of a fence's line it blocks him and the animals
 FENCE_THICK :: f32(0.1)
 // a piece goes on the line of the grid nearest to the spot this far in front of him (never under his feet),
 FENCE_AHEAD :: f32(0.7)
@@ -43,6 +47,7 @@ FENCE_HEAVY :: f32(30)
 // ---- scarecrow_rod_spear ----
 // Scarecrows are round things of the world, like trees. One that has been taken down leaves its place free for the next.
 MAX_SCARECROWS :: 8
+// how big a scarecrow is on the ground, in metres
 SCARECROW_RADIUS :: f32(0.22)
 // crows leave wheat this near one alone
 SCARECROW_REACH :: f32(9)
@@ -50,18 +55,25 @@ SCARECROW_REACH :: f32(9)
 ROD_REACH :: f32(4)
 // The spear. It leaves his hoof as a stone of its weight would, and what it takes from an animal's health when thrown as fast as an arm can (ARM_SPEED) is SPEAR_BLOW; slower, less, by the square of the speed. The animal is not bowled over, it staggers for SPEAR_STAGGER seconds.
 SPEAR_KG :: f32(1.5)
+// how big a thrown spear is when it hits something, in metres
 SPEAR_RADIUS :: f32(0.12)
 // stamina to throw one
 SPEAR_COST :: f32(6)
+// how long the spear is drawn, in metres
 SPEAR_LEN :: f32(1.5)
+// seconds an animal hit by a spear staggers
 SPEAR_STAGGER :: f32(0.8)
+// health a spear thrown at ARM_SPEED takes from each kind (out of ENEMY_HEALTH); raise it and fewer spears bring one down
 SPEAR_BLOW := [Enemy_Kind]f32{.Turkey = 55, .Goat = 40, .Billy = 28, .Fox = 60}
 
 // ---- larder ----
 // food keeps this many times as long in a larder
 LARDER_KEEPS :: f32(5)
+// how much a larder holds, in litres
 LARDER_LITRES :: f32(100)
+// how big a larder is on the ground, in metres
 LARDER_RADIUS :: f32(0.6)
+// larders standing at once, a count (as many as are saved)
 MAX_LARDERS :: 4
 
 // ---- campfire ----

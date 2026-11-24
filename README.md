@@ -13,6 +13,7 @@ This is a proof of concept: one meadow, no goal yet beyond keeping Prosio fed an
 - [Body and skills](#body-and-skills)
 - [The sack and the oven](#the-sack-and-the-oven)
 - [Wood and the workshop](#wood-and-the-workshop)
+- [Mixing (the rules alone, for now)](#mixing-the-rules-alone-for-now)
 - [Nutrients and water](#nutrients-and-water)
 - [Moving, jumping and stamina](#moving-jumping-and-stamina)
 - [Fighting](#fighting)
@@ -21,6 +22,7 @@ This is a proof of concept: one meadow, no goal yet beyond keeping Prosio fed an
 - [Building](#building)
 - [How the code is organised](#how-the-code-is-organised)
 - [Asset workshop, integration plan and agent handoff](docs/asset-integration.md)
+- [Local image-to-3D workflow](img2model/README.md)
 - [Testing without playing](#testing-without-playing)
 - [Tuning](#tuning)
 - [Text](#text)
@@ -99,7 +101,7 @@ The first row puts on a whole outfit at once; every other row changes one piece,
 | Aviator | leather flying cap with goggles, sunglasses, moustache, white scarf, white shirt, belted trench coat, cords, brown boots |
 | Space pirate | long shaggy hair, eyepatch, scar, a black top with a skull and crossed bones, a black cape lined with red, black leather trousers, tall black boots |
 | Chef | chef's hat, moustache, kerchief, white chef's jacket, apron, grey checked trousers, sneakers |
-| Bare pig | nothing but his tuft of hair |
+| Bare pig | smooth base skin, bare head and no tail |
 
 | Part | Row | Choices |
 |---|---|---|
@@ -133,7 +135,7 @@ There is one set of books, in kilograms. **Prosio's weight is nothing but the su
 
 Two more things he needs weigh nothing: vitamins and electrolytes. Food gives all of its points of these only while he is under half full of them; above that he takes in less and less, and nothing when full.
 
-**Food is made of the same stuff.** Each food has a composition: the share of its calories that is carbs, fat, protein, fibre, vitamins and electrolytes, adding up to 100% (the tables in [The sack and the oven](#the-sack-and-the-oven) give them all). A piece puts into him exactly those shares of its calories and nothing it is not made of, and a piece twice as rich puts in twice as much of each. Each share goes in at a fixed rate: carbs, fat and protein 200 kcal to the kilogram, fibre 60 kcal to the kilogram, vitamins and electrolytes a point of their level for each kcal. So a food's calories count all of it; only its carbs, fat and protein are energy. Food holds no water: that comes from the pond. Eating puts each share into the part of him that is the same thing, so he gets heavier by exactly what the food weighs:
+**Food is made of the same stuff.** Each food has a composition: the share of its calories that is carbs, fat, protein, fibre, vitamins and electrolytes, adding up to 100% (the tables in [The sack and the oven](#the-sack-and-the-oven) give them all). A piece puts into him exactly those shares of its calories and nothing it is not made of, and a piece twice as rich puts in twice as much of each. Each share goes in at a fixed rate: carbs, fat and protein 200 kcal to the kilogram, fibre 60 kcal to the kilogram, vitamins and electrolytes a point of their level for each kcal. So a food's calories count all of it; only its carbs, fat and protein are energy. Food holds no water: that comes from the pond. Eating puts each share into the part of him that is the same thing, and the books balance in energy, not in weight. A food weighs what it really does for its calories (carbs and protein 4 kcal to the gram, fat 9, fibre 2, as in life), but Prosio is an animal with an extremely efficient metabolism: 200 kcal change him by a kilogram, where a real body needs about 7,700. That is why his shape changes in days, and why a meal can put more weight on him than it weighs (the flour from a sheaf weighs 100 g, and its 340 kcal put 1.7 kg on him):
 
 - **Carbs** go into his carbs. What they cannot hold turns to fat: one loaf fills them, and a second goes almost all to fat.
 - **Fat** goes straight onto his fat.
@@ -189,9 +191,9 @@ So a strong pig is hungry: he gets through his carbs in under 20 minutes at rest
 
 ## The sack and the oven
 
-Food is not eaten where it is found. `E` next to it and Prosio stoops, picks it up and drops it over his shoulder into the sack on his back. He eats from the sack when he likes: `Z` and `C` choose, `Q` eats.
+Food is not eaten where it is found. Press `E` next to it to pick it up. Prosio eats from his sack when he likes. `Z` and `C` choose, and `Q` eats.
 
-**The sack holds 60 litres**, of whatever he likes, and is meant to be roomy: the sixteen logs for a whole pen go in at once, or the eight pieces of fence they make, with room for food beside them; fifteen pumpkins fill it. Each thing takes up room and has a weight (a berry bunch 0.1 kg and 0.2 litres, an apple 0.2 kg and 0.3 litres, a log 1 kg and 1.5 litres, a pumpkin 3 kg and 4 litres, a flat-packed piece of fence 3 kg and 4 litres: all in `ITEM_KG` and `ITEM_LITRES` in `data/tuning/food.json`). On the screen there are no litres, and the only kilograms are his own weight: a thin bar under the sack says how full it is, orange when it is full or when the load is heavy for him (over 30% of his own weight). The larder's menu shows how full the sack and the larder are in per cent. The numbers below are what the game works with inside. **The weight has no limit but his back**, and he carries it. The sack sits well on his back, so his legs feel only 60% of its weight (a rock in his arms they feel all of):
+**The sack holds 60 litres**, of whatever he likes, and is meant to be roomy: the sixteen logs for a whole pen go in at once, or the eight pieces of fence they make, with room for food beside them; fifteen pumpkins fill it. Each thing takes up room and has a weight (a berry bunch 0.1 kg and 0.2 litres, an apple 0.2 kg and 0.3 litres, a log 1 kg and 1.5 litres, a pumpkin 1.5 kg and 4 litres, a flat-packed piece of fence 3 kg and 4 litres: all in `ITEM_KG` and `ITEM_LITRES` in `data/tuning/food.json`). A food weighs what it really does for its calories, so the rich ones are light: a mug of milk 220 g, a sheaf's flour 100 g, a piece of honeycomb 100 g, a cut of meat 190 g, a handful of nuts 30 g, cheese 95 g and butter 42 g; a turkey's egg 90 g, a brown mushroom 140 g, and a fish 400 g whole (half of it is eaten). On the screen there are no litres, and the only kilograms are his own weight: a thin bar under the sack says how full it is, orange when it is full or when the load is heavy for him (over 30% of his own weight). The larder's menu shows how full the sack and the larder are in per cent. The numbers below are what the game works with inside. **The weight has no limit but his back**, and he carries it. The sack sits well on his back, so his legs feel only 60% of its weight (a rock in his arms they feel all of):
 
 - It slows him a little: 16 kg in the sack makes him about a tenth slower, a full sack of wood (40 kg) about a quarter.
 - Walking and sprinting burn a little more: an eighth more with 16 kg. Sprinting and jumping cost more stamina, and he jumps less high (all of the sack's weight counts for that, so a heavy sack can stop him clearing a fence).
@@ -218,7 +220,7 @@ His weight on the screen is his body alone; the load is shown with the sack.
 | Fish | In the pond | 6 | Another swims in 4 to 8 minutes after one is caught |
 | Honey | Three hives in the bee meadow | 6 combs (2 a hive) | The bees fill another comb in 4 to 8 minutes |
 | Wood | Fallen branches under the forest trees | 36 branches (not food: see [Wood and the workshop](#wood-and-the-workshop)) | Another falls where one lay 2 to 5 minutes after it is picked up |
-| Milk | The five goats | a jug from each | A milked goat has milk again after 3 minutes |
+| Milk | The five goats | a mug from each | A milked goat has milk again after 3 minutes |
 | Meat | Turkeys and goats, once dead | 2 pieces from a turkey, 5 from a goat, 8 from the billy goat | Another turkey takes a dead one's place after 5 to 8 minutes, a goat after 8 to 12, the billy goat after 10 to 15 |
 
 **Things grow, and can be picked too early.** A new piece sprouts small and green, with a quarter of its calories, and grows to full size and colour; picked early it is worth less, and the prompt says what it is worth now ("E: pick it now (164 kcal, still growing)"). Each piece's full size also differs by up to 15% either way, so one ripe pumpkin is 350 kcal and the next 450. At the start of a game everything is at a different stage. The sack keeps the calories of each kind of thing all together, not piece by piece: three apples of 150, 100 and 50 kcal are 300 kcal of apples, and any one of them taken out is worth the average, 100. The sack shows what one piece of each kind is worth, and, for the one chosen in its menu, what it is made of: a bar of its composition, each share in per cent, and what one piece puts into him.
@@ -234,7 +236,7 @@ His weight on the screen is his body alone; the load is shown with the sack.
 
 **Honey** is in the three straw hives of the bee meadow, `E` to take a comb. Come within 3.6 m of a hive and its bees are after him, a little faster than he walks, stinging every 0.7 seconds (0.1 kg a sting) until he has been out of that 3.6 m for 5 seconds. His wind sends them back into the hive and keeps them quiet for 14 seconds, and well padded he hardly feels the stings (see [Nutrients and water](#nutrients-and-water)).
 
-**Milk** comes from a goat (not the billy goat), one jug every 3 minutes; her udder is round and full when she has some. There are two ways to get it. The gentle one: be salty. A Prosio full of electrolytes draws the goats, who trot up and stand licking the salt off him and have no mind to butt, and `E` beside a licking goat milks her where she stands. A drink at the pond washes a good part of the salt out of him (25 points, never below 40), which is enough for the goats to lose interest. A goat he hits (the nanny goats or the billy goat: a bump, even one that only pushes it without hurting it, a bash with a held animal, a stone, a spear, or being thrown) will not lick him again, however salty he is, until he has been out of its sight (more than 22 m off) for a minute and a half; seen again before that, it starts forgetting over. The rough one: grab her by the hind legs with `F`, and `E` milks her while he holds on, with the rest of the herd still butting him. There is a third, which takes building: a goat in a pen stands quietly, and `E` beside her milks her.
+**Milk** comes from a goat (not the billy goat), one mug every 3 minutes; her udder is round and full when she has some. There are two ways to get it. The gentle one: be salty. A Prosio full of electrolytes draws the goats, who trot up and stand licking the salt off him and have no mind to butt, and `E` beside a licking goat milks her where she stands. A drink at the pond washes a good part of the salt out of him (25 points, never below 40), which is enough for the goats to lose interest. A goat he hits (the nanny goats or the billy goat: a bump, even one that only pushes it without hurting it, a bash with a held animal, a stone, a spear, or being thrown) will not lick him again, however salty he is, until he has been out of its sight (more than 22 m off) for a minute and a half; seen again before that, it starts forgetting over. The rough one: grab her by the hind legs with `F`, and `E` milks her while he holds on, with the rest of the herd still butting him. There is a third, which takes building: a goat in a pen stands quietly, and `E` beside her milks her.
 
 **Meat** comes from a turkey or a goat that has been knocked out, which now means dead (see [Fighting](#fighting)). The body has to be dragged to the chopping block by the cooking fire, at the pond (or to the stump by his own campfire, wherever he set it up), and `E` there chops it into pieces of raw meat.
 
@@ -250,7 +252,7 @@ What each raw food is made of, in shares of its calories, and what one ripe piec
 | Pumpkin | 400 | 82% | 2% | 7% | 4% | 3% | 2% | 2.09 kg, 12 vitamins, 8 electrolytes |
 | Cabbage | 250 | 55% | 3% | 15% | 20% | 5% | 2% | 1.75 kg, 12 vitamins, 5 electrolytes |
 | Handful of nuts | 180 | 12% | 70% | 12% | 5% |  | 1% | 1.00 kg, 2 electrolytes |
-| Jug of milk | 150 | 8% | 48% | 40% |  | 2% | 2% | 0.72 kg, 3 vitamins, 3 electrolytes |
+| Mug of milk | 150 | 8% | 48% | 40% |  | 2% | 2% | 0.72 kg, 3 vitamins, 3 electrolytes |
 | Comb of honey | 300 | 99% |  |  |  | 1% |  | 1.49 kg, 3 vitamins |
 | Lump of rock salt | 30 |  |  |  |  |  | 100% | 30 electrolytes, and weighs nothing |
 | Wheat (a sheaf), or its flour | 340 | 82% | 4% | 12% | 2% |  |  | 1.78 kg (not edible until baked) |
@@ -292,8 +294,8 @@ So a trip to the forest, the fields, the mill and Turkey Meadow for an apple pie
 | Fried egg | fire | 1 egg, 1 log | 130 | 2% | 60% | 34% |  | 3% | 1% | 0.62 kg, 4 vitamins, 1 electrolytes |
 | Grilled fish | fire | 1 fish, 1 log | 200 |  | 25% | 70% |  | 3% | 2% | 0.95 kg, 6 vitamins, 4 electrolytes |
 | Roast meat | fire | 1 piece of meat, 1 log | 300 |  | 45% | 53% |  | 1% | 1% | 1.47 kg, 3 vitamins, 3 electrolytes |
-| Butter | churn | 2 jugs of milk | 300 |  | 98% | 1% |  | 1% |  | 1.49 kg, 3 vitamins |
-| Cheese | churn | 2 jugs of milk, 1 lump of salt | 330 | 2% | 52% | 37% |  | 1% | 8% | 1.50 kg, 3 vitamins, 26 electrolytes |
+| Butter | churn | 2 mugs of milk | 300 |  | 98% | 1% |  | 1% |  | 1.49 kg, 3 vitamins |
+| Cheese | churn | 2 mugs of milk, 1 lump of salt | 330 | 2% | 52% | 37% |  | 1% | 8% | 1.50 kg, 3 vitamins, 26 electrolytes |
 
 ### What fat changes
 
@@ -385,6 +387,62 @@ The way to pen a turkey or a fox is to lift it over the fence (`F` at the fence)
 **The campfire kit** (4 wood and 4 pebbles; 5 kg and 8 litres in the sack) is a cooking fire of his own, for cooking eggs, fish and meat nearer where he finds them. With it chosen in the sack, `Q` sets it up in front of him wherever there is clear ground (not in the pond, not out in the fog): a ring of stones, a fire with a spit over it, and a stump with a cleaver to chop meat on. It works just like the cooking fire by the pond: the same dishes (a fried egg, grilled fish, roast meat) for the same wood, in the same 4 seconds, and his same skill at the grill makes them richer; and a body is chopped into meat at its stump. Only one stands at a time. `F` at it packs it back into the sack, once nothing is cooking on it and nothing cooked is waiting there. It is saved where it stands.
 
 **The spear** is thrown like a pebble (see [Grabbing and throwing](#grabbing-and-throwing)): wind up, aim with the direction keys, let go; a tap is a weak flick. It weighs 1.5 kg, so it leaves an ordinary Prosio's hoof at the same 22 m/s as a pebble, and costs 6 stamina. At that speed it takes 55 of a turkey's 100 health, 40 of a goat's, 28 of the billy goat's and 60 of a fox's; thrown slower, less, by the square of the speed. The animal is not bowled over: it staggers for most of a second, a fox drops what it stole, and the flock takes fright as at any hard blow. Hit or miss, the spear lies where it came down, stuck in the ground, until `E` picks it up.
+
+## Mixing (the rules alone, for now)
+
+The oven's and the fire's fixed recipes are to give way to a mixing bowl: what comes out will follow from what goes in, from what is done to it, and from how long and how hot (the design is `docs/plans/wd1-mixing-and-book.md`, with `wd1b-quantities-times-effects.md` in place of its sections 1, 3 and 4, and `wd1c-real-food-rules.md` on top of both). So far only the rules exist, in `src/game/mixing.odin`; nothing in the game uses them yet, and the game plays as it did.
+
+**Food is real.** A bowl takes real amounts: grams, millilitres of milk or water, eggs by number, salt by the gram or the pinch (2 g), chili and dill by the pinch; up to 4 kinds and 5 kg. Everything in a bowl is weight, split into water, starch, sugar, fat, protein, fibre, salt, acid, alcohol and the rest, from each food's real calories to the gram (carbs and protein 4 kcal a gram, fat 9, fibre 2), what those calories are made of, its share of water, the share of its carbs that is sugar, and its acid. A food also has how bitter and how hot it is, how much of its protein sets, how many microorganisms it starts with, and marks: a leafy or a firm vegetable, a fruit, grows in the ground (soil on it), wants cooking (potato, aubergine), stays in pieces, mashes into a dough (potato, banana), keeps in its shell (an egg). Besides what is in the sack there are water, chili and twenty foods for the rules only, not yet in the meadow: potato, onion, carrot, beetroot, cucumber, tomato, cauliflower, aubergine, zucchini, radicchio, dill, lemon, orange, peach, pear, plum, cherry, grapes and banana, with their water and calories from ordinary nutrition tables. Every food is made of what it weighs (a rule).
+
+**Before mixing**, it can be **washed** (what grows in the ground loses most of its microorganisms, to a hundredth) or **pressed** (fruit and vegetables to juice).
+
+**The mix** is a **salad** if at least 70% of it is vegetables and fruit, raw, without flour: a dish as it stands, eaten fresh. Otherwise it is named by its free liquid (free water, and half its fat) as a share of its weight: crumbly under 28%, kneadable to 50%, pourable to 72%, runny over that. With flour that is crumbs, a dough, a batter (if enough protein sets) or slop. Without flour, a crumbly or kneadable bowl is **pieces** if it has things in pieces (meat, fish, cheese, nuts) and mush if not; a pourable or runny one is an egg mix if enough sets, a soup if it has pieces, and otherwise mush (pourable) or a drink (runny). **Mixing** has a best time, long for a stiff flour and water dough (9 minutes for 500 g of flour and 300 ml of water), short for a rich batter, shortest for a drink: too short is lumpy, and a batter mixed twice too long is tough.
+
+**Shaping** a dough comes next: a loaf (no shaping), flat (with things on top, a pie), wrapped round a filling, layered with a filling, strips, or small lumps. A thin shape cooks faster than a loaf of the same weight.
+
+**Heating**, at a temperature for a time, browns the outside (by the temperature), warms the middle until it is done (by the time), dries it, and kills microorganisms as the middle warms. The best temperature is lower the more sugar and the more egg in it; the best time longer the more of it and the more water, and shorter for a thin shape. The oven's temperature is chosen; the fire has three heights for the spit (160, 210 and 260 degrees). Cooked right a dough is bread (a pie, with pieces), a flatbread on the fire, and by its shape a pasty, a layered bake, crackers or rolls; a batter a cake (muffins) or a pancake; an egg mix a custard or an omelette; slop porridge; crumbs crackers; pieces baked or grilled. A salad heated dry goes soggy by its share of leaves: all leaves, a **soggy mess**; all firm vegetables, baked or grilled vegetables, which are good. A drink boils away in the oven and runs through the grill; a soup loses its liquid and its pieces are baked or grilled. Too short is raw in the middle; too hot and short, burnt outside (and bitter) and raw inside; too long, dry. Burnt right through, it is **charcoal**, and a dough or a slop dried right out is a **brick**: neither can be eaten.
+
+**Boiling**, in a pot of water on the fire, is at 100 degrees for a time. Nothing burns in a pot; too short is raw in the middle and far too long falls apart, and starch takes up water (noodles come out heavier than they went in). A dough boiled is, by its shape, dumplings (wrapped), noodles (strips or flat), small dumplings (small lumps; a batter too) or a poor boiled lump; slop and crumbs are porridge, an egg a boiled egg, a drink a hot drink (boiled milk is safe), a soup a soup, and pieces or vegetables boiled. Heat drives alcohol off: 20 minutes' boiling leaves a twentieth.
+
+**Leaving to stand**, in a crock for days: its microorganisms grow as anywhere, and as they do, if it is 12 degrees or warmer, in a brine of 1 to 6% salt its sugar turns to acid until the acid stops them: **pickles**, which keep for months (500 g cucumber, 500 ml water and 15 g salt, a week at 20 degrees). With too little salt it rots first; with too much, or in the cold, nothing happens. A sweet drink without salt turns its sugar to alcohol: **wine** (500 g grapes pressed, 10 days); left longer open to the air, its alcohol turns to acid: **vinegar**. Alcohol is a part of the food, in grams. What alcohol and chili do to him comes with the next step.
+
+**Microorganisms** are a count a gram, as a power of ten, from what went in. Kept, they grow, fastest at blood heat, slower in the cold but not stopping (at 4 degrees about a quarter as fast as at 24), and not at all frozen; and slower the less water is free to them, and the more salt, sugar, acid and alcohol in that water. Heat kills them, next to nothing under 60 degrees and quickly over 70. Over 1,000 a gram it is **unsafe**: a tummy ache. Over a million it is **spoiled for good**: it stinks, cooking does not save it, and he will not eat it. A day here is 24 of the rules' hours. They are tuned to how long things really keep: raw meat must be cooked the same day at 24 degrees and keeps two days at 4; grilled meat keeps two days at 24 and a week at 4; raw milk is unsafe as it comes, and safe boiled; an egg keeps two weeks in its shell at 24; salted, pickled or frozen, months. Raw dough is unsafe too, bread baked a third of its time is unsafe in the middle, and an unwashed carrot makes a salad unsafe.
+
+**A dish's effects** are worked out from all that: its safety (the count; and anything that wants cooking, eaten raw, is hard to digest), taste (sweet, salty, fatty, sour, bitter and hot, each good to a point and bad past another, less its flaws), texture and how right it is, how well it keeps, how much of the station's cooking bonus it gets (as much as the mixing and the cooking were right), its weight (all that went in but the water and alcohol driven off, and with the water the pot gave) and its hardness. A cooking burns a little wood, and a dial minute is a quarter of a real second.
+
+**The editor**, when there is one, shows an interval for each setting: wide for a beginner, narrowing to the best for a master, with the best at a place inside it that is the same for the same recipe and never the middle. Every number is in `food.json` (`MIXABLE` and `NUTRIENT_KCAL` in `made_of`, and the `mixing` section), each with a line saying what it is, its unit and which way to turn it, as is every value in `data/tuning` (a rule). The same inputs always give the same result.
+
+To see what any bowls give, mixed and cooked at their best or as you say, washed, pressed, shaped, left to stand, and their microorganisms kept before or after:
+
+```bash
+tools/check.sh mix "500g flour, 300ml water" "250g flour, 2 eggs, 300ml milk"
+```
+
+```bash
+tools/check.sh mix "500g flour, 300ml water" --mix 8 --bake 200 40 --grill low 15
+```
+
+```bash
+tools/check.sh mix "300g cabbage, 100g carrot" --wash
+```
+
+```bash
+tools/check.sh mix "100g flour, 60ml water" --shape wrapped --fill "60g cheese" --boil 8
+```
+
+```bash
+tools/check.sh mix "500g cucumber, 500ml water, 15g salt" --stand 7 20
+```
+
+```bash
+tools/check.sh mix "500g grapes" --press --stand 10 20 --stand 30 20 --air
+```
+
+```bash
+tools/check.sh mix "300g meat" --keep-before 24 4 --keep 48 24
+```
+
+`--keep-before HOURS DEGREES` keeps the foods whole (an egg in its shell) before they go in the bowl; `--keep` keeps what comes out. With `--bake`, `--grill` or `--boil` it shows only those; otherwise what it is as it stands, and in the oven, on the fire and in a pot at their best. With no bowl it lists the foods and their units. `tools/check.sh mix --walk` tries a grid of 467,184 bowls (up to 3 of the 36 foods, each at 4 amounts) and says how many come out as each kind, and the range of their best settings; the check suite walks every bowl of one or two foods and every fifth of three.
 
 ## Nutrients and water
 
@@ -596,6 +654,51 @@ The forest trails are the exception: trees may stand in front of them. The fores
 
 The script has only been run on an Apple-silicon Mac. Odin's raylib bindings also cover Linux and Windows, but those builds have not been tried, and each has to be built on its own system.
 
+### Prosio's editable base mesh
+
+**Bare pig** and the test meadow show the continuous skin rebuilt from the original procedural character. The sculpt has a visible neck, three digits per hand, folded ears, a recessed snout and stronger pectorals at the 70 kg reference weight. Odin moves the skin-tone brow ridges with expressions and folds the ears as Prosio rises and falls. The glossy black eyes have two catchlights each. Arm and leg segments have fixed lengths through actions and body changes. Fat and muscle change limb girth, and the facial shape key fills out the cheeks, jowls and chin. Clothing presets use their procedural body and fitting. The backpack geometry has been removed across outfits.
+
+Open `img2model/output/prosio-base.blend` to edit the skin, paint, weights or separate face details. The file opens in a widened arm bind pose for editing the shoulders and armpits. The `.glb` contains the same rig and geometry for interchange. The Blender workshop in `img2model/output/prosio-workshop/` runs independently from an exported Odin snapshot. Its README covers rebuilding the base and packing skin edits into `assets/prosio_base/`. The game build uses the packed buffers, so Blender is only needed to author or repack them.
+
+To compare with the original body in the meadow, build it with `odin build src/main_desktop -define:PROSIO_LAB=true -define:PROSIO_BASE=false -out:build/desktop/prosio-procedural -o:speed -vet`.
+
+### Alternate modeled Prosio preview
+
+Build the opt-in character variant from the repo root, then select **Bare pig** in the outfit menu.
+
+```bash
+sh tools/gen_data.sh
+mkdir -p build/desktop
+odin build src/main_desktop -define:PROSIO_CHARACTER=true -out:build/desktop/prosio-character -o:speed -vet
+./build/desktop/prosio-character
+```
+
+The painted model uses separate Blender shape keys for body fat, muscle and meal fullness. Fat rounds out the cheeks, arms and legs. Training fills out the upper arms, thighs or chest according to the skills trained. Swallowing expands the belly temporarily based on the size of the meal. Wind and hiccups trigger brief body and facial reactions during play, and Prosio pants when winded.
+
+To preview the six-second tipsy stagger, run this from the repo root and walk around. The preview runs without a save.
+
+```bash
+./build/desktop/prosio-character --outfit 70000000000 --tipsy
+```
+
+The other outfits use the procedural character while their clothing is fitted. Edit the eyes, lids and body shape keys in `img2model/output/prosio-anderson.blend` and use `prosio-anderson.glb` for interchange. To rebuild the game's mesh buffers from Blender, run `blender -b --python tools/pack_prosio.py -- img2model/output/prosio-anderson.blend assets/prosio`.
+
+The preview adapts the pig from Joel Anderson's [Angel Devil](https://sketchfab.com/3d-models/angel-devil-26aec177328d4d5bb4c644e827c523f3) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Prosio uses a relaxed stance, a repainted face and body, a tailored skeleton and new body and facial shape keys.
+
+### Test meadow
+
+From the repo root, build and launch the desktop test meadow.
+
+```bash
+./build_desktop.sh --lab && ./build/desktop/prosio-lab
+```
+
+Drag the sliders to change fat in kilograms, arm and leg training, lungs and camera distance while the meadow runs. Arms and legs use a scale from −100 (wasted) through 0 (ordinary) to +100 (fully trained). **Portrait** brings the eyes and face into view. **Eat pumpkin**, **Wind**, **Hiccup** and **Tipsy** trigger reactions on demand.
+
+The meadow starts near the oven with a goat, a fox, ingredients for one apple pie and a few tools. Spawn other animals, a fallen goat, an apple or a liftable rock as needed. **Go to pond** and **Go to oven** take you into reach of those interactions. Use WASD or arrows to move, F to grab or throw, E to pick up or use, and Q to eat or build. **Hide** or F1 closes the test panel. **Reset** starts a fresh test session. The test meadow uses separate, temporary game and controls state.
+
+For the browser, run `./build_web.sh --lab` and serve `build/web-lab` over HTTP. This uses the same Raylib web library and Emscripten setup as the regular web build.
+
 ### Web
 
 ```bash
@@ -671,6 +774,8 @@ src/
                      up after the game is over; saving
     kitchen.odin     the sack, calories, recipes and plans, the oven, the fire,
                      the churn, the mill, and their menus and pixel icons
+    mixing.odin      the rules of mixing a bowl of things and heating the mix
+                     (not used in the game yet)
     workshop.odin    wood, the workbench, fences, gates and pens, lifting an
                      animal over a fence, scarecrows, the fishing rod and
                      the spear
@@ -706,12 +811,13 @@ src/
     pad_other.odin   (elsewhere raylib reads it, in platform.odin)
     util.odin        small maths helpers and a random number generator
   main_desktop/      entry point for desktop, plus the testing options
-  check/             the tests: the rules the game must keep, and a bot that
-                     plays it (see Testing without playing)
+  check/             the tests: the rules the game must keep, a bot that
+                     plays it (see Testing without playing), and what bowls
+                     mix into (see Mixing)
   main_web/          entry point and page for the browser
 build_desktop.sh
 build_web.sh
-tools/               check.sh (the check suite and autoplay), tour.sh (screenshots)
+tools/               check.sh (the check suite, autoplay and mix), tour.sh (screenshots)
                      and play.sh (a program plays a step at a time);
                      pack_quadrupeds.sh, pack_quadruped.py and quadruped_odin.py
                      (animals from the animal pack, with Blender); pack_trees.sh
@@ -740,7 +846,7 @@ A few choices shape the rest:
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (149 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (220 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -833,12 +939,12 @@ For example, Prosio grabs a turkey from the crowd on frame 12, walks off draggin
 
 ## Tuning
 
-Every number that shapes the game is in the data files in `data/tuning/`, one file to a subject, each in sections. Each value has its name in capitals, its type, the value, and a line saying what it is:
+Every number that shapes the game is in the data files in `data/tuning/`, one file to a subject, each in sections. Each value has its name in capitals, its type, the value, and a line saying what it is, its unit, and which way to turn it (a rule fails if any value has none):
 
 ```json
 "NEED_LOW": {"f32": 15, "about": "below this he lacks it"}
 "WALK_SPEED": {"Vec2": [7.2, 2.6], "const": true, "about": "how fast he walks, m/s"}
-"TREE_HEIGHT": {"[Tree_Species]f32": {"Broadleaf": 5.4, "Apple": 4.6, "Blossom": 5.2, "Pine": 5.8}}
+"TREE_HEIGHT": {"[Tree_Species]f32": {"Broadleaf": 5.4, "Apple": 4.6, "Blossom": 5.2, "Pine": 5.8}, "about": "how tall each kind of tree stands, metres"}
 ```
 
 The game never reads these files: `tools/gen_data` (run by the build scripts and `tools/check.sh`) turns each into `src/game/gen_<subject>.odin`, so after editing one, build as usual. A mistake in a file stops the build with its line number, and a misspelled name stops it at the code that uses it. Do not edit the `gen_` files. Inside a value, a word with a capital and small letters is a name from the game's lists (`"Carbs"`), a key in small letters is a field (`"keys"`), a name in capitals is another value (`"FAT_MAX"`), and a name from a list that is all capitals is written with a dot (`".RT"`, the right trigger). A table may be marked `"partial": true` when it leaves some entries out.
@@ -847,7 +953,7 @@ The game never reads these files: `tools/gen_data` (run by the build scripts and
 |---|---|
 | `prosio.json` | Prosio himself: his fat and its zones (`fat`); his size, stamina and the time a bump, a stoop and a jump take (`moving`); what gets worse with fat, lean against fat: walking speed, sprint boost and drain, bump speed and cost, jump cost, stamina coming back (`lean_to_fat`); what everything burns, and what a load does (`burning`); bruises (`bruises`); his muscles, how traits fade and waste (`muscle`); what each thing he does trains (`training`); what each trait is worth (`skills`); what waking up costs (`waking_up`); his shape (`shape`) |
 | `diet.json` | His needs: how big each store is (`stores`); where each level starts, where lacking, full and too much begin, how fast levels fall, thirst, drinking and licked salt (`levels`); what full and lacking do (`full_and_lacking`); what too much does (`too_much`) |
-| `food.json` | The sack and its size, calories to a kilogram (`sack`); each thing's weight, room and calories (`things`); what each food is made of (`made_of`); how fast food goes off, and a body (`going_off`); the oven, fire, churn, bench, mill and campfire: time, cooking bonus, skill, size, and every recipe and plan (`making`) |
+| `food.json` | The sack and its size, calories to a kilogram (`sack`); each thing's weight, room and calories (`things`); what each food is made of, real calories to the gram, and every food a mixing bowl takes, with its water, sugar, acid, marks and microorganisms (`made_of`); the rules of mixing, shaping, heating, boiling, standing in a crock and microorganisms (`mixing`); how fast food goes off, and a body (`going_off`); the oven, fire, churn, bench, mill and campfire: time, cooking bonus, skill, size, and every recipe and plan (`making`) |
 | `animals.json` | Turkeys, goats, the billy goat and foxes: weight, size, speed, grip, meat, coming back, how far they follow (`all_animals`); eggs, milk, goats he hit, foxes (`eggs_milk_and_the_fox`); swimming, drowning, sinking (`swimming`); health and blows (`health_and_blows`); bold and wary animals, a frightened flock (`boldness_and_alarm`); the animal-pack goats' and fox's walk, gallop, turning and head (`pack_animals_moving`); their body following a turn, giving way, struggling (`pack_animals_body`); a body dragged along the ground (`dragging`); what a blow does: push, stumble, fall, launch, tumble, get up (`impacts`, `impact_pose`) |
 | `critters.json` | Fish (`fish`); rabbits and crows (`pests`); bees and hives (`bees`) |
 | `handling.json` | Throwing stones and pebbles, aiming, winding up (`throwing`); grabbing, lifting, holding, dragging, rock weight (`holding`); a body skipping along (`skipping`); swinging, slams and bashes (`bashing`); how rocks are drawn (`rocks`) |

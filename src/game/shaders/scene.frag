@@ -2,7 +2,9 @@ VARY vec3 normal;
 VARY vec3 position;
 VARY vec3 local;
 VARY vec2 uv;
+VARY vec3 meshPaint;
 uniform vec4 colDiffuse;
+uniform int useMeshPaint;
 uniform int surface;    // see Surface in platform.odin
 uniform float hitFlash;
 uniform float fade;     // 0 = solid, 1 = see-through
@@ -155,6 +157,7 @@ void main() {
     vec3 sun = normalize(vec3(-.62, .89, .43)); // must match SUN in platform.odin
     float light = dot(n, sun);
     vec3 pigment = colDiffuse.rgb;
+    if (useMeshPaint != 0) pigment *= meshPaint;
 
     if (surface == 2) {
         // Leaves: clumps of lighter and darker foliage.
@@ -205,5 +208,12 @@ void main() {
     float contact = mix(.8, 1.0, steps(smoothstep(.0, .5, position.y), 2.0, dither));
     vec3 color = pigment * tint * contact + bounce + sky;
     color = floor(color * 14.0 + .5) / 14.0;
+    if (useMeshPaint != 0) {
+        // Keep the painted skin matte under the meadow's strong highlights.
+        vec3 matte = mix(vec3(.57, .58, .72), vec3(1.01, .95, .90),
+                         smoothstep(-.52, .91, lit));
+        color = pigment * matte * contact + .55 * (bounce + sky);
+        color = floor(color * 22.0 + .5) / 22.0;
+    }
     OUT_COLOR = vec4(mix(mix(color, vec3(1.0, .89, .68), hitFlash), FOG_COLOR, mist), colDiffuse.a);
 }

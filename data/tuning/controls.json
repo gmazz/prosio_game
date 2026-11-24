@@ -39,6 +39,6 @@
   "controller": {
     "STICK_DEAD": {"f32": 0.2, "about": "the stick's middle, where it does nothing"},
     "STICK_PRESS": {"f32": 0.5, "about": "how far the stick goes before it counts as a direction in menus"},
-    "TRIGGER_PRESS": {"f32": 0.4}
+    "TRIGGER_PRESS": {"f32": 0.4, "about": "how far a controller trigger goes in before it counts as pressed, 0 to 1"}
   }
 }

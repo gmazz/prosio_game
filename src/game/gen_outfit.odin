@@ -7,11 +7,14 @@ package game
 // ---- outfits ----
 // Each whole outfit: what it changes from the explorer's (anything not given stays as the explorer has it).
 
+// each outfit by name, with what it changes from the explorer's
 PRESETS := [Preset]Outfit{.Explorer = {}, .Metalhead = {hair = .Long_Black, hat = .None, earrings = .Both, neck = .None, shirt = .Band_Tee, over = .Leather, legs = .Leather, feet = .Black_Boots}, .Eighties_Nerd = {hair = .Bowl, hat = .None, glasses = .Nerd, neck = .Bow_Tie, shirt = .Computer_Tee, legs = .Cords, feet = .Sneakers}, .Keynote = {hair = .Grey, hat = .None, glasses = .Round, face = .Stubble, neck = .None, shirt = .Turtleneck, legs = .Jeans, feet = .Trainers}, .Aviator = {hair = .None, hat = .Flying_Cap, glasses = .Sunglasses, face = .Moustache, neck = .Scarf, shirt = .White_Shirt, over = .Trench, legs = .Cords, feet = .Boots}, .Space_Pirate = {hair = .Shaggy, hat = .None, glasses = .Eyepatch, face = .Scar, neck = .None, shirt = .Pirate_Top, over = .Cape, legs = .Leather, feet = .Black_Boots}, .Chef = {hair = .None, hat = .Chef_Hat, face = .Moustache, neck = .Kerchief, shirt = .Chef_Jacket, over = .Apron, legs = .Checks, feet = .Sneakers}, .Bare = {hair = .Tuft, hat = .None, neck = .None, shirt = .None, legs = .None}}
 
 // ---- clothes ----
 // how much bigger each layer of clothes is than what is under it
 LAYER :: f32(0.02)
+// what each shirt is like: its colour, its hem's colour, its sleeves, whether it covers his belly, and its surface
 SHIRT_LOOK := [Shirt]Shirt_Look{.Jacket = {color = COLOR_SHIRT, hem = {175, 115, 60, 255}, sleeves = .Short, long = false, surface = .Jacket}, .None = {}, .T_Shirt = {color = TSHIRT, hem = {172, 58, 50, 255}, sleeves = .Short, long = false, surface = .Solid}, .Sailor = {color = SAILOR, hem = NAVY, sleeves = .Short, long = false, surface = .Stripes}, .Band_Tee = {color = TEE_BLACK, hem = TEE_BLACK, sleeves = .Short, long = true, surface = .Solid}, .Computer_Tee = {color = TEE_CREAM, hem = TEE_CREAM, sleeves = .Short, long = true, surface = .Solid}, .Turtleneck = {color = TEE_BLACK, hem = TEE_BLACK, sleeves = .Long, long = true, surface = .Solid}, .White_Shirt = {color = SAILOR, hem = SAILOR, sleeves = .Long, long = true, surface = .Solid}, .Pirate_Top = {color = LEATHER, hem = LEATHER, sleeves = .Long, long = true, surface = .Solid}, .Chef_Jacket = {color = SAILOR, hem = SAILOR, sleeves = .Long, long = true, surface = .Solid}}
+// what each top worn over the shirt is like: its colour, and its sleeves
 OVER_LOOK := [Over]Over_Look{.None = {}, .Gilet = {color = GILET, sleeves = .None}, .Coat = {color = COAT, sleeves = .Long}, .Leather = {color = LEATHER, sleeves = .Long}, .Trench = {color = TRENCH, sleeves = .Long}, .Cape = {color = LEATHER, sleeves = .None}, .Apron = {color = SAILOR, sleeves = .None}}
 

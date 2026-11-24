@@ -21,5 +21,6 @@ CONTROLS_WAIT :: f32(6)
 STICK_DEAD :: f32(0.2)
 // how far the stick goes before it counts as a direction in menus
 STICK_PRESS :: f32(0.5)
+// how far a controller trigger goes in before it counts as pressed, 0 to 1
 TRIGGER_PRESS :: f32(0.4)
 

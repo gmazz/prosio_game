@@ -2,15 +2,15 @@
   "_about": "The meadow: its size and layout, the fog round it, what grows and how fast, the forest and its trees, and how much room the game keeps for things.",
   "meadow": {
     "_about": "Where everything is, in metres; home is at 0, 0.",
-    "GRAVITY": {"f32": 25},
+    "GRAVITY": {"f32": 25, "about": "how fast falling things speed up, m/s each second; raise it and jumps and throws come down sooner"},
     "WORLD_HALF": {
       "Vec2": [100, 70],
       "const": true,
       "about": "The meadow reaches this far from the centre, inside a fence. Prosio's home with its oven is in the middle; each kind of food grows in its own part of the meadow (see REGIONS), so he has to go out and fetch it."
     },
-    "HOME": {"Vec2": [0, 0], "const": true},
+    "HOME": {"Vec2": [0, 0], "const": true, "about": "where his home is, in metres: the middle of the meadow"},
     "POND": {"Vec2": [-26, -48], "const": true, "about": "The pond: the only water to drink. It is round, and too deep to walk into."},
-    "POND_RADIUS": {"f32": 7.5},
+    "POND_RADIUS": {"f32": 7.5, "about": "how far the pond reaches from its middle, in metres"},
     "PATH_ENDS": {
       "[Region_Kind]Vec2": {
         "Home": "HOME",
@@ -37,7 +37,7 @@
       "f32": -2.5,
       "about": "Beyond the edge of the meadow lies a thick dark fog: it starts FOG_START metres past the edge and is solid FOG_THICK metres further. Nobody walks into it, but an animal thrown far enough flies into it and is lost: it comes back later at home, like any other that is gone."
     },
-    "FOG_THICK": {"f32": 6},
+    "FOG_THICK": {"f32": 6, "about": "metres from where the fog starts to where it is solid"},
     "FOG_LOST": {"f32": 3, "about": "how far past the edge a flying animal is lost (or as soon as it comes down beyond it)"}
   },
   "growing": {
@@ -85,7 +85,7 @@
     "SALT_ROCKS": {"untyped": 4, "about": "big rocks in the goat hills with rock salt growing on them (salt is no energy, so it has no budget)"},
     "MAX_SALT": {"untyped": 2, "about": "lumps on one of them"},
     "SALT_REGROW": {"Vec2": [300, 600], "const": true, "about": "seconds until another lump has grown"},
-    "SALT_ROCK_RADIUS": {"f32": 1.0},
+    "SALT_ROCK_RADIUS": {"f32": 1.0, "about": "how big a salt rock is on the ground, in metres"},
     "PEBBLE_PATCHES": {
       "[Region_Kind]int": {"Home": 1, "Forest": 1, "Fields": 1, "Garden": 0, "Turkeys": 1, "Hills": 3, "Pond": 2, "Bees": 0},
       "about": "Patches of pebbles for throwing: some in the goat hills, by the pond, and one each near home, the turkeys and the fields."
@@ -93,7 +93,7 @@
     "MAX_PEBBLES": {"untyped": 6, "about": "in one patch"},
     "PEBBLE_HANDFUL": {"untyped": 3, "about": "taken at one stoop"},
     "PEBBLE_REGROW": {"Vec2": [30, 70], "const": true, "about": "seconds until another has worked its way up"},
-    "PEBBLE_PATCH_RADIUS": {"f32": 0.45}
+    "PEBBLE_PATCH_RADIUS": {"f32": 0.45, "about": "how big a patch of pebbles is, in metres"}
   },
   "forest": {
     "_about": "Shaking a tree: standing right at it (no further than TREE_SHAKE_REACH from its trunk) and facing it (within TREE_SHAKE_ANGLE either side) he takes hold of it with both hooves and shakes it, as hard as his arms are strong (STRONG and NOODLE_ARMS in prosio.json, skills). The crown shakes that much, and that many apples come down.",
@@ -105,13 +105,13 @@
     "FOREST_SPACING": {"f32": 3.4, "about": "each at least this far from the next,"},
     "FOREST_EDGE": {"f32": 0.25, "about": "thinning to this share of the trees at its edge"},
     "FOREST_STUMPS": {"untyped": 36, "about": "mossy stumps and fallen logs in the forest"},
-    "STUMP_RADIUS": {"f32": 0.5},
+    "STUMP_RADIUS": {"f32": 0.5, "about": "how big a stump or a fallen log is on the ground, in metres"},
     "CLEARINGS": {
       "[3]Vec2": [[-50, -14], [-71, 8], [-73, -36]],
       "about": "The forest's clearings, and the trail that joins them to the path from home (PATH_ENDS[.Forest])."
     },
-    "CLEARING_RADIUS": {"f32": 8},
-    "TRAILS": {"[3][2]Vec2": [[[-30, -8], [-50, -14]], [[-50, -14], [-71, 8]], [[-50, -14], [-73, -36]]]},
+    "CLEARING_RADIUS": {"f32": 8, "about": "how far each clearing reaches from its middle, in metres"},
+    "TRAILS": {"[3][2]Vec2": [[[-30, -8], [-50, -14]], [[-50, -14], [-71, 8]], [[-50, -14], [-73, -36]]], "about": "the forest's trails, each a straight run from one point to another, in metres"},
     "TREE_SHAKE_REACH": {"f32": 0.6, "about": "metres between him and the trunk"},
     "TREE_SHAKE_ANGLE": {"f32": "math.PI / 6", "about": "30 degrees either side of where he faces"},
     "TREE_SHAKE_TIME": {"f32": 0.9, "about": "seconds he shakes it"},
@@ -123,14 +123,15 @@
       "[Tree_Species]f32": {"Broadleaf": 5.4, "Apple": 4.6, "Blossom": 5.2, "Pine": 5.8},
       "about": "Each kind's height (metres, before a tree's own size), how wide its crown is (its radius), and its two models."
     },
-    "TREE_CROWN": {"[Tree_Species]f32": {"Broadleaf": 2.0, "Apple": 1.7, "Blossom": 1.9, "Pine": 1.35}},
+    "TREE_CROWN": {"[Tree_Species]f32": {"Broadleaf": 2.0, "Apple": 1.7, "Blossom": 1.9, "Pine": 1.35}, "about": "how wide each kind's crown is: its radius, in metres"},
     "TREE_PICK": {
       "[Tree_Species][]Tree_Model_Kind": {
         "Broadleaf": ["Broad1", "Broad2", "Broad3", "Broad4", "Common1", "Common2", "Birch1", "Birch2"],
         "Apple": ["Round1", "Round2"],
         "Blossom": ["Round3", "Broad1"],
         "Pine": ["Pine1", "Pine2", "Pine3", "Pine4", "Pine5"]
-      }
+      },
+      "about": "the models each kind is drawn from; a tree takes one of them by its number"
     },
     "TREE_WIDTH": {"f32": 0.12, "about": "how much wider or narrower a tree may be than its kind,"},
     "TREE_LEAN": {"f32": 0.06, "about": "how far it may lean (radians),"},
@@ -142,11 +143,11 @@
   },
   "limits": {
     "_about": "How many of each thing the game keeps room for (it allocates nothing while playing). Raise one only if the meadow needs more.",
-    "MAX_ROUNDS": {"untyped": 640},
-    "MAX_FOODS": {"untyped": 360},
-    "MAX_PARTICLES": {"untyped": 256},
-    "MAX_DECOR": {"untyped": 5000},
-    "MAX_FIELDS": {"untyped": 8}
+    "MAX_ROUNDS": {"untyped": 640, "about": "round things standing in the world at once, a count: trees, rocks, bushes, hives, stations and what he builds"},
+    "MAX_FOODS": {"untyped": 360, "about": "food growing or lying about at once"},
+    "MAX_PARTICLES": {"untyped": 256, "about": "bits of dust, sparks and splashes in the air at once; when it is full the oldest goes"},
+    "MAX_DECOR": {"untyped": 5000, "about": "grass tufts, flowers and ferns, there only to look at"},
+    "MAX_FIELDS": {"untyped": 8, "about": "fields of crops"}
   },
   "plants": {
     "_about": "How big the grass clumps, ferns, low bushes and fallen logs are drawn.",

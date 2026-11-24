@@ -5,6 +5,7 @@ package check
 // keep them passing.
 
 import game "../game"
+import "core:encoding/json"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
@@ -43,6 +44,9 @@ run_rules :: proc() -> int {
 	rules_kitchen()
 	rules_animals()
 	rules_fox_rig()
+	rules_prosio_character()
+	when game.PROSIO_BASE { rules_prosio_base() }
+	rules_test_meadow()
 	rules_fighting()
 	rules_impacts()
 	rules_stones()
@@ -54,9 +58,53 @@ run_rules :: proc() -> int {
 	rules_shake_salt_fog()
 	rules_campfire()
 	rules_undergrowth()
+	rules_mixing()
 	rules_text()
 	fmt.printf("\n%d passed, %d failed\n", passed, failed)
 	return failed
+}
+
+rules_test_meadow :: proc() {
+	section("test meadow")
+	fresh()
+	check("test controls take effect only in the test meadow", !game.lab_act(.Goat))
+	game.g.opts.lab = true
+	game.new_game()
+	p := &game.g.prosio
+	first_kg := p.kg
+	game.lab_adjust(.Fat, .71)
+	game.lab_adjust(.Arms, 1)
+	game.lab_adjust(.Legs, 0)
+	game.lab_adjust(.Lungs, .75)
+	check("test sliders update the actual body model and weight",
+		p.kg > first_kg && p.kg == game.body_kg() && p.trait[.Arms] == 1 &&
+		p.trait[.Legs] == -1 && p.trait[.Lungs] == .75 && p.fat > 70)
+	game.g.enemy_count = 0
+	fallen := game.lab_act(.Fallen_Goat)
+	step(1, {}, {.Grab})
+	check("a test goat can be grabbed with the real game controls",
+		fallen && p.carry == .Enemy && game.g.enemies[p.carry_index].ko)
+	game.new_game()
+	game.g.enemy_count = 0
+	apple := game.lab_act(.Apple)
+	first_apples := p.sack[.Apple]
+	step(1, {}, {.Action})
+	check("the test apple can be gathered and the sample meal can be eaten",
+		apple && p.sack[.Apple] > first_apples &&
+		game.lab_act(.Eat_Pumpkin) && p.meal_target > 0)
+	game.new_game()
+	game.g.enemy_count = 0
+	rock := game.lab_act(.Rock)
+	target, close := game.grab_target()
+	check("the test rock enters the normal grab system", rock && close && target.kind == .Rock)
+	oven := game.lab_act(.Oven)
+	step(1, {}, {.Action})
+	check("the oven shortcut puts Prosio in reach of the regular cooking menu", oven && game.scene == .Oven)
+	game.forced_pressed = {.Action}
+	game.update_cook_menu(1.0 / 60)
+	game.forced_pressed = {}
+	check("the test meadow starts with enough ingredients to bake an apple pie", game.g.stations[.Oven].baking)
+	fresh()
 }
 
 // Muscle that comes back, where his weight goes, and the weight a test asks for.
@@ -1081,7 +1129,7 @@ rules_weight :: proc() {
 	for _ in 0 ..< room {
 		game.sack_add(.Pumpkin, 400)
 	}
-	check("the sack holds 60 litres: fifteen pumpkins fill it", room == 15 && game.sack_room(.Mushroom) == 0 && game.sack_room(.Apple) == 0 && abs(game.total_kg() - p.kg - 45) < 0.01, fmt.tprintf("room for %d pumpkins; then for %d mushrooms; carrying %.1f kg", room, game.sack_room(.Mushroom), game.total_kg() - p.kg))
+	check("the sack holds 60 litres: fifteen pumpkins fill it", room == 15 && game.sack_room(.Mushroom) == 0 && game.sack_room(.Apple) == 0 && abs(game.total_kg() - p.kg - 15 * game.ITEM_KG[.Pumpkin]) < 0.01, fmt.tprintf("room for %d pumpkins; then for %d mushrooms; carrying %.1f kg", room, game.sack_room(.Mushroom), game.total_kg() - p.kg))
 
 	// Roomy enough for a whole pen at once: sixteen logs, then the eight
 	// pieces of fence they make, with food beside them.
@@ -3144,4 +3192,438 @@ looks_like_text :: proc(s: string) -> bool {
 		}
 	}
 	return letter && mark
+}
+
+
+// The mixing, heating and standing rules (src/game/mixing.odin), alone:
+// nothing in the game uses them yet. The reference bowls of the designs come
+// out as they say (docs/plans/wd1b-quantities-times-effects.md, section 9,
+// and docs/plans/wd1c-real-food-rules.md, section 7), the best settings
+// move the right way, every food is made of what it weighs, and over a grid
+// of bowls: the same inputs give the same result, weight in is weight out
+// (less what was driven off, plus what the pot gave), only charcoal and a
+// brick cannot be eaten, nothing cooked at its best is unsafe, and the
+// editor's intervals hold the best, never at their middle. Every value in
+// the tuning files says what it is.
+rules_mixing :: proc() {
+	section("mixing")
+	DOUGH :: "500g flour, 300ml water"
+	BATTER :: "250g flour, 2 eggs, 300ml milk"
+	EGGS :: "3 eggs, 100ml milk"
+
+	dough := bowl(DOUGH)
+	d_oven, d_fire := at_best(dough, .Bake), at_best(dough, .Grill)
+	check("500 g flour and 300 ml water is a dough: bread in the oven, flatbread on the fire", dough.kind == .Dough && d_oven.kind == .Bread && d_fire.kind == .Flatbread && !d_oven.unsafe && !d_fire.unsafe, fmt.tprintf("%v, %v, %v", dough.kind, d_oven.kind, d_fire.kind))
+	pie := bowl("500g flour, 300ml water, 100g cheese")
+	check("with 100 g cheese it is a dough, and a pie", pie.kind == .Dough && at_best(pie, .Bake).kind == .Pie, fmt.tprintf("%v, %v", pie.kind, at_best(pie, .Bake).kind))
+	long_fire, long_oven := at_best(dough, .Grill, 3), at_best(dough, .Bake, 3)
+	check("the dough cooked three times too long is charcoal on the fire and a brick in the oven, and neither can be eaten", long_fire.kind == .Charcoal && long_oven.kind == .Brick && long_fire.inedible && long_oven.inedible && long_fire.kcal == 0 && long_oven.kcal == 0, fmt.tprintf("%v, %v", long_fire.kind, long_oven.kind))
+	scorched := at_best(dough, .Bake, 1.0 / 3, 100)
+	check("the dough baked 100 degrees too hot for a third of the time is bread burnt outside and raw in the middle: unsafe", scorched.kind == .Bread && scorched.flaws >= {.Burnt_Crust, .Raw_Middle} && scorched.unsafe, fmt.tprintf("%v, %v, microbes %.1f", scorched.kind, scorched.flaws, scorched.microbes))
+	short := at_best(dough, .Bake, 1.0 / 3)
+	check("baked a third of the time it is bread, raw in the middle: unsafe", short.kind == .Bread && .Raw_Middle in short.flaws && .Burnt_Crust not_in short.flaws && short.unsafe, fmt.tprintf("%v, %v, microbes %.1f", short.kind, short.flaws, short.microbes))
+	slop := bowl("250g flour, 1000ml water")
+	check("250 g flour and 1000 ml water is slop: porridge on the fire", slop.kind == .Slop && at_best(slop, .Grill).kind == .Porridge, fmt.tprintf("%v, %v", slop.kind, at_best(slop, .Grill).kind))
+	crumbs := bowl("500g flour")
+	check("500 g flour is crumbs", crumbs.kind == .Crumbs, fmt.tprint(crumbs.kind))
+	batter := bowl(BATTER)
+	check("250 g flour, 2 eggs and 300 ml milk is a batter: a cake, a pancake", batter.kind == .Batter && at_best(batter, .Bake).kind == .Cake && at_best(batter, .Grill).kind == .Pancake, fmt.tprintf("%v, %v, %v", batter.kind, at_best(batter, .Bake).kind, at_best(batter, .Grill).kind))
+	overmixed := bowl(BATTER, minutes = batter.best_minutes * 3)
+	tough := at_best(overmixed, .Bake)
+	check("the batter mixed three times too long makes a tough cake", tough.kind == .Cake && .Tough in tough.flaws && tough.consistency < 0.6, fmt.tprintf("%v, %v, consistency %.2f", tough.kind, tough.flaws, tough.consistency))
+	muffins := bowl("250g flour, 2 eggs, 300ml milk, 150g berries")
+	check("with 150 g berries it is a batter, and muffins", muffins.kind == .Batter && at_best(muffins, .Bake).kind == .Muffins, fmt.tprintf("%v, %v", muffins.kind, at_best(muffins, .Bake).kind))
+	eggs := bowl(EGGS)
+	check("3 eggs and 100 ml milk is an egg mix: a custard, an omelette", eggs.kind == .Egg_Mix && at_best(eggs, .Bake).kind == .Custard && at_best(eggs, .Grill).kind == .Omelette, fmt.tprintf("%v, %v, %v", eggs.kind, at_best(eggs, .Bake).kind, at_best(eggs, .Grill).kind))
+	curdled := at_best(eggs, .Bake, 1, 40)
+	check("baked 40 degrees too hot it curdles: a custard of poor consistency", curdled.kind == .Custard && .Curdled in curdled.flaws && curdled.consistency <= 0.5, fmt.tprintf("%v, %v, consistency %.2f", curdled.kind, curdled.flaws, curdled.consistency))
+	drink, honey, soup := bowl("1 egg, 2000ml water"), bowl("300g honey"), bowl("400g fish, 500ml milk")
+	check("1 egg in 2000 ml water is a drink, 300 g honey mush, 400 g fish in 500 ml milk a soup", drink.kind == .Drink && honey.kind == .Mush && soup.kind == .Soup, fmt.tprintf("%v, %v, %v", drink.kind, honey.kind, soup.kind))
+	chili := bowl("500g flour, 300ml water, 3 pinches chili")
+	hot := at_best(chili, .Bake)
+	carried := 3 * game.PINCH_G * game.MIXABLE[.Chili].heat / hot.grams * 1000
+	check("with 3 pinches of chili it is bread, its heat carried through", hot.kind == .Bread && hot.heat > 0 && abs(hot.heat - carried) < 0.01, fmt.tprintf("%v, chili %.2f a kg, of %.2f", hot.kind, hot.heat, carried))
+
+	// Kept in the warm and the cold (wd1b's "a day in the warm" is three
+	// days at 24 degrees now: Gio's table keeps grilled meat two).
+	meat := at_best(bowl("300g meat"), .Grill)
+	warm := game.microbes_grown(meat.microbes, 24, 3 * game.DAY_HOURS, meat.keeping)
+	cold := game.microbes_grown(meat.microbes, 4, 3 * game.DAY_HOURS, meat.keeping)
+	check("300 g meat grilled, kept three days at 24 degrees, is unsafe; kept at 4, safe", !meat.unsafe && warm > game.UNSAFE_MICROBES && cold <= game.UNSAFE_MICROBES, fmt.tprintf("grilled %.1f, three days warm %.1f, cold %.1f", meat.microbes, warm, cold))
+	salted := at_best(bowl("300g meat, 10 pinches salt"), .Grill)
+	plain_h, salted_h := game.hours_until_unsafe(meat.microbes, 20, meat.keeping), game.hours_until_unsafe(salted.microbes, 20, salted.keeping)
+	check("with 10 pinches of salt it keeps three times as long or more", salted_h >= 3 * plain_h, salted_h > 1e6 ? fmt.tprintf("for good; plain %.0f hours", plain_h) : fmt.tprintf("%.0f hours, plain %.0f", salted_h, plain_h))
+	jam := at_best(bowl("200g berries, 200g honey"), .Bake)
+	berries := bowl("200g berries")
+	jam_h, berries_h := game.hours_until_unsafe(jam.microbes, 20, jam.keeping), game.hours_until_unsafe(berries.microbes, 20, game.mix_keeping(berries))
+	check("200 g berries and 200 g honey, heated, keep ten times as long as berries or more", jam_h >= 10 * berries_h, jam_h > 1e6 ? fmt.tprintf("never go off; berries in %.0f hours", berries_h) : fmt.tprintf("%.0f hours, berries %.0f", jam_h, berries_h))
+	old := bowl("300g meat", game.Prep{kept_hours = game.DAY_HOURS / 2, kept_temp = 24})
+	saved := at_best(old, .Grill)
+	check("300 g meat left raw half a day at 24 degrees, then grilled well, is safe again", old.microbes > game.UNSAFE_MICROBES && !old.spoiled && !saved.unsafe && !saved.spoiled, fmt.tprintf("%.1f before, %.1f after", old.microbes, saved.microbes))
+
+	// The best settings move the right way.
+	more := bowl("1000g flour, 600ml water")
+	wetter := bowl("500g flour, 340ml water")
+	sweeter := bowl("250g flour, 2 eggs, 300ml milk, 100g honey")
+	_, t_dough := game.best_settings(dough, .Bake)
+	_, t_more := game.best_settings(more, .Bake)
+	_, t_wetter := game.best_settings(wetter, .Bake)
+	check("more of the same bowl takes longer; more water takes longer; more sugar wants less heat; a dough's best mixing is three times a batter's or more", t_more > t_dough && t_wetter > t_dough && game.best_temperature(sweeter) < game.best_temperature(batter) && dough.best_minutes >= 3 * batter.best_minutes, fmt.tprintf("%.0f min, twice as much %.0f, wetter %.0f; %.0f degrees, sweeter %.0f; mixing %.1f and %.1f", t_dough, t_more, t_wetter, game.best_temperature(batter), game.best_temperature(sweeter), dough.best_minutes, batter.best_minutes))
+
+	rules_real_food()
+
+	refusals := [?]struct {
+		bowl: string,
+		why:  game.Bowl_Refusal,
+	} {
+		{"", .Empty},
+		{"100g flour, 100ml water, 1 egg, 100ml milk, 1 pinch salt", .Too_Many_Kinds},
+		{"3000g flour, 2500ml water", .Too_Much},
+		{"0g flour, 100ml water", .No_Amount},
+		{"100g flour, 100ml water, 50g flour", .Twice},
+		{"1.5 eggs, 100ml milk", .Not_Whole},
+		{"500g cucumber, 500ml water, 15g salt", .None},
+	}
+	wrong: string
+	for r in refusals {
+		parts: [MIX_MOST_PARTS]game.Bowl_Part
+		n, _ := parse_bowl(r.bowl, &parts)
+		if _, why := game.mix_bowl(parts[:n], {minutes = 1}); why != r.why {
+			wrong = fmt.tprintf("\"%s\" gave %v", r.bowl, why)
+		}
+	}
+	check(fmt.tprintf("a bowl takes at most %d kinds of food and %.0f g, whole eggs (salt by the gram), and nothing twice", game.BOWL_KINDS, game.BOWL_MOST_G), wrong == "", wrong)
+	shapes := [?]struct {
+		bowl:  string,
+		shape: game.Dough_Shape,
+		fill:  bool,
+		why:   game.Shape_Refusal,
+	} {
+		{"300g meat", .Flat, false, .Not_Dough},
+		{DOUGH, .Wrapped, false, .Needs_Filling},
+		{DOUGH, .Strips, true, .No_Filling_Here},
+		{DOUGH, .Flat, true, .None},
+	}
+	wrong = ""
+	cheese := bowl("60g cheese")
+	for s in shapes {
+		_, why := game.shape_mix(bowl(s.bowl), s.shape, s.fill ? &cheese : nil)
+		if why != s.why {
+			wrong = fmt.tprintf("%s, %v: %v", s.bowl, s.shape, why)
+		}
+	}
+	check("only a dough takes a shape; wrapped and layered need a filling, a loaf, strips and lumps take none", wrong == "", wrong)
+
+	walk: Mix_Walk
+	each_bowl(walk_mixing, &walk)
+	missing: [dynamic]game.Mix_Kind
+	missing.allocator = context.temp_allocator
+	for count, kind in walk.kinds {
+		if count == 0 {
+			append(&missing, kind)
+		}
+	}
+	check(fmt.tprintf("every one of the %d kinds of mix comes of some bowl of the grid", len(game.Mix_Kind)), len(missing) == 0, len(missing) > 0 ? fmt.tprintf("never: %v", missing[:]) : fmt.tprintf("%d bowls", walk.bowls))
+	check("the same bowl, mixed and cooked twice or put in the other way round, gives the same thing", walk.unsteady == "", walk.unsteady)
+	check("weight in is weight out, less the water and alcohol driven off and what ran away, plus the water the pot gave; and what it is made of adds up to its weight", walk.unweighed == "", walk.unweighed)
+	check("charcoal and a brick cannot be eaten, and have no calories but their weight; nothing else is inedible, and nothing in a pot burns", walk.inedible == "" && walk.charcoal > 0 && walk.bricks > 0, walk.inedible != "" ? walk.inedible : fmt.tprintf("%d charcoal, %d bricks", walk.charcoal, walk.bricks))
+	check("nothing mixed and cooked at its best is unsafe, hard to digest, burnt or a brick", walk.unsafe == "", walk.unsafe)
+	check("the editor's interval holds the best, never at its middle, narrows with skill, and is the same for the same recipe", walk.interval == "", walk.interval)
+}
+
+// A bowl mixed at its best (or so long), prepared so.
+bowl :: proc(text: string, prep: game.Prep = {}, minutes: f32 = -1) -> game.Mix {
+	parts: [MIX_MOST_PARTS]game.Bowl_Part
+	n, _ := parse_bowl(text, &parts)
+	return mixed(parts[:n], prep, minutes)
+}
+
+// Cooked at its best, times so long, at so many degrees over.
+at_best :: proc(m: game.Mix, how: game.Heating, longer: f32 = 1, hotter: f32 = 0) -> game.Dish {
+	t, minutes := game.best_settings(m, how)
+	return game.cook(m, how, t + hotter, minutes * longer, 1)
+}
+
+// Real food (docs/plans/wd1c-real-food-rules.md): what each food is made of,
+// salads and pieces, washing, shaping, boiling, standing, and how long
+// things keep.
+rules_real_food :: proc() {
+	// Every food is made of what it weighs.
+	worst, emptiest: game.Mixable
+	worst_by, empty_by: f32
+	for food in game.Mixable {
+		if by := game.food_overfull(food); by > worst_by {
+			worst, worst_by = food, by
+		}
+		if rest := game.food_matter(food, 100)[.Other] / 100; rest > empty_by {
+			emptiest, empty_by = food, rest
+		}
+	}
+	check("every food is made of what it weighs: its water, acid and the grams of its calories (carbs and protein 4 kcal a gram, fat 9, fibre 2) come within 3% of its weight, and leave no more than 12% unaccounted for", worst_by <= 0.03 && empty_by <= 0.12, fmt.tprintf("most over: %v by %.1f%%; most left over: %v, %.1f%%", worst, 100 * worst_by, emptiest, 100 * empty_by))
+	flour_g := game.ITEM_KG[.Flour] * 1000
+	puts_on := game.item_kcal(.Flour) / game.KCAL_PER_KG
+	check("food weighs what it really does for its calories, and he does not: the flour from a sheaf weighs 100 g and its 340 kcal would put more than a kilogram on him", abs(flour_g - 100) < 0.5 && puts_on > 1, fmt.tprintf("%.0f g of flour, %.2f kg on him", flour_g, puts_on))
+
+	// Salads and pieces.
+	SALAD :: "300g cabbage, 100g carrot"
+	salad := bowl(SALAD)
+	washed := bowl(SALAD, {washed = true})
+	raw_salad, washed_salad := game.as_it_stands(salad), game.as_it_stands(washed)
+	check("300 g cabbage and 100 g carrot, washed, is a salad, and safe; not washed, a tummy ache", washed.kind == .Salad && washed_salad.kind == .Salad && !washed_salad.unsafe && raw_salad.unsafe, fmt.tprintf("%v, washed 10^%.1f, not 10^%.1f", washed.kind, washed_salad.microbes, raw_salad.microbes))
+	soggy := at_best(salad, .Bake)
+	check("the same salad baked is a soggy mess", soggy.kind == .Soggy_Mess && soggy.taste < game.as_it_stands(washed).taste, fmt.tprintf("%v, taste %.2f", soggy.kind, soggy.taste))
+	roast := at_best(bowl("400g pumpkin, 100g onion"), .Bake)
+	check("400 g pumpkin and 100 g onion, baked, are baked vegetables, and good", roast.kind == .Baked && game.dish_good(roast), fmt.tprintf("%v, %v, taste %.2f", roast.kind, roast.flaws, roast.taste))
+	veg_soup := at_best(bowl("300g cabbage, 100g carrot, 500ml water"), .Boil)
+	check("300 g cabbage, 100 g carrot and 500 ml water, boiled, is a soup", veg_soup.kind == .Soup && !veg_soup.unsafe, fmt.tprint(veg_soup.kind))
+	fruit, cheesy := bowl("200g apple, 100g pear, 100g plum"), bowl("300g cabbage, 200g cheese")
+	check("200 g apple, 100 g pear and 100 g plum is a salad; 300 g cabbage with 200 g cheese is pieces (under 70% vegetables)", fruit.kind == .Salad && cheesy.kind == .Pieces, fmt.tprintf("%v, %v", fruit.kind, cheesy.kind))
+	grilled := at_best(bowl("200g meat, 2 pinches salt"), .Grill)
+	check("200 g meat with 2 pinches of salt, grilled, is grilled", grilled.kind == .Grilled && !grilled.unsafe, fmt.tprint(grilled.kind))
+	potato := bowl("200g potato", {washed = true})
+	raw_potato, boiled_potato := game.as_it_stands(potato), at_best(potato, .Boil)
+	check("200 g potato, washed, raw, wants cooking: a tummy ache; boiled, good", raw_potato.hard && .Hard_To_Digest in raw_potato.flaws && game.dish_good(boiled_potato), fmt.tprintf("raw: hard %v, taste %.2f; boiled: %v, %v, taste %.2f", raw_potato.hard, raw_potato.taste, boiled_potato.kind, boiled_potato.flaws, boiled_potato.taste))
+	milk := bowl("250ml milk")
+	raw_milk, boiled_milk := game.as_it_stands(milk), at_best(milk, .Boil)
+	check("250 ml milk drunk as it comes gives a tummy ache; boiled, it is a hot drink, and safe", raw_milk.unsafe && boiled_milk.kind == .Hot_Drink && !boiled_milk.unsafe, fmt.tprintf("10^%.1f, boiled 10^%.1f", raw_milk.microbes, boiled_milk.microbes))
+
+	// Shaping.
+	PASTRY :: "100g flour, 60ml water"
+	cheese := bowl("60g cheese")
+	wrapped, _ := game.shape_mix(bowl(PASTRY), .Wrapped, &cheese)
+	dumplings, pasty := at_best(wrapped, .Boil), at_best(wrapped, .Bake)
+	check("100 g flour and 60 ml water wrapped round 60 g cheese: dumplings boiled, a pasty baked", dumplings.kind == .Dumplings && pasty.kind == .Pasty && !dumplings.unsafe && !pasty.unsafe, fmt.tprintf("%v, %v", dumplings.kind, pasty.kind))
+	strips, _ := game.shape_mix(bowl("100g flour, 1 egg"), .Strips)
+	lumps, _ := game.shape_mix(bowl("150g potato, 50g flour"), .Lumps)
+	noodles, gnocchi := at_best(strips, .Boil), at_best(lumps, .Boil)
+	check("100 g flour and 1 egg in strips, boiled, are noodles; 150 g potato and 50 g flour in small lumps, boiled, small dumplings", noodles.kind == .Noodles && gnocchi.kind == .Small_Dumplings && noodles.grams > strips.grams, fmt.tprintf("%v (%.0f g from %.0f), %v", noodles.kind, noodles.grams, strips.grams, gnocchi.kind))
+	topping := bowl("150g tomato, 60g cheese")
+	layered, _ := game.shape_mix(bowl(PASTRY), .Layered, &topping)
+	bake := at_best(layered, .Bake)
+	check("100 g flour and 60 ml water layered with 150 g tomato and 60 g cheese, baked, is a layered bake", bake.kind == .Layered_Bake && !bake.unsafe, fmt.tprint(bake.kind))
+	loaf, flat := bowl(DOUGH_250), bowl(DOUGH_250)
+	flat, _ = game.shape_mix(flat, .Flat)
+	_, loaf_min := game.best_settings(loaf, .Bake)
+	_, flat_min := game.best_settings(flat, .Bake)
+	check("a thin shape cooks faster than a loaf of the same weight", flat_min < loaf_min * 0.5, fmt.tprintf("flat %.0f min, a loaf %.0f", flat_min, loaf_min))
+
+	// Standing.
+	CUCUMBERS :: "500g cucumber, 500ml water, 15g salt"
+	pickles := game.stand(bowl(CUCUMBERS), 7, 20, false)
+	months := game.microbes_grown(pickles.microbes, 20, 90 * game.DAY_HOURS, game.mix_keeping(pickles))
+	check("500 g cucumber, 500 ml water and 15 g salt, a week at 20 degrees, are pickles, and keep for months", pickles.crock == .Pickles && months <= game.UNSAFE_MICROBES, fmt.tprintf("%v, acid %.2f%%, 10^%.1f after three months", pickles.crock, 100 * pickles.matter[.Acid] / pickles.grams, months))
+	rotten := game.stand(bowl("500g cucumber, 500ml water, 2g salt"), 7, 20, false)
+	salty := game.stand(bowl("500g cucumber, 500ml water, 100g salt"), 7, 20, false)
+	cold_crock := game.stand(bowl(CUCUMBERS), 7, 4, false)
+	check("with 2 g salt they rot; with 100 g, or at 4 degrees, nothing happens", rotten.crock == .Rotten && rotten.spoiled && salty.crock == .Nothing && cold_crock.crock == .Nothing && !salty.spoiled && !cold_crock.spoiled, fmt.tprintf("%v, %v, %v", rotten.crock, salty.crock, cold_crock.crock))
+	juice := bowl("500g grapes", {pressed = true})
+	wine := game.stand(juice, 10, 20, false)
+	check("500 g grapes pressed, 10 days at 20 degrees, are wine: alcohol in it, the gas gone off", juice.kind == .Drink && wine.crock == .Wine && wine.matter[.Alcohol] / wine.grams >= game.WINE_ALCOHOL && wine.grams < juice.grams, fmt.tprintf("%v, %v, alcohol %.1f%%, %.0f g from %.0f", juice.kind, wine.crock, 100 * wine.matter[.Alcohol] / wine.grams, wine.grams, juice.grams))
+	mulled := game.cook(wine, .Boil, 100, 20, 1)
+	check("that wine boiled 20 minutes has almost no alcohol left", mulled.matter[.Alcohol] < 0.1 * wine.matter[.Alcohol], fmt.tprintf("%.1f g of %.1f", mulled.matter[.Alcohol], wine.matter[.Alcohol]))
+	vinegar := game.stand(wine, 30, 20, true)
+	closed := game.stand(wine, 30, 20, false)
+	check("that wine, a month more with air, is vinegar; without air it stays wine", vinegar.crock == .Vinegar && closed.crock == .Wine, fmt.tprintf("%v, acid %.1f%%; closed %v", vinegar.crock, 100 * vinegar.matter[.Acid] / vinegar.grams, closed.crock))
+	weighed := ""
+	for s in ([?]game.Mix{pickles, rotten, wine, vinegar}) {
+		sum: f32
+		for v in s.matter {
+			sum += v
+		}
+		if abs(sum - s.grams) > 0.01 * s.grams && weighed == "" {
+			weighed = fmt.tprintf("%v: made of %.1f g, weighs %.1f", s.crock, sum, s.grams)
+		}
+	}
+	again := game.stand(bowl(CUCUMBERS), 7, 20, false)
+	check("standing, what it is made of still adds up to its weight (gas gone off, air taken in), and the same crock gives the same thing", weighed == "" && again == pickles, weighed)
+
+	// How long things keep (Gio's table, a day being DAY_HOURS).
+	DAY :: game.DAY_HOURS
+	raw_day := bowl("200g meat", {kept_hours = DAY, kept_temp = 24})
+	check("raw meat a day at 24 degrees is spoiled for good: grilling does not save it", raw_day.spoiled && at_best(raw_day, .Grill).spoiled, fmt.tprintf("10^%.1f", raw_day.microbes))
+	raw_cold := bowl("200g meat", {kept_hours = 2 * DAY, kept_temp = 4})
+	cold_grilled := at_best(raw_cold, .Grill)
+	check("raw meat 2 days at 4 degrees, then grilled, is safe", !raw_cold.spoiled && !cold_grilled.unsafe && !cold_grilled.spoiled, fmt.tprintf("10^%.1f raw", raw_cold.microbes))
+	cooked := at_best(bowl("200g meat"), .Grill)
+	two, three := game.microbes_grown(cooked.microbes, 24, 2 * DAY, cooked.keeping), game.microbes_grown(cooked.microbes, 24, 3 * DAY, cooked.keeping)
+	week := game.microbes_grown(cooked.microbes, 4, 7 * DAY, cooked.keeping)
+	check("grilled meat is still safe after 2 days at 24 degrees, not after a third; and after a week at 4", two <= game.UNSAFE_MICROBES && three > game.UNSAFE_MICROBES && week <= game.UNSAFE_MICROBES, fmt.tprintf("10^%.1f, 10^%.1f; a week cold 10^%.1f", two, three, week))
+	egg := bowl("1 egg", {kept_hours = 14 * DAY, kept_temp = 24})
+	cracked := game.microbes_grown(game.MIXABLE[.Egg].microbes, 24, 14 * DAY, game.mix_keeping(bowl("1 egg")))
+	check("an egg 2 weeks at 24 degrees in its shell, then cooked, is safe (cracked, it would have spoiled)", !egg.spoiled && !at_best(egg, .Boil).unsafe && cracked >= game.SPOILED_MICROBES, fmt.tprintf("10^%.1f in the shell, 10^%.1f cracked", egg.microbes, cracked))
+	frozen := bowl("200g meat", {kept_hours = 90 * DAY, kept_temp = -18})
+	check("meat frozen 3 months, then grilled, is safe: nothing grows below freezing", !frozen.spoiled && !at_best(frozen, .Grill).unsafe && game.growth_rate(-1) == 0 && game.growth_rate(1) > 0, fmt.tprintf("10^%.1f", frozen.microbes))
+
+	// Every value in the tuning files says what it is.
+	rules_about()
+}
+
+DOUGH_250 :: "250g flour, 150ml water"
+
+// Every value in data/tuning/*.json has an "about": what it is, its unit,
+// which way to turn it.
+rules_about :: proc() {
+	files, _ := filepath.glob("data/tuning/*.json")
+	values, bare := 0, 0
+	first: string
+	for path in files {
+		data, err := os.read_entire_file(path, context.temp_allocator)
+		if err != nil {
+			continue
+		}
+		parsed, jerr := json.parse(data, allocator = context.temp_allocator)
+		if jerr != nil {
+			bare += 1
+			first = fmt.tprintf("%s cannot be read", path)
+			continue
+		}
+		walk :: proc(v: json.Value, file: string, values, bare: ^int, first: ^string) {
+			obj, ok := v.(json.Object)
+			if !ok {
+				return
+			}
+			for key, value in obj {
+				if is_capitals(key) {
+					values^ += 1
+					entry, _ := value.(json.Object)
+					about, _ := entry["about"].(json.String)
+					if len(strings.trim_space(about)) == 0 {
+						bare^ += 1
+						if first^ == "" {
+							first^ = fmt.tprintf("%s in %s", key, filepath.base(file))
+						}
+					}
+				} else if !strings.has_prefix(key, "_") {
+					walk(value, file, values, bare, first)
+				}
+			}
+		}
+		walk(parsed, path, &values, &bare, &first)
+	}
+	check("every value in data/tuning says what it is (an \"about\")", values > 0 && bare == 0, bare > 0 ? fmt.tprintf("%d of %d have none, such as %s", bare, values, first) : fmt.tprintf("%d values", values))
+}
+
+is_capitals :: proc(s: string) -> bool {
+	if len(s) == 0 || !(s[0] >= 'A' && s[0] <= 'Z') {
+		return false
+	}
+	for c in transmute([]u8)s {
+		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// The rules walk every bowl of one or two foods, and of three foods every
+// WALK_STRIDE-th the grid comes to (all of them take half a minute).
+WALK_STRIDE :: 5
+
+Mix_Walk :: struct {
+	seen:                       int,
+	bowls:                      int,
+	kinds:                      [game.Mix_Kind]int,
+	charcoal, bricks:           int,
+	unsteady, unweighed:        string, // the first bowl that broke each rule
+	inedible, unsafe, interval: string,
+}
+
+walk_mixing :: proc(parts: []game.Bowl_Part, data: rawptr) {
+	w := (^Mix_Walk)(data)
+	near :: proc(a, b: f32) -> bool {
+		return abs(a - b) <= 0.001 * max(1, abs(a), abs(b))
+	}
+	w.seen += 1
+	if len(parts) == WALK_KINDS && w.seen % WALK_STRIDE != 0 {
+		return
+	}
+	if _, refused := game.mix_bowl(parts, {}); refused != .None {
+		return
+	}
+	text := bowl_text(parts)
+	m := mixed(parts, {})
+	w.bowls += 1
+	w.kinds[m.kind] += 1
+	backwards: [WALK_KINDS]game.Bowl_Part
+	for part, i in parts {
+		backwards[len(parts) - 1 - i] = part
+	}
+	turned, _ := game.mix_bowl(backwards[:len(parts)], m.prep)
+	again, _ := game.mix_bowl(parts, m.prep)
+	if w.unsteady == "" && (turned.kind != m.kind || !near(turned.grams, m.grams) || !near(turned.free_liquid, m.free_liquid) || !near(turned.best_minutes, m.best_minutes) || !near(game.best_temperature(turned), game.best_temperature(m)) || again != m) {
+		w.unsteady = fmt.tprintf("%s: %v, then %v, the other way round %v", text, m.kind, again.kind, turned.kind)
+	}
+	sum: f32
+	for v in m.matter {
+		sum += v
+	}
+	if w.unweighed == "" && !near(sum, m.grams) {
+		w.unweighed = fmt.tprintf("%s: made of %.1f g, weighs %.1f", text, sum, m.grams)
+	}
+	for how in game.Heating {
+		t, minutes := game.best_settings(m, how)
+		best := game.cook(m, how, t, minutes, 1.5)
+		if best != game.cook(m, how, t, minutes, 1.5) || best.kind != game.cook(turned, how, t, minutes, 1.5).kind {
+			if w.unsteady == "" {
+				w.unsteady = fmt.tprintf("%s, %v: cooked twice, or turned round, not the same", text, how)
+			}
+		}
+		if w.unsafe == "" && !best.lost && (best.unsafe || best.hard || best.inedible || .Burnt_Crust in best.flaws) {
+			w.unsafe = fmt.tprintf("%s, %v at %.0f for %.1f: %v, microbes %.1f, %v", text, how, t, minutes, best.kind, best.microbes, best.flaws)
+		}
+		// Cooked well and badly: at its best, three times too long, far too
+		// hot for a third of the time, and too cool.
+		tries := [4]game.Dish{best, game.cook(m, how, t, minutes * 3, 1.5), game.cook(m, how, t + 100, minutes / 3, 1.5), game.cook(m, how, t - 60, minutes, 1.5)}
+		for d in tries {
+			if d.lost {
+				continue
+			}
+			if w.unweighed == "" && !near(m.grams, d.grams + d.water_lost + d.alcohol_lost + d.poured_off - d.water_gained) {
+				w.unweighed = fmt.tprintf("%s, %v: %.1f g in, %.1f out, %.1f of water and %.1f of alcohol driven off, %.1f ran away, %.1f taken up", text, how, m.grams, d.grams, d.water_lost, d.alcohol_lost, d.poured_off, d.water_gained)
+			}
+			burnt := d.kind == .Charcoal || d.kind == .Brick
+			if d.kind == .Charcoal {w.charcoal += 1}
+			if d.kind == .Brick {w.bricks += 1}
+			if w.inedible == "" && (d.inedible != burnt || (burnt && how == .Boil) || (d.inedible && (d.kcal != 0 || d.grams <= 0)) || (!d.inedible && d.kcal <= 0 && m.kcal > 0)) {
+				w.inedible = fmt.tprintf("%s, %v: %v, inedible %v, %.0f kcal, %.0f g", text, how, d.kind, d.inedible, d.kcal, d.grams)
+			}
+		}
+		// The editor's intervals, for its time and temperature.
+		key := game.recipe_key(m, how)
+		if key != game.recipe_key(turned, how) && w.interval == "" {
+			w.interval = fmt.tprintf("%s: a different recipe turned round", text)
+		}
+		check_interval(w, text, minutes, .Cooking, key)
+		if how == .Bake {
+			check_interval(w, text, t, .Temperature, key)
+			check_interval(w, text, m.best_minutes, .Mixing, key)
+		}
+	}
+}
+
+check_interval :: proc(w: ^Mix_Walk, text: string, best: f32, setting: game.Setting, key: u32) {
+	if w.interval != "" {
+		return
+	}
+	last := max(f32)
+	place: f32 = -1
+	for skill in ([3]f32{0, 0.5, 1}) {
+		low, high := game.setting_interval(best, setting, skill, key)
+		width := high - low
+		at := (best - low) / width
+		if place >= 0 && abs(at - place) > 0.001 {
+			w.interval = fmt.tprintf("%s, %v: the best moves inside it with skill", text, setting)
+		}
+		place = at
+		if best < low || best > high || abs(at - 0.5) < game.SKILL_NOT_MIDDLE - 0.001 || width >= last || width <= 0 {
+			w.interval = fmt.tprintf("%s, %v at skill %.1f: best %.1f in %.1f to %.1f", text, setting, skill, best, low, high)
+			return
+		}
+		last = width
+	}
+	// Twice as much is the same recipe: the best at the same place.
+	low, high := game.setting_interval(best * 2, setting, 0, key)
+	if abs((best * 2 - low) / (high - low) - place) > 0.001 {
+		w.interval = fmt.tprintf("%s, %v: the place of the best changes with the amount", text, setting)
+	}
 }

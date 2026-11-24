@@ -406,13 +406,7 @@ update_diet :: proc(dt: f32) {
 		p.hiccup_t -= dt
 		if p.hiccup_t <= 0 {
 			p.hiccup_t = random_range(HICCUP_EVERY.x, HICCUP_EVERY.y)
-			a := random_range(0, math.TAU)
-			p.vel += Vec2{math.cos(a), math.sin(a)} * 2.5
-			p.vy = 3.5
-			p.airborne = true
-			p.peak = p.height
-			p.stretch_vel += 4
-			say(TEXT.hic, 0.5)
+			start_hiccup()
 		}
 	}
 
@@ -454,10 +448,23 @@ update_diet :: proc(dt: f32) {
 	}
 }
 
+start_hiccup :: proc() {
+	p := &g.prosio
+	a := random_range(0, math.TAU)
+	p.vel += Vec2{math.cos(a), math.sin(a)} * 2.5
+	p.vy = 3.5
+	p.airborne = true
+	p.peak = p.height
+	p.stretch_vel += 4
+	p.hiccup_pose_t = PROSIO_REACTION_TIME.y
+	say(TEXT.hic, 0.5)
+}
+
 // A mighty wind: a green cloud behind him, a little hop forwards, and every
 // animal near enough takes to its heels.
 pass_gas :: proc() {
 	p := &g.prosio
+	p.gas_pose_t = PROSIO_REACTION_TIME.x
 	if too_much(.Fibre) {
 		p.gas_t = random_range(GAS_STORM.x, GAS_STORM.y)
 		p.need[.Fibre] -= GAS_COST * 2

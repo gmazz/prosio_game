@@ -7,6 +7,7 @@ package check
 //   prosio-check autoplay [options]    a bot plays, and reports anything odd
 //       --minutes 30   how long it plays (in game time)
 //       --seed 7       which meadow, and which choices the bot makes
+//   prosio-check mix "500g flour, 300ml water" ...   what bowls make (see mix.odin)
 //
 // The suite prints PASS or FAIL for each rule and exits with the number of
 // failures. Autoplay prints a report (see autoplay.odin) and exits with 1 if
@@ -21,6 +22,12 @@ import "core:strconv"
 main :: proc() {
 	game.keyboard_enabled = false
 	args := os.args[1:]
+	when game.PROSIO_BASE_EXPORT {
+		if len(args) > 0 && args[0] == "export-prosio-base" {
+			export_prosio_base()
+			return
+		}
+	}
 	if len(args) > 0 && args[0] == "autoplay" {
 		minutes := 30
 		seed := 1
@@ -39,6 +46,9 @@ main :: proc() {
 			}
 		}
 		os.exit(autoplay(minutes, seed) ? 0 : 1)
+	}
+	if len(args) > 0 && args[0] == "mix" {
+		os.exit(mix_command(args[1:]))
 	}
 	failures := run_rules()
 	os.exit(failures)

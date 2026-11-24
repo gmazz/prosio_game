@@ -1042,7 +1042,7 @@ draw_leg_outfit :: proc(hip: Mat4, leg_r: f32, knee, ankle: Vec3) {
 		ball(hip, knee, {leg_r * 1.12, leg_r * 1.12, leg_r * 1.12}, color)
 		taper(hip, knee, ankle + {0, 0.05, 0}, leg_r * 1.18, color)
 	}
-	sole := Vec3{0, -0.42 * LEG_SCALE, 0.05}
+	sole := ankle + Vec3{0, -0.01 * LEG_SCALE, 0.05}
 	// A shoe: a rounded upper on a darker sole that shows as a rim round it.
 	shoe :: proc(hip: Mat4, sole: Vec3, leg_r: f32, upper, under: Color) {
 		ball(hip, sole + {0, -0.012, 0.02}, {leg_r * 1.38, 0.06, leg_r * 2.0}, under)

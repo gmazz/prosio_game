@@ -11,12 +11,15 @@ _ :: math
 // ---- meadow ----
 // Where everything is, in metres; home is at 0, 0.
 
+// how fast falling things speed up, m/s each second; raise it and jumps and throws come down sooner
 GRAVITY :: f32(25)
 // The meadow reaches this far from the centre, inside a fence. Prosio's home with its oven is in the middle; each kind of food grows in its own part of the meadow (see REGIONS), so he has to go out and fetch it.
 WORLD_HALF :: Vec2{100, 70}
+// where his home is, in metres: the middle of the meadow
 HOME :: Vec2{0, 0}
 // The pond: the only water to drink. It is round, and too deep to walk into.
 POND :: Vec2{-26, -48}
+// how far the pond reaches from its middle, in metres
 POND_RADIUS :: f32(7.5)
 // Paths from home out to each region, as straight segments; they wander a little when drawn.
 PATH_ENDS := [Region_Kind]Vec2{.Home = HOME, .Forest = {-30, -8}, .Fields = {36, 18}, .Garden = {-10, 34}, .Turkeys = {10, -29}, .Hills = {50, -30}, .Pond = {-21, -39}, .Bees = {-38, 46}}
@@ -32,6 +35,7 @@ SIGHT :: f32(15)
 // ---- fog ----
 // Beyond the edge of the meadow lies a thick dark fog: it starts FOG_START metres past the edge and is solid FOG_THICK metres further. Nobody walks into it, but an animal thrown far enough flies into it and is lost: it comes back later at home, like any other that is gone.
 FOG_START :: f32(-2.5)
+// metres from where the fog starts to where it is solid
 FOG_THICK :: f32(6)
 // how far past the edge a flying animal is lost (or as soon as it comes down beyond it)
 FOG_LOST :: f32(3)
@@ -79,6 +83,7 @@ SALT_ROCKS :: 4
 MAX_SALT :: 2
 // seconds until another lump has grown
 SALT_REGROW :: Vec2{300, 600}
+// how big a salt rock is on the ground, in metres
 SALT_ROCK_RADIUS :: f32(1.0)
 // Patches of pebbles for throwing: some in the goat hills, by the pond, and one each near home, the turkeys and the fields.
 PEBBLE_PATCHES := [Region_Kind]int{.Home = 1, .Forest = 1, .Fields = 1, .Garden = 0, .Turkeys = 1, .Hills = 3, .Pond = 2, .Bees = 0}
@@ -88,6 +93,7 @@ MAX_PEBBLES :: 6
 PEBBLE_HANDFUL :: 3
 // seconds until another has worked its way up
 PEBBLE_REGROW :: Vec2{30, 70}
+// how big a patch of pebbles is, in metres
 PEBBLE_PATCH_RADIUS :: f32(0.45)
 
 // ---- forest ----
@@ -103,10 +109,13 @@ FOREST_SPACING :: f32(3.4)
 FOREST_EDGE :: f32(0.25)
 // mossy stumps and fallen logs in the forest
 FOREST_STUMPS :: 36
+// how big a stump or a fallen log is on the ground, in metres
 STUMP_RADIUS :: f32(0.5)
 // The forest's clearings, and the trail that joins them to the path from home (PATH_ENDS[.Forest]).
 CLEARINGS := [3]Vec2{{-50, -14}, {-71, 8}, {-73, -36}}
+// how far each clearing reaches from its middle, in metres
 CLEARING_RADIUS :: f32(8)
+// the forest's trails, each a straight run from one point to another, in metres
 TRAILS := [3][2]Vec2{{{-30, -8}, {-50, -14}}, {{-50, -14}, {-71, 8}}, {{-50, -14}, {-73, -36}}}
 // metres between him and the trunk
 TREE_SHAKE_REACH :: f32(0.6)
@@ -122,7 +131,9 @@ TREE_SHAKE_APPLES :: f32(2)
 
 // Each kind's height (metres, before a tree's own size), how wide its crown is (its radius), and its two models.
 TREE_HEIGHT := [Tree_Species]f32{.Broadleaf = 5.4, .Apple = 4.6, .Blossom = 5.2, .Pine = 5.8}
+// how wide each kind's crown is: its radius, in metres
 TREE_CROWN := [Tree_Species]f32{.Broadleaf = 2.0, .Apple = 1.7, .Blossom = 1.9, .Pine = 1.35}
+// the models each kind is drawn from; a tree takes one of them by its number
 TREE_PICK := [Tree_Species][]Tree_Model_Kind{.Broadleaf = {.Broad1, .Broad2, .Broad3, .Broad4, .Common1, .Common2, .Birch1, .Birch2}, .Apple = {.Round1, .Round2}, .Blossom = {.Round3, .Broad1}, .Pine = {.Pine1, .Pine2, .Pine3, .Pine4, .Pine5}}
 // how much wider or narrower a tree may be than its kind,
 TREE_WIDTH :: f32(0.12)
@@ -136,10 +147,15 @@ TREE_LEAVES := [Tree_Species]Color{.Broadleaf = {92, 150, 72, 255}, .Apple = {12
 // ---- limits ----
 // How many of each thing the game keeps room for (it allocates nothing while playing). Raise one only if the meadow needs more.
 
+// round things standing in the world at once, a count: trees, rocks, bushes, hives, stations and what he builds
 MAX_ROUNDS :: 640
+// food growing or lying about at once
 MAX_FOODS :: 360
+// bits of dust, sparks and splashes in the air at once; when it is full the oldest goes
 MAX_PARTICLES :: 256
+// grass tufts, flowers and ferns, there only to look at
 MAX_DECOR :: 5000
+// fields of crops
 MAX_FIELDS :: 8
 
 // ---- plants ----

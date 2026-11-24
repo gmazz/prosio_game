@@ -7,7 +7,7 @@
       "const": true,
       "about": "where the workbench stands, from home: across the yard from the oven, between the paths to the fields and the garden"
     },
-    "BENCH_RADIUS": {"f32": 0.8}
+    "BENCH_RADIUS": {"f32": 0.8, "about": "how big the workbench is, in metres: what he bumps into, and how near he must be to use it (it is STATION_RADIUS for the bench in food.json)"}
   },
   "fences": {
     "_about": "Fences stand on the lines of a grid of squares FENCE_LEN across, which covers the meadow (FENCE_W by FENCE_H of them: the meadow's size over FENCE_LEN; changing these makes old saves unreadable). He can lift an animal over a fence if it weighs no more than this.",
@@ -16,11 +16,11 @@
       "about": "Fences stand on the lines of a grid of squares FENCE_LEN across, which covers the meadow. A piece runs from a point of the grid to the next one east or south of it."
     },
     "FENCE_W": {"untyped": 100, "about": "squares across: the meadow's width over FENCE_LEN"},
-    "FENCE_H": {"untyped": 70},
-    "FENCE_POINTS": {"untyped": "(FENCE_W + 1) * (FENCE_H + 1)"},
+    "FENCE_H": {"untyped": 70, "about": "squares from top to bottom: the meadow's height over FENCE_LEN"},
+    "FENCE_POINTS": {"untyped": "(FENCE_W + 1) * (FENCE_H + 1)", "about": "points of the grid, a count worked out from FENCE_W and FENCE_H"},
     "MAX_FENCES": {"untyped": 240, "about": "pieces standing at once (as many as are saved)"},
     "FENCE_TOP": {"f32": 0.4, "about": "anything with its feet higher than this is over it; a jump this high takes him over (at 80 kg he jumps 0.45 m)"},
-    "FENCE_THICK": {"f32": 0.1},
+    "FENCE_THICK": {"f32": 0.1, "about": "how far, in metres, either side of a fence's line it blocks him and the animals"},
     "FENCE_AHEAD": {"f32": 0.7, "about": "a piece goes on the line of the grid nearest to the spot this far in front of him (never under his feet),"},
     "FENCE_REACH": {"f32": 1.05, "about": "so it is never further from that spot than this; and F takes down a piece that near it"},
     "BUILT_REACH": {"f32": 0.6, "about": "how near he must be to a scarecrow to take it down, or to a penned goat to milk it"},
@@ -31,24 +31,24 @@
   },
   "scarecrow_rod_spear": {
     "MAX_SCARECROWS": {"untyped": 8, "about": "Scarecrows are round things of the world, like trees. One that has been taken down leaves its place free for the next."},
-    "SCARECROW_RADIUS": {"f32": 0.22},
+    "SCARECROW_RADIUS": {"f32": 0.22, "about": "how big a scarecrow is on the ground, in metres"},
     "SCARECROW_REACH": {"f32": 9, "about": "crows leave wheat this near one alone"},
     "ROD_REACH": {"f32": 4, "about": "The rod: how far out it reaches for a fish, from where he stands."},
     "SPEAR_KG": {
       "f32": 1.5,
       "about": "The spear. It leaves his hoof as a stone of its weight would, and what it takes from an animal's health when thrown as fast as an arm can (ARM_SPEED) is SPEAR_BLOW; slower, less, by the square of the speed. The animal is not bowled over, it staggers for SPEAR_STAGGER seconds."
     },
-    "SPEAR_RADIUS": {"f32": 0.12},
+    "SPEAR_RADIUS": {"f32": 0.12, "about": "how big a thrown spear is when it hits something, in metres"},
     "SPEAR_COST": {"f32": 6, "about": "stamina to throw one"},
-    "SPEAR_LEN": {"f32": 1.5},
-    "SPEAR_STAGGER": {"f32": 0.8},
-    "SPEAR_BLOW": {"[Enemy_Kind]f32": {"Turkey": 55, "Goat": 40, "Billy": 28, "Fox": 60}}
+    "SPEAR_LEN": {"f32": 1.5, "about": "how long the spear is drawn, in metres"},
+    "SPEAR_STAGGER": {"f32": 0.8, "about": "seconds an animal hit by a spear staggers"},
+    "SPEAR_BLOW": {"[Enemy_Kind]f32": {"Turkey": 55, "Goat": 40, "Billy": 28, "Fox": 60}, "about": "health a spear thrown at ARM_SPEED takes from each kind (out of ENEMY_HEALTH); raise it and fewer spears bring one down"}
   },
   "larder": {
     "LARDER_KEEPS": {"f32": 5, "about": "food keeps this many times as long in a larder"},
-    "LARDER_LITRES": {"f32": 100},
-    "LARDER_RADIUS": {"f32": 0.6},
-    "MAX_LARDERS": {"untyped": 4}
+    "LARDER_LITRES": {"f32": 100, "about": "how much a larder holds, in litres"},
+    "LARDER_RADIUS": {"f32": 0.6, "about": "how big a larder is on the ground, in metres"},
+    "MAX_LARDERS": {"untyped": 4, "about": "larders standing at once, a count (as many as are saved)"}
   },
   "campfire": {
     "_about": "His campfire: one, wherever he sets it up (not in the pond, nor out in the fog), with a ring of stones and a spit, and a stump beside it to chop meat on. While it stands it is a cooking fire like the one by the pond (the station Camp: the same dishes, his same skill at the grill). F packs it up again, once nothing is cooking on it.",

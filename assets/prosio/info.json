@@ -1,0 +1,110 @@
+{
+  "joint_names": [
+    "Pelvis",
+    "Spine",
+    "Chest",
+    "Head",
+    "eye.R",
+    "eye.L",
+    "UpperArm.R",
+    "Forearm.R",
+    "Hand.R",
+    "UpperArm.L",
+    "Forearm.L",
+    "Hand.L",
+    "Thigh.R",
+    "Shin.R",
+    "Hoof.R",
+    "Thigh.L",
+    "Shin.L",
+    "Hoof.L"
+  ],
+  "parts": {
+    "Prosio \u2022 body (Anderson refit)": {
+      "vertices": 9133,
+      "triangles": 18184
+    },
+    "Eye.R": {
+      "vertices": 422,
+      "triangles": 840
+    },
+    "Eye.L": {
+      "vertices": 422,
+      "triangles": 840
+    },
+    "Brows": {
+      "vertices": 358,
+      "triangles": 650
+    },
+    "Tongue": {
+      "vertices": 83,
+      "triangles": 149
+    },
+    "Upper teeth": {
+      "vertices": 438,
+      "triangles": 825
+    },
+    "Iris.R": {
+      "vertices": 161,
+      "triangles": 280
+    },
+    "Pupil.R": {
+      "vertices": 81,
+      "triangles": 120
+    },
+    "Catchlight.R": {
+      "vertices": 37,
+      "triangles": 54
+    },
+    "Low catchlight.R": {
+      "vertices": 29,
+      "triangles": 42
+    },
+    "Upper lid.R": {
+      "vertices": 105,
+      "triangles": 160
+    },
+    "Lower lid.R": {
+      "vertices": 105,
+      "triangles": 160
+    },
+    "Iris.L": {
+      "vertices": 161,
+      "triangles": 280
+    },
+    "Pupil.L": {
+      "vertices": 81,
+      "triangles": 120
+    },
+    "Catchlight.L": {
+      "vertices": 37,
+      "triangles": 54
+    },
+    "Low catchlight.L": {
+      "vertices": 29,
+      "triangles": 42
+    },
+    "Upper lid.L": {
+      "vertices": 105,
+      "triangles": 160
+    },
+    "Lower lid.L": {
+      "vertices": 105,
+      "triangles": 160
+    }
+  },
+  "vertices": 11892,
+  "outline_indices": 54552,
+  "indices": 69360,
+  "shape_vertices": {
+    "Fat": 7088,
+    "ArmMuscle": 1294,
+    "LegMuscle": 1357,
+    "ChestMuscle": 3265,
+    "BellyFull": 5401,
+    "JawOpen": 1388,
+    "CheekPuff": 3005,
+    "Smile": 1051,
+    "BrowLift": 358
+  }
+}
