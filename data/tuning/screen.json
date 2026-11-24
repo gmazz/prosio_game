@@ -34,7 +34,9 @@
   "menus": {
     "SACK_COLUMNS": {"untyped": 9},
     "MENU_TOP": {"f32": 0.44, "about": "where the main and pause menus' first choice is, as a share of the screen's height"},
-    "MENU_STEP": {"f32": 56, "about": "from one of their choices to the next, at 1280 by 720"}
+    "MENU_STEP": {"f32": 56, "about": "from one of their choices to the next, at 1280 by 720"},
+    "SQUEEZE_MOST": {"f32": 0.85, "about": "the BODY page's lines are brought closer together when a short window would push them past the help at its bottom: down to this share of their usual spacing, and no closer"},
+    "FIT_SMALLEST": {"f32": 0.7, "about": "a help line too long for its menu is made smaller, down to this share of its size (and no smaller than the letters go), before it is broken onto two lines"}
   },
   "places": {
     "REGION_ABOUT_TIME": {"f32": 5, "about": "seconds the line about a part of the meadow shows after he gets there"}

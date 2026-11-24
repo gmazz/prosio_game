@@ -48,6 +48,10 @@ SACK_COLUMNS :: 9
 MENU_TOP :: f32(0.44)
 // from one of their choices to the next, at 1280 by 720
 MENU_STEP :: f32(56)
+// the BODY page's lines are brought closer together when a short window would push them past the help at its bottom: down to this share of their usual spacing, and no closer
+SQUEEZE_MOST :: f32(0.85)
+// a help line too long for its menu is made smaller, down to this share of its size (and no smaller than the letters go), before it is broken onto two lines
+FIT_SMALLEST :: f32(0.7)
 
 // ---- places ----
 // seconds the line about a part of the meadow shows after he gets there

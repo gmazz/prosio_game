@@ -17,6 +17,94 @@ label_centred :: proc(text: cstring, cx, y, size: f32, color: Color = UI_WHITE) 
 	label(text, cx - ui_text_width(text, size) / 2, y, size, color)
 }
 
+// The size, at most this one, at which a text fits a width: smaller if it
+// must be, but no smaller than FIT_SMALLEST of it (or than the letters go).
+fit_size :: proc(text: cstring, size, width: f32) -> f32 {
+	sz := size
+	for sz - 1 >= size * FIT_SMALLEST && ui_text_width(text, sz) > width {
+		sz -= 1
+	}
+	return sz
+}
+
+// A line centred in a given width (the help along the bottom of a menu):
+// smaller if it would not fit (see fit_size), and past that on two lines,
+// broken where its parts are spaced apart (or else at a space) so the two
+// are as even as can be. y is where the line's top would be; two lines sit
+// either side of it.
+label_fitted :: proc(text: cstring, cx, y, size, width: f32, color: Color = UI_WHITE) {
+	sz := fit_size(text, size, width)
+	at, after := split_point(text, sz)
+	if ui_text_width(text, sz) <= width || at < 0 {
+		label_centred(text, cx, y, sz, color)
+		return
+	}
+	line := text_height(sz)
+	label_centred(text_part(text, 0, at), cx, y - line / 2, sz, color)
+	label_centred(text_part(text, after, len(text)), cx, y + line / 2, sz, color)
+}
+
+// Where to break a line in two: at the gap of two spaces or more that
+// halves it best, or, with no such gap, at the space that does. The first
+// part ends at at, the second starts at after; at is -1 with no space.
+split_point :: proc(text: cstring, size: f32) -> (at, after: int) {
+	s := string(text)
+	at, after = -1, -1
+	best := f32(1e9)
+	for wide in ([]bool{true, false}) {
+		for i := 1; i < len(s); i += 1 {
+			if s[i] != ' ' || s[i - 1] == ' ' || (wide && (i + 1 >= len(s) || s[i + 1] != ' ')) {
+				continue
+			}
+			end := i
+			for end < len(s) && s[end] == ' ' {
+				end += 1
+			}
+			worse := max(ui_text_width(text_part(text, 0, i), size), ui_text_width(text_part(text, end, len(s)), size))
+			if worse < best {
+				at, after, best = i, end, worse
+			}
+		}
+		if at >= 0 {
+			break
+		}
+	}
+	return
+}
+
+// A text in lines no wider than width, broken at spaces. Returns how tall
+// they are together.
+label_wrapped :: proc(text: cstring, x, y, size, width: f32, color: Color = UI_WHITE) -> f32 {
+	s := string(text)
+	line := text_height(size)
+	ly := y
+	start := 0
+	for start < len(s) {
+		// The most words, from start, that fit (at least one).
+		end, i := -1, start
+		for {
+			for i < len(s) && s[i] != ' ' {
+				i += 1
+			}
+			if end >= 0 && ui_text_width(text_part(text, start, i), size) > width {
+				break
+			}
+			end = i
+			if i >= len(s) {
+				break
+			}
+			i += 1
+		}
+		label(text_part(text, start, end), x, ly, size, color)
+		ly += line
+		start = end
+		for start < len(s) && s[start] == ' ' {
+			start += 1
+		}
+	}
+	return ly - y
+}
+
 // A label floating above a place in the world.
 world_label :: proc(text: cstring, pos: Vec3, size: f32, color: Color = UI_WHITE) {
 	s := world_to_screen(pos)
@@ -370,7 +458,7 @@ draw_menu :: proc() {
 		y += MENU_STEP * s
 	}
 
-	label_centred(TEXT.menu_help, sw / 2, sh - 110 * s, 20 * s, UI_YELLOW)
+	label_fitted(TEXT.menu_help, sw / 2, sh - 110 * s, 20 * s, sw - 80 * s, UI_YELLOW)
 	// What every button does (in the game only the line about what the
 	// buttons would do just there shows).
 	label_centred(TEXT.controls_line, sw / 2, sh - 70 * s, 13 * s)

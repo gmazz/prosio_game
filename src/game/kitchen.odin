@@ -1387,13 +1387,25 @@ draw_cook_menu :: proc() {
 	// Where what each needs starts: after the longest line saying what a plan
 	// is for (longer in some languages), while two parts and the count still
 	// fit after it.
-	needs_x := px + (cook_at == .Bench ? 500 : 330) * s // (a plan has few parts, and a line saying what it is for)
-	if cook_at == .Bench {
-		for r in recipes {
+	// What each needs starts after the longest name (and, at the bench, the
+	// longest line saying what it is for: a plan has few parts), as far right
+	// as leaves room for the most parts any of them needs. A name longer
+	// than the room before it is made smaller.
+	needs_x := px + (cook_at == .Bench ? 500 : 330) * s
+	most_needs := 0
+	for r in recipes {
+		parts := 0
+		for need in r.needs {
+			parts += need.count > 0 ? 1 : 0
+		}
+		most_needs = max(most_needs, parts)
+		needs_x = max(needs_x, px + 94 * s + ui_text_width(TEXT.item_name[r.dish], 22 * s) + 16 * s)
+		if cook_at == .Bench {
 			needs_x = max(needs_x, px + 94 * s + ui_text_width(TEXT.plan_about[r.dish], 14 * s) + 16 * s)
 		}
-		needs_x = min(needs_x, px + pw - 144 * s - 2 * 112 * s)
 	}
+	needs_x = min(needs_x, px + pw - 144 * s - f32(most_needs) * 112 * s)
+	name_room := needs_x - px - 94 * s - 10 * s
 
 	y := py + 108 * s
 	for r, i in recipes {
@@ -1405,7 +1417,7 @@ draw_cook_menu :: proc() {
 		}
 		ui_round_rect(px + 34 * s, y, 46 * s, 46 * s, SACK_BOX, 0.2)
 		draw_icon(r.dish, px + 38 * s, y + 4 * s, 38 * s)
-		label(TEXT.item_name[r.dish], px + 94 * s, y, 22 * s, most > 0 ? UI_WHITE : Color{200, 180, 170, 255})
+		label(TEXT.item_name[r.dish], px + 94 * s, y, fit_size(TEXT.item_name[r.dish], 22 * s, name_room), most > 0 ? UI_WHITE : Color{200, 180, 170, 255})
 		if r.at == .Bench {
 			label(TEXT.plan_about[r.dish], px + 94 * s, y + 28 * s, 14 * s, UI_YELLOW)
 		} else {
@@ -1438,7 +1450,7 @@ draw_cook_menu :: proc() {
 	if cook_refused_t > 0 {
 		label_centred(cook_at == .Bench || cook_at == .Churn ? TEXT.not_enough : TEXT.not_enough_wood, sw / 2, py + ph - 82 * s, 20 * s, UI_RED)
 	}
-	label_centred(TEXT.station_help, sw / 2, py + ph - 42 * s, 18 * s, UI_YELLOW)
+	label_fitted(TEXT.station_help, sw / 2, py + ph - 42 * s, 18 * s, pw - 40 * s, UI_YELLOW)
 }
 
 Mill :: struct {

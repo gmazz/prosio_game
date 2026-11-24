@@ -2812,10 +2812,10 @@ rules_text :: proc() {
 	}
 	check("every language fills in the same names in braces as English ({kcal}, {Action})", len(differ) == 0, len(differ) == 0 ? fmt.tprintf("%d languages", len(game.Language)) : fmt.tprintf("%v", differ[:min(len(differ), 3)]))
 
-	// Every letter of every text, in every language, is in the font files:
-	// a letter the font lacks would be drawn as nothing.
-	CUTE_PIXEL :: #load("../../assets/fonts/CutePixel.ttf")
-	PIXELIFY :: #load("../../assets/fonts/PixelifySans.ttf")
+	// Every letter of every text, in every language, is in the font files
+	// (the game's, and the two it can be built with instead): a letter a
+	// font lacks would be drawn as nothing.
+	FONTS := [3][]u8{PIXELLARI, #load("../../assets/fonts/CutePixel.ttf"), #load("../../assets/fonts/PixelifySans.ttf")}
 	lacking: [dynamic]string
 	letters := 0
 	for &texts, lang in game.TEXTS {
@@ -2823,7 +2823,11 @@ rules_text :: proc() {
 			for text in texts_of(&texts, f) {
 				for r in string(text) {
 					letters += 1
-					if r < ' ' || !font_has(CUTE_PIXEL, r) || !font_has(PIXELIFY, r) {
+					has := r >= ' '
+					for font in FONTS {
+						has &&= font_glyph(font, r) != 0
+					}
+					if !has {
 						append(&lacking, fmt.tprintf("%v %s: %q", lang, f.name, r))
 					}
 				}
@@ -2832,9 +2836,63 @@ rules_text :: proc() {
 	}
 	extra_ok := true
 	for r in game.TEXT_LETTERS {
-		extra_ok &&= font_has(CUTE_PIXEL, r)
+		for font in FONTS {
+			extra_ok &&= font_glyph(font, r) != 0
+		}
 	}
-	check("every letter of every text, in every language, is in both fonts (the game loads ą, ł, ó... with ASCII)", len(lacking) == 0 && extra_ok && !font_has(CUTE_PIXEL, 0x4E00), len(lacking) == 0 ? fmt.tprintf("%d letters, %d past ASCII", letters, len(game.TEXT_LETTERS)) : fmt.tprintf("%v", lacking[:min(len(lacking), 4)]))
+	check("every letter of every text, in every language, is in every font (the game loads ą, ł, ó... with ASCII)", len(lacking) == 0 && extra_ok && font_glyph(PIXELLARI, 0x4E00) == 0, len(lacking) == 0 ? fmt.tprintf("%d letters, %d past ASCII", letters, len(game.TEXT_LETTERS)) : fmt.tprintf("%v", lacking[:min(len(lacking), 4)]))
+
+	// Pixellari is the game's font: narrow for its height. The smallest the
+	// letters go is one pixel of the font to a pixel of the screen (at 1280
+	// by 720), and every help line along the bottom of a menu, its buttons
+	// written out, fits its menu there in every language: on one line, or
+	// on two broken where label_fitted breaks it. Measured here in the font
+	// file's own widths.
+	Help :: struct {
+		text:  proc() -> cstring,
+		width: f32,
+	}
+	HELPS := [?]Help {
+		{proc() -> cstring {return game.TEXT.sack_help}, 480},
+		{proc() -> cstring {return game.TEXT.outfit_help}, 480},
+		{proc() -> cstring {return game.TEXT.bag_help}, 480},
+		{proc() -> cstring {return game.TEXT.controls_help}, 480},
+		{proc() -> cstring {return game.TEXT.larder_help}, 720},
+		{proc() -> cstring {return game.TEXT.station_help}, 900},
+		{proc() -> cstring {return game.TEXT.menu_help}, 1200},
+	}
+	too_wide: [dynamic]string
+	was_lang := game.language
+	widest_half: f32 = 0
+	for lang in game.Language {
+		game.set_language(lang)
+		for help in HELPS {
+			text := string(game.expand_keys(help.text()))
+			if font_width(PIXELLARI, text) <= help.width {
+				continue
+			}
+			first, second := split_in_two(PIXELLARI, text)
+			half := max(font_width(PIXELLARI, first), font_width(PIXELLARI, second))
+			widest_half = max(widest_half, half / help.width)
+			if len(second) == 0 || half > help.width {
+				append(&too_wide, fmt.tprintf("%v %q", lang, text))
+			}
+		}
+	}
+	// And every dish's name fits the room the oven's menu leaves before what
+	// it needs (four things, the most a recipe has), made as small as it
+	// goes.
+	OVEN_NAME_ROOM :: f32(940 - 144 - 4 * 112 - 104)
+	for lang in game.Language {
+		game.set_language(lang)
+		for item in game.Item {
+			if name := string(game.TEXT.item_name[item]); font_width(PIXELLARI, name) > OVEN_NAME_ROOM {
+				append(&too_wide, fmt.tprintf("%v %q", lang, name))
+			}
+		}
+	}
+	game.set_language(was_lang)
+	check("the font is Pixellari, and every help line fits its menu on at most two lines, and every name the oven's room for it, at the smallest the letters go, in every language", game.FONT_NAME == "pixellari" && len(too_wide) == 0, len(too_wide) == 0 ? fmt.tprintf("the widest half line %.0f%% of its menu", widest_half * 100) : fmt.tprintf("%v", too_wide[:min(len(too_wide), 3)]))
 
 	// The language is chosen on the main and pause menus, and kept with the
 	// controls: a file written in Polish reads back as Polish.
@@ -2951,9 +3009,60 @@ slice_sort_strings :: proc(s: []string) {
 	}
 }
 
-// Whether a font file has a letter, from its table of letters (its "cmap",
-// in either of the two forms fonts use for it).
-font_has :: proc(font: []u8, r: rune) -> bool {
+PIXELLARI :: #load("../../assets/fonts/Pixellari.ttf")
+
+// How wide a text is in a pixel font, in its pixels (the advance of each
+// letter, as the game rounds it).
+font_width :: proc(font: []u8, text: string) -> f32 {
+	u16_at :: proc(d: []u8, at: int) -> int {return int(d[at]) << 8 | int(d[at + 1])}
+	table :: proc(font: []u8, tag: string) -> int {
+		for i in 0 ..< u16_at(font, 4) {
+			entry := 12 + 16 * i
+			if string(font[entry:entry + 4]) == tag {
+				return u16_at(font, entry + 8) << 16 | u16_at(font, entry + 10)
+			}
+		}
+		return -1
+	}
+	metrics := u16_at(font, table(font, "hhea") + 34)
+	hmtx := table(font, "hmtx")
+	width: f32 = 0
+	for r in text {
+		g := min(font_glyph(font, r), metrics - 1)
+		width += math.round(f32(u16_at(font, hmtx + 4 * g)) / game.FONT_GRID)
+	}
+	return width
+}
+
+// A line in two, where label_fitted breaks it: at the gap of two spaces or
+// more that halves it best, or else at the space that does.
+split_in_two :: proc(font: []u8, s: string) -> (first, second: string) {
+	best := f32(1e9)
+	first = s
+	for wide in ([]bool{true, false}) {
+		for i := 1; i < len(s); i += 1 {
+			if s[i] != ' ' || s[i - 1] == ' ' || (wide && (i + 1 >= len(s) || s[i + 1] != ' ')) {
+				continue
+			}
+			end := i
+			for end < len(s) && s[end] == ' ' {
+				end += 1
+			}
+			if worse := max(font_width(font, s[:i]), font_width(font, s[end:])); worse < best {
+				first, second, best = s[:i], s[end:], worse
+			}
+		}
+		if len(second) > 0 {
+			break
+		}
+	}
+	return
+}
+
+// Which of a font file's letters a character is (0 if it has none), from
+// its table of letters (its "cmap", in either of the two forms fonts use
+// for it).
+font_glyph :: proc(font: []u8, r: rune) -> int {
 	u16_at :: proc(d: []u8, at: int) -> int {return int(d[at]) << 8 | int(d[at + 1])}
 	u32_at :: proc(d: []u8, at: int) -> int {return u16_at(d, at) << 16 | u16_at(d, at + 2)}
 	cmap := -1
@@ -2964,7 +3073,7 @@ font_has :: proc(font: []u8, r: rune) -> bool {
 		}
 	}
 	if cmap < 0 {
-		return false
+		return 0
 	}
 	for i in 0 ..< u16_at(font, cmap + 2) {
 		table := cmap + u32_at(font, cmap + 4 + 8 * i + 4)
@@ -2985,19 +3094,19 @@ font_has :: proc(font: []u8, r: rune) -> bool {
 					glyph = u16_at(font, ranges + 2 * s + offset + 2 * (int(r) - first))
 				}
 				if glyph != 0 {
-					return true
+					return glyph
 				}
 			}
 		case 12:
 			for g in 0 ..< u32_at(font, table + 12) {
 				group := table + 16 + 12 * g
 				if int(r) >= u32_at(font, group) && int(r) <= u32_at(font, group + 4) {
-					return true
+					return u32_at(font, group + 8) + int(r) - u32_at(font, group)
 				}
 			}
 		}
 	}
-	return false
+	return 0
 }
 
 // The string literals in a line of Odin, leaving out what follows a //.

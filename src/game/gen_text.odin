@@ -424,8 +424,8 @@ Text :: struct {
 	back_to_defaults_done: cstring,
 	controls_header: [3]cstring,
 	back_to_defaults: cstring,
-	// three lines, under the buttons
-	controls_always: [3]cstring,
+	// a paragraph under the buttons, broken into lines that fit
+	controls_always: cstring,
 	press_button: cstring,
 	press_key: cstring,
 }
@@ -798,7 +798,7 @@ TEXTS := [Language]Text {
 		back_to_defaults_done = "Back to the buttons it started with.",
 		controls_header = {"XBOX", "KEY", "OR KEY"},
 		back_to_defaults = "BACK TO THE DEFAULTS",
-		controls_always = {"Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses;", "A, ENTER or SPACE chooses. Clicking a stick to sprint keeps", "him running until he stops; any other sprint button is held."},
+		controls_always = "Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses; A, ENTER or SPACE chooses. Clicking a stick to sprint keeps him running until he stops; any other sprint button is held.",
 		press_button = "Press a button on the controller   (MENU or ESC: cancel)",
 		press_key = "Press a key   (BACKSPACE: none   ESC: cancel)",
 	},
@@ -1168,7 +1168,7 @@ TEXTS := [Language]Text {
 		back_to_defaults_done = "Przyciski są znowu takie jak na początku.",
 		controls_header = {"XBOX", "KLAWISZ", "LUB KLAWISZ"},
 		back_to_defaults = "PRZYWRÓĆ DOMYŚLNE",
-		controls_always = {"Zawsze: gałka, krzyżak, WASD lub strzałki to ruch; MENU lub ESC to pauza;", "A, ENTER lub SPACJA wybiera. Wciśnięta gałka do sprintu sprawia,", "że biegnie, aż się zatrzyma; inne przyciski sprintu trzeba trzymać."},
+		controls_always = "Zawsze: gałka, krzyżak, WASD lub strzałki to ruch; MENU lub ESC to pauza; A, ENTER lub SPACJA wybiera. Wciśnięta gałka do sprintu sprawia, że biegnie, aż się zatrzyma; inne przyciski sprintu trzeba trzymać.",
 		press_button = "Naciśnij przycisk na padzie   (MENU albo ESC: anuluj)",
 		press_key = "Naciśnij klawisz   (BACKSPACE: brak   ESC: anuluj)",
 	},

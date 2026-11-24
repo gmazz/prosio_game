@@ -308,19 +308,19 @@ draw_bag :: proc() {
 	switch bag_tab {
 	case .Sack:
 		draw_bag_sack(x + 20 * s, top, w - 40 * s, s)
-		label_centred(TEXT.sack_help, x + w / 2, y + h - 36 * s, 13 * s, UI_YELLOW)
+		label_fitted(TEXT.sack_help, x + w / 2, y + h - 36 * s, 13 * s, w - 40 * s, UI_YELLOW)
 	case .Outfit:
 		draw_bag_outfit(x + 20 * s, top, w - 40 * s, s)
-		label_centred(TEXT.outfit_help, x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_fitted(TEXT.outfit_help, x + w / 2, y + h - 36 * s, 15 * s, w - 40 * s, UI_YELLOW)
 	case .Body:
-		draw_bag_body(x + 20 * s, top, w - 40 * s, s)
-		label_centred(TEXT.bag_help, x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		draw_bag_body(x + 20 * s, top, w - 40 * s, y + h - 36 * s - text_height(15 * s) / 2 - 6 * s, s)
+		label_fitted(TEXT.bag_help, x + w / 2, y + h - 36 * s, 15 * s, w - 40 * s, UI_YELLOW)
 	case .Map:
 		draw_bag_map(x + 20 * s, top, w - 40 * s, s)
-		label_centred(TEXT.bag_help, x + w / 2, y + h - 36 * s, 15 * s, UI_YELLOW)
+		label_fitted(TEXT.bag_help, x + w / 2, y + h - 36 * s, 15 * s, w - 40 * s, UI_YELLOW)
 	case .Controls:
 		draw_controls_panel(x + 20 * s, top, w - 40 * s, s)
-		label_centred(TEXT.controls_help, x + w / 2, y + h - 36 * s, 14 * s, UI_YELLOW)
+		label_fitted(TEXT.controls_help, x + w / 2, y + h - 36 * s, 14 * s, w - 40 * s, UI_YELLOW)
 	}
 }
 
@@ -547,23 +547,34 @@ draw_content :: proc(item: Item, x, y, w, s: f32) {
 	}
 	GREY :: Color{150, 150, 150, 255}
 	size := 15 * s
+	// Each column as wide as its names and amounts (longer in some
+	// languages): the right one at the middle, or further left if it would
+	// not fit there.
+	amount_text :: proc(n: Nutrient, amount: f32) -> cstring {
+		if n == .Vitamins || n == .Electrolytes {
+			return fill("+{n}", {"n", int(i32(math.round(amount)))})
+		}
+		return fill(TEXT.plus_kg, {"kg", Decimal{int(i32(math.round(amount * 100))), 2}})
+	}
+	per_w := ui_text_width(fill(TEXT.percent, {"percent", 100}), size)
+	per_end, amount_w: [2]f32
+	for n in Nutrient {
+		c := int(n) % 2
+		per_end[c] = max(per_end[c], 14 * s + ui_text_width(TEXT.nutrient_name[n], size) + 8 * s + per_w)
+		amount_w[c] = max(amount_w[c], ui_text_width(amount_text(n, amounts[n]), size))
+	}
+	col_x := [2]f32{x, min(x + w / 2, x + w - per_end[1] - 8 * s - amount_w[1])}
 	for share, i in c {
 		n := Nutrient(i)
-		cx := x + f32(i % 2) * w / 2
+		cx := col_x[i % 2]
 		cy := y + 42 * s + f32(i / 2) * 22 * s
 		none := share < 0.5
 		ui_rect(cx, cy + 3 * s, 9 * s, 9 * s, NUTRIENT_COLOR[n])
 		label(TEXT.nutrient_name[n], cx + 14 * s, cy, size, none ? GREY : UI_WHITE)
 		per := fill(TEXT.percent, {"percent", int(i32(math.round(share)))})
-		label(per, cx + 160 * s - ui_text_width(per, size), cy, size, none ? GREY : UI_YELLOW)
-		if none {
-			continue
-		}
-		if n == .Vitamins || n == .Electrolytes {
-			label(fill("+{n}", {"n", int(i32(math.round(amounts[n])))}), cx + 168 * s, cy, size, UI_GREEN)
-		} else {
-			hundredths := i32(math.round(amounts[n] * 100))
-			label(fill(TEXT.plus_kg, {"kg", Decimal{int(hundredths), 2}}), cx + 168 * s, cy, size, UI_GREEN)
+		label(per, cx + per_end[i % 2] - ui_text_width(per, size), cy, size, none ? GREY : UI_YELLOW)
+		if !none {
+			label(amount_text(n, amounts[n]), cx + per_end[i % 2] + 8 * s, cy, size, UI_GREEN)
 		}
 	}
 }
@@ -571,38 +582,81 @@ draw_content :: proc(item: Item, x, y, w, s: f32) {
 // What Prosio is made of and what he has got good at: his fat, his two
 // muscles and his skills, each with which way it is going, what makes it
 // grow and what it is good for.
-draw_bag_body :: proc(x, y, w, s: f32) {
+draw_bag_body :: proc(x, y, w, bottom, s: f32) {
 	p := &g.prosio
 	GREY :: Color{200, 200, 200, 255}
-	trend_word :: proc(change: f32, x, y, size: f32) {
+	// (Ending at right.)
+	trend_word :: proc(change: f32, right, y, size: f32) {
 		if change > 0.0005 {
-			label(TEXT.growing, x, y, size, UI_GREEN)
+			label(TEXT.growing, right - ui_text_width(TEXT.growing, size), y, size, UI_GREEN)
 		} else if change < -0.0005 {
-			label(TEXT.fading, x, y, size, UI_ORANGE)
+			label(TEXT.fading, right - ui_text_width(TEXT.fading, size), y, size, UI_ORANGE)
 		}
 	}
 	// What he weighs, as the sum of his parts: the bar, and each part's
 	// kilograms under it.
 	label(weight_text(TEXT.he_weighs), x, y, 22 * s)
-	label(TEXT.the_sum_of, x + w - ui_text_width(TEXT.the_sum_of, 13 * s), y + 5 * s, 13 * s, GREY)
+	sum_x := x + w - ui_text_width(TEXT.the_sum_of, 13 * s)
+	label(TEXT.the_sum_of, sum_x, y + 5 * s, 13 * s, GREY)
 	draw_weight_stack(x, y + 30 * s, w, 14 * s, s)
-	for part in Part {
-		i := int(part)
-		px := x + f32(i % 4) * w / 4
-		py := y + 52 * s + f32(i / 4) * 19 * s
-		ui_rect(px, py + 3 * s, 9 * s, 9 * s, PART_COLOR[part])
-		label(TEXT.part_name[part], px + 13 * s, py, 11 * s, GREY)
-		label(kg_text(part_kg(part)), px + 70 * s, py, 12 * s)
+	// Each part, its colour, name and kilograms, in columns as wide as
+	// their names (in this language) need: four, or fewer if four would not
+	// fit, spread across the width.
+	PART_NAME, PART_KG :: 11, 12
+	cols := 4
+	name_w, kg_w: [4]f32
+	for ; ; cols -= 1 {
+		name_w, kg_w = {}, {}
+		for part in Part {
+			c := int(part) % cols
+			name_w[c] = max(name_w[c], ui_text_width(TEXT.part_name[part], PART_NAME * s))
+			kg_w[c] = max(kg_w[c], ui_text_width(kg_text(part_kg(part)), PART_KG * s))
+		}
+		across := f32(cols - 1) * 14 * s
+		for c in 0 ..< cols {
+			across += 18 * s + name_w[c] + kg_w[c]
+		}
+		if across <= w || cols == 1 {
+			break
+		}
 	}
+	spare := w
+	for c in 0 ..< cols {
+		spare -= 18 * s + name_w[c] + kg_w[c]
+	}
+	spare /= f32(max(cols - 1, 1))
+	rows := (len(Part) + cols - 1) / cols
+	for part in Part {
+		c, r := int(part) % cols, int(part) / cols
+		px := x
+		for k in 0 ..< c {
+			px += 18 * s + name_w[k] + kg_w[k] + spare
+		}
+		py := y + 52 * s + f32(r) * 19 * s
+		ui_rect(px, py + 3 * s, 9 * s, 9 * s, PART_COLOR[part])
+		label(TEXT.part_name[part], px + 13 * s, py, PART_NAME * s, GREY)
+		kg := kg_text(part_kg(part))
+		label(kg, px + 18 * s + name_w[c] + kg_w[c] - ui_text_width(kg, PART_KG * s), py, PART_KG * s)
+	}
+	// (Before "the sum of", not over it.)
 	if p.fat_trend > 0.01 {
-		label(TEXT.getting_fatter, x + w - 100 * s, y + 5 * s, 13 * s, UI_ORANGE)
+		label(TEXT.getting_fatter, sum_x - 14 * s - ui_text_width(TEXT.getting_fatter, 13 * s), y + 5 * s, 13 * s, UI_ORANGE)
 	} else if p.fat_trend < -0.01 {
-		label(TEXT.getting_thinner, x + w - 108 * s, y + 5 * s, 13 * s, UI_GREEN)
+		label(TEXT.getting_thinner, sum_x - 14 * s - ui_text_width(TEXT.getting_thinner, 13 * s), y + 5 * s, 13 * s, UI_GREEN)
 	}
 
 	// The bars start after the longest name (longer in some languages), and
 	// end in the same place.
-	ry := y + 94 * s
+	ry := y + 52 * s + f32(rows - 1) * 19 * s + 23 * s
+	// Its lines closer together (down to SQUEEZE_MOST of their room) when,
+	// in a short window, they would run on past the help at the bottom.
+	name_h, note_h := text_height(15 * s), text_height(12 * s)
+	tall := 3 * name_h // (the headings)
+	for t in Trait {
+		tall += is_mental(t) ? name_h + 3 * s : name_h + 2 * note_h + 3 * s
+	}
+	squeeze := clamp((bottom - ry) / tall, SQUEEZE_MOST, 1)
+	name_h, note_h = name_h * squeeze, note_h * squeeze
 	bar_x := x + 108 * s
 	for t in Trait {
 		bar_x = max(bar_x, x + ui_text_width(TEXT.trait_name[t], 15 * s) + 10 * s)
@@ -611,11 +665,11 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 	for t in Trait {
 		if t == .Arms {
 			label(TEXT.muscle, x, ry, 15 * s, UI_ORANGE)
-			ry += text_height(15 * s)
+			ry += name_h
 		}
 		if t == .Lungs {
 			label(TEXT.skills, x, ry, 15 * s, UI_ORANGE)
-			ry += text_height(15 * s)
+			ry += name_h
 		}
 		level := p.trait[t]
 		if is_mental(t) {
@@ -623,18 +677,21 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			// no trend to show, only what he is called and what it is worth.
 			if t == .Baking {
 				label(TEXT.in_the_kitchen, x, ry, 15 * s, UI_ORANGE)
-				ry += text_height(15 * s)
+				ry += name_h
 			}
 			at := t == .Baking ? Station_Kind.Oven : (t == .Grilling ? Station_Kind.Fire : Station_Kind.Churn)
-			short := bar_w * 0.55
+			bonus := i32(math.round((cook_bonus(at) - 1) * 100))
+			most := i32(math.round((COOK_RANGE[at][1] - 1) * 100))
+			worth := fill(TEXT.cook_bonus_short, {"title", cook_title(at)}, {"percent", int(bonus)}, {"most", int(most)})
+			// (A shorter bar when what it is worth, in some language, would
+			// run past the page.)
+			short := max(min(bar_w * 0.55, x + w - ui_text_width(worth, 13 * s) - 12 * s - bar_x), bar_w * 0.2)
 			label(TEXT.trait_name[t], x, ry, 15 * s)
 			ui_rect(bar_x - 2 * s, ry + 2 * s, short + 4 * s, 13 * s, UI_DARK)
 			ui_rect(bar_x, ry + 4 * s, short, 9 * s, {96, 110, 120, 255})
 			ui_rect(bar_x, ry + 4 * s, short * level, 9 * s, NEED_POWER)
-			bonus := i32(math.round((cook_bonus(at) - 1) * 100))
-			most := i32(math.round((COOK_RANGE[at][1] - 1) * 100))
-			label(fill(TEXT.cook_bonus_short, {"title", cook_title(at)}, {"percent", int(bonus)}, {"most", int(most)}), bar_x + short + 12 * s, ry + 1 * s, 13 * s, UI_YELLOW)
-			ry += text_height(15 * s) + 3 * s
+			label(worth, bar_x + short + 12 * s, ry + 1 * s, 13 * s, UI_YELLOW)
+			ry += name_h + 3 * s * squeeze
 			continue
 		}
 		label(TEXT.trait_name[t], x, ry, 15 * s)
@@ -655,13 +712,12 @@ draw_bag_body :: proc(x, y, w, s: f32) {
 			ui_rect(bar_x, ry + 4 * s, bar_w, 9 * s, {96, 110, 120, 255})
 			ui_rect(bar_x, ry + 4 * s, bar_w * level, 9 * s, NEED_POWER)
 		}
-		trend_word(p.trend[t], x + w - 66 * s, ry + 1 * s, 15 * s)
+		trend_word(p.trend[t], x + w, ry + 1 * s, 15 * s)
 		// What makes it grow, and what it is good for, each on a line of its
 		// own under it (spaced by the font's own lines).
-		name_h, note_h := text_height(15 * s), text_height(12 * s)
 		label(TEXT.trait_grows[t], x + 10 * s, ry + name_h, 12 * s, GREY)
 		label(TEXT.trait_gives[t], x + 10 * s, ry + name_h + note_h, 12 * s, UI_YELLOW)
-		ry += name_h + 2 * note_h + 3 * s
+		ry += name_h + 2 * note_h + 3 * s * squeeze
 	}
 }
 

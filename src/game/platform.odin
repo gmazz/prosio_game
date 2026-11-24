@@ -1012,12 +1012,29 @@ draw_fox_meshes :: proc(frames: ^[Fox_Joint]Mat4, hide_eyes: bool) {
 // every letter is made of whole pixels; text is then drawn a whole number of
 // screen pixels to each of them (see font_scale), never smoothed, so it
 // stays crisp at every size.
-// The letters are Cute Pixel (by zK4rim, free for personal and commercial
-// use: see assets/fonts/CutePixel-LICENSE.txt), used as the file is.
-// -define:FONT=pixelify draws them in Pixelify Sans instead (SIL Open Font
-// License), made bold.
-FONT_NAME :: #config(FONT, "cutepixel")
-when FONT_NAME == "pixelify" {
+// The letters are Pixellari (by Zacchary Dempsey-Plante, free, with credit:
+// see assets/fonts/Pixellari-LICENSE.txt), used as the file is: narrow for
+// their height, so more fits on a line.
+// -define:FONT=cutepixel draws them in Cute Pixel instead (the game's first
+// font: rounder and wider, by zK4rim), and -define:FONT=pixelify in
+// Pixelify Sans (SIL Open Font License), made bold.
+FONT_NAME :: #config(FONT, "pixellari")
+when FONT_NAME == "pixellari" {
+	@(private = "file")
+	FONT_FILE :: #load("../../assets/fonts/Pixellari.ttf")
+	FONT_GRID :: f32(64) // design units to one pixel of the font
+	FONT_ORIGIN :: [2]f32{0, 0} // where its grid starts, in design units
+	FONT_EM :: f32(1024) // its ascent and descent together: a line is 16 of its pixels (its capitals are 11 tall)
+	FONT_ASCENT :: f32(768)
+	FONT_SIZE :: f32(15) // the text size (as the game asks for it) drawn one screen pixel to each pixel of the font
+	FONT_BOLD :: i32(0)
+	// Its Ż and ż have a slant over them, like Ź and ź's the other way:
+	// drawn here with a dot, as Polish writes them.
+	FONT_REDRAWN :: [?]Redrawn {
+		{'Ż', {"....##....", "..........", "##########", "##########", "......###.", ".....###..", "....###...", "...###....", "..###.....", ".###......", "##########", "##########"}},
+		{'ż', {"..##..", "..##..", "......", "######", "######", "...##.", "..##..", "..##..", ".##...", "######", "######"}},
+	}
+} else when FONT_NAME == "pixelify" {
 	@(private = "file")
 	FONT_FILE :: #load("../../assets/fonts/PixelifySans.ttf")
 	FONT_GRID :: f32(91.43) // design units to one pixel of the font (its capitals are 7 tall)
@@ -1026,7 +1043,7 @@ when FONT_NAME == "pixelify" {
 	FONT_ASCENT :: f32(920)
 	FONT_SIZE :: f32(11) // the text size (as the game asks for it) drawn one screen pixel to each pixel of the font
 	FONT_BOLD :: i32(1) // how many pixels wider each stroke is made than the font's regular weight
-} else {
+} else when FONT_NAME == "cutepixel" {
 	@(private = "file")
 	FONT_FILE :: #load("../../assets/fonts/CutePixel.ttf")
 	FONT_GRID :: f32(64) // design units to one pixel of the font
@@ -1039,10 +1056,7 @@ when FONT_NAME == "pixelify" {
 	// another: its M is an H with a notch (MEADOW read HEADOW), its a an o
 	// with a pixel of tail (and read ond), its ą a q, its ł and Ł a t with
 	// a lump. The same height as the font's, starting where its start.
-	FONT_REDRAWN :: [?]struct {
-		letter: rune,
-		rows:   []string,
-	} {
+	FONT_REDRAWN :: [?]Redrawn {
 		{'M', {"##...##", "###.###", "#######", "##.#.##", "##...##", "##...##", "##...##", "##...##"}},
 		{'a', {".####.", "....##", ".#####", "##..##", "##..##", ".#####"}},
 		{'ą', {".####.", "....##", ".#####", "##..##", "##..##", ".#####", "....#.", "....##"}},
@@ -1051,6 +1065,13 @@ when FONT_NAME == "pixelify" {
 	}
 }
 pixel_font: rl.Font
+
+// A letter drawn by the game instead of the font's own: its rows from the
+// top, # for ink, as tall as the font's and starting where it starts.
+Redrawn :: struct {
+	letter: rune,
+	rows:   []string,
+}
 
 // How many screen pixels to each pixel of the font, for text of this size:
 // in whole pixels of the display (on a fine screen with two to each of the

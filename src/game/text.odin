@@ -96,6 +96,18 @@ fill :: proc(format: cstring, args: ..Arg) -> cstring {
 	return cstring(raw_data(buf[:]))
 }
 
+// Part of a text, from one byte to another, as a text of its own (lasting
+// as long as a filled one).
+text_part :: proc(text: cstring, from, to: int) -> cstring {
+	buf := &filled[filled_next]
+	filled_next = (filled_next + 1) % len(filled)
+	part := string(text)[from:to]
+	n := min(len(part), len(buf) - 1)
+	copy(buf[:n], part[:n])
+	buf[n] = 0
+	return cstring(raw_data(buf[:]))
+}
+
 // The language the texts are in: chosen on the menu, and kept with the
 // controls (see encode_controls).
 language: Language

@@ -965,14 +965,7 @@
     "back_to_defaults_done": "Back to the buttons it started with.",
     "controls_header": ["XBOX", "KEY", "OR KEY"],
     "back_to_defaults": "BACK TO THE DEFAULTS",
-    "controls_always": {
-      "text": [
-        "Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses;",
-        "A, ENTER or SPACE chooses. Clicking a stick to sprint keeps",
-        "him running until he stops; any other sprint button is held."
-      ],
-      "about": "three lines, under the buttons"
-    },
+    "controls_always": {"text": "Always: stick, D-pad, WASD or arrows move; MENU or ESC pauses; A, ENTER or SPACE chooses. Clicking a stick to sprint keeps him running until he stops; any other sprint button is held.", "about": "a paragraph under the buttons, broken into lines that fit"},
     "press_button": "Press a button on the controller   (MENU or ESC: cancel)",
     "press_key": "Press a key   (BACKSPACE: none   ESC: cancel)"
   }

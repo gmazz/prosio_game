@@ -277,7 +277,7 @@ draw_larder_menu :: proc() {
 		}
 		y += row
 	}
-	label_centred(TEXT.larder_help, sw / 2, py + ph - 40 * s, 15 * s, UI_YELLOW)
+	label_fitted(TEXT.larder_help, sw / 2, py + ph - 40 * s, 15 * s, pw - 40 * s, UI_YELLOW)
 }
 
 // A larder: a wooden cupboard on short legs under a little roof, with a

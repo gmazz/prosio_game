@@ -514,10 +514,27 @@ note :: proc(text: cstring) {
 draw_controls_panel :: proc(x, y, w, s: f32) {
 	name_size := 17 * s
 	row_h := 30 * s
-	col_x := [3]f32{x + 215 * s, x + 318 * s, x + 400 * s}
-	col_w := [3]f32{96 * s, 76 * s, 76 * s}
+	// The columns start after the longest name, and share what is left of
+	// the width (the pad's a little wider), up to a third more than their
+	// usual size.
+	names_w: f32 = 0
+	for b in REMAPPABLE {
+		names_w = max(names_w, ui_text_width(control_cname(b), name_size))
+	}
+	GAP :: 6
+	SHARE := [3]f32{96, 76, 76}
+	start := x + max(names_w + 14 * s, 120 * s)
+	unit := min((x + w - start - 2 * GAP * s) / (SHARE[0] + SHARE[1] + SHARE[2]), 1.3 * s)
+	col_x, col_w: [3]f32
+	cx := start
 	for c in 0 ..< 3 {
-		label(TEXT.controls_header[c], col_x[c] + 6 * s, y, 14 * s, {200, 200, 200, 255})
+		col_x[c], col_w[c] = cx, SHARE[c] * unit
+		cx += col_w[c] + GAP * s
+	}
+	for c in 0 ..< 3 {
+		header := TEXT.controls_header[c]
+		room := (c < 2 ? col_x[c + 1] : x + w) - col_x[c] - 8 * s
+		label(header, col_x[c] + 6 * s, y, fit_size(header, 14 * s, room), {200, 200, 200, 255})
 	}
 	top := y + 24 * s
 	for b, i in REMAPPABLE {
@@ -564,9 +581,7 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 	}
 
 	info := ry + row_h + 16 * s
-	for line, i in TEXT.controls_always {
-		label(line, x, info + f32(i) * 18 * s, 13 * s, {200, 200, 200, 255})
-	}
+	below := info + label_wrapped(TEXT.controls_always, x, info, 13 * s, w, {200, 200, 200, 255})
 
 	line: cstring
 	switch {
@@ -578,7 +593,7 @@ draw_controls_panel :: proc(x, y, w, s: f32) {
 		line = controls_note
 	}
 	if line != nil {
-		label(line, x, info + 62 * s, 15 * s, controls_waiting ? UI_YELLOW : UI_ORANGE)
+		label(line, x, max(info + 62 * s, below + 8 * s), 15 * s, controls_waiting ? UI_YELLOW : UI_ORANGE)
 	}
 }
 

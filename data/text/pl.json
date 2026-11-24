@@ -910,11 +910,7 @@
     "back_to_defaults_done": "Przyciski są znowu takie jak na początku.",
     "controls_header": ["XBOX", "KLAWISZ", "LUB KLAWISZ"],
     "back_to_defaults": "PRZYWRÓĆ DOMYŚLNE",
-    "controls_always": [
-      "Zawsze: gałka, krzyżak, WASD lub strzałki to ruch; MENU lub ESC to pauza;",
-      "A, ENTER lub SPACJA wybiera. Wciśnięta gałka do sprintu sprawia,",
-      "że biegnie, aż się zatrzyma; inne przyciski sprintu trzeba trzymać."
-    ],
+    "controls_always": "Zawsze: gałka, krzyżak, WASD lub strzałki to ruch; MENU lub ESC to pauza; A, ENTER lub SPACJA wybiera. Wciśnięta gałka do sprintu sprawia, że biegnie, aż się zatrzyma; inne przyciski sprintu trzeba trzymać.",
     "press_button": "Naciśnij przycisk na padzie   (MENU albo ESC: anuluj)",
     "press_key": "Naciśnij klawisz   (BACKSPACE: brak   ESC: anuluj)"
   }
