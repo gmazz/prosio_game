@@ -5,41 +5,6 @@
   "numbers": {
     "decimal_point": ","
   },
-  "test_meadow": {
-    "lab_title": "ŁĄKA TESTOWA",
-    "lab_show": "POKAŻ",
-    "lab_hide": "UKRYJ",
-    "lab_body": "CIAŁO I KAMERA",
-    "lab_world": "ZWIERZĘTA, PRZEDMIOTY I REAKCJE",
-    "lab_help": "F1 ukrywa lub pokazuje panel.",
-    "lab_unavailable": "Tu lub teraz ta opcja jest niedostępna.",
-    "lab_slider": {
-      "_of": "Lab_Slider",
-      "Fat": "Tłuszcz (kg)",
-      "Arms": "Ręce",
-      "Legs": "Nogi",
-      "Lungs": "Płuca",
-      "Zoom": "Odległość"
-    },
-    "lab_action": {
-      "_of": "Lab_Action",
-      "Goat": "Koza",
-      "Billy": "Kozioł",
-      "Fox": "Lis",
-      "Turkey": "Indyk",
-      "Fallen_Goat": "Padła koza",
-      "Apple": "Jabłko",
-      "Rock": "Kamień",
-      "Eat_Pumpkin": "Zjedz dynię",
-      "Wind": "Bąk",
-      "Hiccup": "Czkawka",
-      "Tipsy": "Po trunku",
-      "Portrait": "Portret",
-      "Pond": "Do stawu",
-      "Oven": "Do pieca",
-      "Reset": "Od nowa"
-    }
-  },
   "things": {
     "item_name": {
       "_of": "Item",

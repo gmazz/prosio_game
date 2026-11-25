@@ -7,22 +7,6 @@ package game
 // ---- camera ----
 // Where the camera sits, relative to the point it looks at.
 CAMERA_OFFSET :: Vec3{0, 8.5, 10.6}
-// test meadow portrait distance, camera rise, target height and side angle
-LAB_CAMERA :: [4]f32{0.29, 2.6, 1.37, 0.31}
-// closest and widest test meadow play camera
-LAB_ZOOM :: Vec2{0.44, 1.5}
-
-// ---- test_meadow ----
-// candidate directions to place a fixture around Prosio
-LAB_PLACEMENT_STEPS :: 16
-// clear ground left between Prosio or a landmark and a test fixture
-LAB_PLACEMENT_GAP :: f32(0.34)
-// clearance for an apple fixture
-LAB_APPLE_RADIUS :: f32(0.25)
-// radius of the liftable test rock
-LAB_ROCK_RADIUS :: f32(0.62)
-// duration of the unavailable-action notice
-LAB_NOTICE_SECONDS :: f32(2)
 
 // ---- forest_view ----
 // in the forest, how much further round him the trees turn see-through (in crowns)

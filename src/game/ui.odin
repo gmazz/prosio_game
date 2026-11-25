@@ -330,7 +330,7 @@ draw_ui :: proc() {
 
 	// Where he is: the part of the meadow, and, for a few seconds after he
 	// gets there, what is found there.
-	if g.in_region && !(scene == .Playing && g.opts.lab && g.lab.visible) {
+	if g.in_region {
 		fade := clamp(g.region_t * 2, 0, 1)
 		name_color := UI_YELLOW
 		name_color.a = u8(255 * fade)

@@ -6,41 +6,6 @@
     "_about": "How numbers are written.",
     "decimal_point": "."
   },
-  "test_meadow": {
-    "lab_title": "TEST MEADOW",
-    "lab_show": "SHOW",
-    "lab_hide": "HIDE",
-    "lab_body": "BODY AND CAMERA",
-    "lab_world": "ANIMALS, PROPS AND REACTIONS",
-    "lab_help": "F1 hides or shows these controls.",
-    "lab_unavailable": "Unavailable here or during this action.",
-    "lab_slider": {
-      "_of": "Lab_Slider",
-      "Fat": "Fat (kg)",
-      "Arms": "Arms",
-      "Legs": "Legs",
-      "Lungs": "Lungs",
-      "Zoom": "Distance"
-    },
-    "lab_action": {
-      "_of": "Lab_Action",
-      "Goat": "Goat",
-      "Billy": "Billy",
-      "Fox": "Fox",
-      "Turkey": "Turkey",
-      "Fallen_Goat": "Fallen goat",
-      "Apple": "Apple",
-      "Rock": "Rock",
-      "Eat_Pumpkin": "Eat pumpkin",
-      "Wind": "Wind",
-      "Hiccup": "Hiccup",
-      "Tipsy": "Tipsy",
-      "Portrait": "Portrait",
-      "Pond": "Go to pond",
-      "Oven": "Go to oven",
-      "Reset": "Reset"
-    }
-  },
   "things": {
     "_about": "The things he can gather, make and carry: their names, and what he says about them.",
     "item_name": {

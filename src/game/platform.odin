@@ -189,6 +189,13 @@ set_hit_flash :: proc(strength: f32) {
 }
 
 platform_init :: proc(title: cstring, width, height: i32) {
+	open_window(title, width, height)
+	load_graphics()
+}
+
+// The window, opened once. (The workbench opens it once and then loads the
+// graphics again each time it swaps in new code: see src/workbench.)
+open_window :: proc(title: cstring, width, height: i32) {
 	flags := rl.ConfigFlags{.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_RESIZABLE}
 	when !IS_WEB {
 		flags += {.WINDOW_HIGHDPI}
@@ -197,7 +204,10 @@ platform_init :: proc(title: cstring, width, height: i32) {
 	rl.SetTraceLogLevel(.WARNING) // no chatter about every file saved
 	rl.InitWindow(width, height, title)
 	rl.SetExitKey(.KEY_NULL)
+}
 
+// The meshes, the shader and the font the game draws with.
+load_graphics :: proc() {
 	meshes[.Terrain] = rl.GenMeshPlane(2, 2, 80, 56)
 	meshes[.Plane] = rl.GenMeshPlane(2, 2, 1, 1)
 	meshes[.Sphere] = rl.GenMeshSphere(1, 20, 28)
@@ -285,6 +295,15 @@ gen_frustum :: proc(top: f32, slices: int) -> rl.Mesh {
 }
 
 platform_shutdown :: proc() {
+	unload_graphics()
+	close_window()
+}
+
+close_window :: proc() {
+	rl.CloseWindow()
+}
+
+unload_graphics :: proc() {
 	when !FOX_PROCEDURAL {for mesh in fox_meshes {rl.UnloadMesh(mesh)}}
 	if pixel_view.width > 0 {
 		rl.UnloadRenderTexture(pixel_view.target)
@@ -306,7 +325,6 @@ platform_shutdown :: proc() {
 		}
 	}
 	rl.UnloadMaterial(material)
-	rl.CloseWindow()
 }
 
 window_should_close :: proc() -> bool {
@@ -328,13 +346,6 @@ frame_time :: proc() -> f32 {
 
 screen_size :: proc() -> (w, h: f32) {
 	return f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())
-}
-
-lab_pointer :: proc() -> (pos: Vec2, pressed, down, toggle: bool) {
-	if !keyboard_enabled {
-		return
-	}
-	return rl.GetMousePosition(), rl.IsMouseButtonPressed(.LEFT), rl.IsMouseButtonDown(.LEFT), rl.IsKeyPressed(.F1)
 }
 
 begin_frame :: proc(clear: Color) {

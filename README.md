@@ -23,6 +23,7 @@ This is a proof of concept: one meadow, no goal yet beyond keeping Prosio fed an
 - [How the code is organised](#how-the-code-is-organised)
 - [Asset workshop, integration plan and agent handoff](docs/asset-integration.md)
 - [Models: from Blender to the game](#models-from-blender-to-the-game)
+- [The workbench](#the-workbench)
 - [Testing without playing](#testing-without-playing)
 - [Tuning](#tuning)
 - [Text](#text)
@@ -101,7 +102,7 @@ The first row puts on a whole outfit at once; every other row changes one piece,
 | Aviator | leather flying cap with goggles, sunglasses, moustache, white scarf, white shirt, belted trench coat, cords, brown boots |
 | Space pirate | long shaggy hair, eyepatch, scar, a black top with a skull and crossed bones, a black cape lined with red, black leather trousers, tall black boots |
 | Chef | chef's hat, moustache, kerchief, white chef's jacket, apron, grey checked trousers, sneakers |
-| Bare pig | nothing on but his tuft of hair: no pack, no tail (in the Test Meadow, the skin made in Blender instead: see [Prosio's skin](#prosios-skin-test-meadow-only)) |
+| Bare pig | nothing on but his tuft of hair: no pack, no tail (in the workbench, with its skin command, the skin made in Blender instead: see [Prosio's skin](#prosios-skin)) |
 
 | Part | Row | Choices |
 |---|---|---|
@@ -654,12 +655,12 @@ The forest trails are the exception: trees may stand in front of them. The fores
 
 The script has only been run on an Apple-silicon Mac. Odin's raylib bindings also cover Linux and Windows, but those builds have not been tried, and each has to be built on its own system.
 
-### Prosio's skin (Test Meadow only)
+### Prosio's skin
 
 Prosio is drawn from one pose: `prosio_pose.odin` works out, from his state and drawing nothing, where each of his 36 parts is (pelvis, belly, chest, each thigh, knee, shin, toe, shoulder, upper arm, biceps, elbow, forearm and hand, the neck, head, snout, ears, brows and pecs), and what his clothes need. Two bodies are drawn from it:
 
 - **The body of shapes** (`draw_prosio_shapes` in `draw.odin`), which the game shows in every outfit, the bare pig included, with his clothes on it and, in every outfit but the bare pig, his canvas pack.
-- **The skin made in Blender** (`prosio_base.odin`): one continuous mesh with a neck, three digits per hand, folded ears, a recessed snout and pectorals at the 70 kg reference weight, bent on the same 36 parts, with glossy black eyes (two catchlights each) and a mouth drawn on it. Odin moves its brows with his expression and folds its ears as he rises and falls; fat and muscle change its girth, and its `Facial Fat` shape fills out the cheeks, jowls and chin. Its art is not ready to show, so it is off in the game: it is drawn on the bare pig only in the Test Meadow (`./build_desktop.sh --lab`), or in a build with `-define:PROSIO_BASE=true`. Its checks run in `tools/check.sh` all the same.
+- **The skin made in Blender** (`prosio_base.odin`): one continuous mesh with a neck, three digits per hand, folded ears, a recessed snout and pectorals at the 70 kg reference weight, bent on the same 36 parts, with glossy black eyes (two catchlights each) and a mouth drawn on it. Odin moves its brows with his expression and folds its ears as he rises and falls; fat and muscle change its girth, and its `Facial Fat` shape fills out the cheeks, jowls and chin. Its art is not ready to show, so it is off in the game: it is drawn on the bare pig only in the workbench, after its `skin on` command or when started with `tools/workbench.sh --skin` (see [The workbench](#the-workbench)), or in a build with `-define:PROSIO_BASE=true`. Its checks run in `tools/check.sh` all the same.
 
 The skin is `assets/prosio_base/prosio_base.glb`, packed into the files the game loads (see [Models: from Blender to the game](#models-from-blender-to-the-game)). It was made at the bind pose, his parts as `assets/prosio_base/bind.json` has them (70 kg, standing, arms held out a little). A rule fails if that file is no longer what the pose gives at the bind pose; if his parts were moved on purpose, remake it and fit the skin to it again in Blender:
 
@@ -668,20 +669,6 @@ build/check/prosio-check export-prosio-base > assets/prosio_base/bind.json
 ```
 
 Its editable source, `prosio-base.blend`, and the Blender scripts that build and refit it are in the workshop folder outside this repository (`img2model/output/` there). Where the parts sit and how big they are, his face, and how the skin is outlined are tuned in `data/tuning/prosio_look.json`; those numbers change how he looks and nothing in how the game plays.
-
-### Test meadow
-
-From the repo root, build and launch the desktop test meadow.
-
-```bash
-./build_desktop.sh --lab && ./build/desktop/prosio-lab
-```
-
-Drag the sliders to change fat in kilograms, arm and leg training, lungs and camera distance while the meadow runs. Arms and legs use a scale from −100 (wasted) through 0 (ordinary) to +100 (fully trained). **Portrait** brings the eyes and face into view. **Eat pumpkin**, **Wind**, **Hiccup** and **Tipsy** trigger reactions on demand.
-
-The meadow starts near the oven with a goat, a fox, ingredients for one apple pie and a few tools. Spawn other animals, a fallen goat, an apple or a liftable rock as needed. **Go to pond** and **Go to oven** take you into reach of those interactions. Use WASD or arrows to move, F to grab or throw, E to pick up or use, and Q to eat or build. **Hide** or F1 closes the test panel. **Reset** starts a fresh test session. The test meadow uses separate, temporary game and controls state.
-
-For the browser, run `./build_web.sh --lab` and serve `build/web-lab` over HTTP. This uses the same Raylib web library and Emscripten setup as the regular web build.
 
 ### Web
 
@@ -770,8 +757,8 @@ src/
                      out of everything solid
     prosio_pose.odin his pose: where each of his 36 parts is, worked out from
                      his state with nothing drawn (both bodies follow it)
-    prosio_base.odin his skin made in Blender, bent on the pose (Test Meadow
-                     only, for now)
+    prosio_base.odin his skin made in Blender, bent on the pose (in the
+                     workbench only, for now)
     reactions.odin   wind, hiccups, tipsiness and the full belly after a meal
     prosio.odin      Prosio: the limits of his fat, movement, jump, sprint,
                      stamina
@@ -848,6 +835,36 @@ A few choices shape the rest:
 - **Shadows are cast, not stamped.** Everything that stands in the sun is first drawn flattened onto the ground along the sunlight, in grey, into an image of its own; the ground is then drawn and that image multiplied over it, and everything else drawn on top. So every shadow has the shape of what casts it (a tree's trunk as well as its crown, Prosio mid-jump), falls the same way as the light, and is simply a darker version of whatever it lands on: grass, path, soil or forest floor. Where shadows overlap they are no darker than one.
 - **Trees** are tall and slim: a trunk plus clusters of round leafy lumps that are darker underneath, in four species (broadleaf, apple, blossom, pine). A tree standing between the camera and Prosio fades to a see-through pattern where it covers him; its shadow stays whole.
 - **Only what is near the camera is drawn.**
+
+## The workbench
+
+The game in a window that rebuilds itself while it runs: save a file and, about a second later, the change is in the running game with Prosio where he was. Desktop only (tried on a Mac; Windows and Linux are untried). It is built and run apart from the game: the game the players get, desktop and web, contains none of it (a rule checks), and it never reads or writes the saved game or the controls file.
+
+```bash
+tools/workbench.sh
+```
+
+- **What it watches:** `src/game`, `src/workbench`, `data` (tuning and texts), the shaders and the models in `assets` (a GLB exported from Blender, or the JSON beside one). On a save it rebuilds the game as a library under a new name (`build/workbench/lib/`), running `gen_data` first if a data file changed and the packer (`tools/pack_assets`) if a model did (a model saved is on the screen about 1.3 s later), and swaps it in, handing the whole game across (`g`, and the screen, outfit, language, key bindings and pixel size kept beside it).
+- **How long:** from the save to the change on the screen 0.85 to 1.14 s, half of it the build (0.47 s), measured on a Mac over 30 swaps of code, tuning, a text and the shader.
+- **When the build fails,** nothing is swapped: the game runs on, and the compiler's errors show over it until a save builds again.
+- **When the state changes shape** (a field added to an animal, a list made longer), the old state cannot be handed across, and the scene starts afresh.
+- **Speed:** the workbench builds without optimising, to rebuild fast. The busiest places in the meadow then take up to about 11 ms of work a frame (the churn in the goat hills), within a frame at 60 a second; a dozen goats and foxes crowded round him take about 17 ms. `WORKBENCH_FLAGS=-o:size tools/workbench.sh` optimises (4.5 ms for that crowd), but each rebuild then takes about 6 s.
+- **Costs:** every library it has loaded stays loaded until it closes (the game's state holds texts inside them), about 7 MB a swap. A crash in the game's code (an index out of range, say) closes the workbench.
+- **The command menu (F1):** a list of every command, narrowed as you type; the arrows choose, Enter runs (a command that needs more, a number or a name, is put on the line to finish), Esc closes. While it is open the game has no keyboard. The commands:
+  - **Go:** `go home`, `go oven` (or `fire`, `churn`, `pond`, a region: `forest`, `hills`...), `go goat` (the nearest goat; likewise `billy`, `fox`, `turkey`), `go X Y`, `go mouse` (where the mouse points).
+  - **Put** (in front of him, or `... at X Y`): `put goat`, `billy`, `fox`, `turkey`, `fallen-goat`, `rock`, `scarecrow`, `larder` or any food (`apple`, `pumpkin`...); `put pen` (a turkey in a pen beside him); `put crowd N` (the animals replaced by N goats, billy goats and foxes); `clear animals`.
+  - **Him:** `kg N`, `fat N`, `trait arms 0.5` (a muscle -1 to 1, a skill 0 to 1), `need water 20`, `bruises N`, `stamina N`, `sack apple 3` (or `sack pie`: what an apple pie needs; `sack full`; `sack empty`), `choose ITEM`, `outfit bare` (or any whole outfit).
+  - **Make happen:** `wind`, `hiccup`, `tipsy`, `eat pumpkin` (any food), `dizzy`, `faint`, `animal dead` (the nearest animal; or `chase`, `dizzy`, `swim`).
+  - **Time:** `pause` (F6), `step N` (F7: one frame), `speed 0.25` (slow motion; 2 or 4 fast forward).
+  - **Look:** `zoom N` (`zoom game`: as the game has it), `portrait` (in close on him, from the usual angle), `free camera` (the arrows move the camera), `follow goat` (the nearest; `follow him` again).
+  - **Workbench:** `skin on` (rebuilds with Prosio's skin on the bare pig; `skin off`), `state`.
+- **The editor (F2):** a panel over the right half of the window (the camera looks a little to the right meanwhile, so he stays in sight on the left), several files as tabs, built on Odin's own `core:text/edit` and `core:odin/tokenizer`. Cmd (Ctrl elsewhere) with S saves (which rebuilds, as any save does), Z undoes, Shift+Z redoes, X C V A as usual, F finds in the file, Shift+F across the project, L goes to a line, P opens a file by name, W closes the tab, [ and ] change tab; the arrows move (Option by word, Cmd to the ends), Shift selects, the mouse places the cursor, drags a selection and scrolls. Esc gives the keys back to the game; a click on the panel takes them again. The compiler's errors are marked in the margin, and a click on one in the error panel opens its file at its line; `open PATH:LINE` from the menu does the same. Tabs, cursors and unsaved changes are handed across every swap, so saving one file never loses what is being typed in another. The font is Iosevka Fixed (`assets/fonts/IosevkaFixed-Regular.ttf`, v34.9.1, SIL Open Font License; the workbench reads it from the file, so the game is no bigger for it), or SF Mono where macOS keeps it if that file is missing. It does not complete code, jump to definitions or refactor; an outside editor works beside it as well, since the workbench only watches for saved files.
+- **Selecting and inspecting:** a click on the game selects what is nearest the mouse on the screen (Prosio, an animal, a tree, rock, bush, station, hive, salt rock, pebbles, bench, scarecrow, larder or stump, a food, a field, a fish, a rabbit or crow, a thrown rock); clicking again in the same place goes on to the next thing there. A panel on the left shows every number of it, live (Odin lists a record's fields by itself, so new fields appear without anyone adding them), and above them what moves, draws, tunes and makes it: the index (`src/workbench/commands/index.odin`). A click on an entry opens the editor at that procedure, or a tuning file at its part; a model is shown in the file browser. Each entry names a procedure and Odin gives its file and line, so the index stays right as code moves; the index is keyed by the game's own kinds, so a new animal, food or other thing cannot be added without its entry (the workbench would not build), and a rule checks every entry leads somewhere.
+- **Seeing inside:** `show collisions` (the circles things bump with, his grab reach, his grip point, what he would grab), `show animals` (what each animal near him is doing and for how long, its health, where it is heading, its home), `show grid` (the fence grid round him and the fences), `show regions` (the regions' borders and names), `show growth` (how far each food near him has grown, how long a fallen one lasts), `show body` (the 36 parts of his pose, their axes, some named), `show timing` (the frame's update and drawing, in ms; skinning is inside drawing); each again to hide. In the inspector, a click on a number, flag, choice or place changes it (Enter sets it, Esc leaves it); `set FIELD VALUE` does the same from the menu. The game may change it straight back if its own rules say so (an animal's state, say).
+- **Set-ups:** every command since the last reset that changed the game is kept, written as it can be run again (`put goat` as `put goat at 3.21 5.07`). `save NAME` writes them to `src/workbench/setups/NAME.txt`, `load NAME` starts a fresh scene and runs them, `replay` (F5) runs the current one again from a fresh scene, `setups` lists them, `reset` starts afresh. When the state changes shape the current set-up is replayed by itself, so the scene comes back. `load meadow` is the old Test Meadow's scene (the bare pig at home, a goat and a fox, what an apple pie needs, his rod, a fence and a spear).
+- **From outside,** the same commands written a line at a time to `build/workbench/command.txt`, answered in `build/workbench/answer.txt`, with `shot FILE.png`, `frame-time`, `pad` (whether a controller is seen), `status` (how the last build went) and `quit`.
+
+It is made of a host that is never reloaded (`src/workbench/host`) and the game built as a library with the workbench's own panels (`src/workbench`). The game gains only what it needs for that, and only in the workbench's build (`-define:WORKBENCH=true`): opening the window apart from loading the graphics, two hooks after the update and after the drawing, and the record of what is kept beside `g` (`src/game/workbench_hooks.odin`). All six steps of `docs/plans/tools1-workbench.md` are built.
 
 ## Testing without playing
 

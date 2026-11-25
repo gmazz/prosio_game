@@ -40,7 +40,6 @@ Options :: struct {
 	seed:       u32, // builds a different meadow (0 = the usual one)
 	no_save:    bool, // neither load nor save the saved game
 	start_tipsy: bool, // preview the tipsy animation in a fresh meadow
-	lab:         bool, // live tuning meadow, without persistent state
 }
 
 Game :: struct {
@@ -78,7 +77,6 @@ Game :: struct {
 	region_t:      f32, // how long he has been there
 	camera:        Vec2, // the point on the ground the camera looks at
 	camera_zoom:   f32, // 1 is the normal distance; larger is further away
-	lab:           Lab,
 	shake:         f32,
 	time:          f32,
 	frame:         int,
@@ -107,10 +105,6 @@ menu_choice: int
 init :: proc(opts: Options) {
 	platform_init(TEXT.window_title, 1280, 720)
 	g.opts = opts
-	if opts.lab {
-		g.opts.no_save = true
-		outfit = PRESETS[.Bare]
-	}
 	keyboard_enabled = opts.shot_path == nil && !opts.agent
 	load_controls()
 	if l, found := language_of(opts.language); found {
@@ -127,7 +121,7 @@ init :: proc(opts: Options) {
 	continue_game()
 	set_ground_layout() // the same in every game
 	// Test runs go straight into the game.
-	scene = ((opts.shot_path != nil || opts.agent || opts.start_tipsy || opts.lab) && !opts.menu) ? .Playing : .Menu
+	scene = ((opts.shot_path != nil || opts.agent || opts.start_tipsy) && !opts.menu) ? .Playing : .Menu
 }
 
 // Builds the meadow afresh and puts the saved Prosio in it, if there is one.
@@ -270,9 +264,6 @@ new_game :: proc() {
 	if opts.has_choose && g.prosio.sack[opts.choose] > 0 {
 		g.prosio.sack_sel = opts.choose
 	}
-	if opts.lab {
-		start_lab()
-	}
 	g.camera = g.prosio.pos
 	g.camera_zoom = 1
 	explore(g.prosio.pos)
@@ -388,6 +379,9 @@ frame :: proc() {
 	}
 
 	update_frame(dt)
+	when WORKBENCH {
+		if workbench_after_update != nil {workbench_after_update()}
+	}
 	draw_frame()
 }
 
@@ -423,9 +417,6 @@ update_frame :: proc(dt: f32) {
 	case .Larder:
 		update_larder_menu()
 	case .Playing:
-		if g.opts.lab {
-			update_lab()
-		}
 		if button_pressed(.Menu) {
 			scene = .Paused
 			menu_choice = 0
@@ -448,12 +439,6 @@ update_frame :: proc(dt: f32) {
 	// The camera follows Prosio smoothly from above and behind.
 	focus := g.prosio.pos
 	zoom := view_zoom() // further back when his eyes are sharp, closer when they are dim
-	if scene == .Playing && g.opts.lab {
-		zoom = g.lab.zoom
-		if g.lab.portrait {
-			zoom = LAB_CAMERA[0]
-		}
-	}
 	if scene == .Menu {
 		// A slow drift over the meadow round home.
 		focus += {math.sin(g.time * 0.15) * 6, -3}
@@ -474,11 +459,6 @@ draw_frame :: proc(shot: cstring = nil) {
 	shake := Vec3{math.sin(g.time * 71), math.sin(g.time * 53), 0} * g.shake * 0.25
 	target := Vec3{g.camera.x, 0.8, g.camera.y} + shake
 	offset := CAMERA_OFFSET
-	if g.opts.lab && g.lab.portrait && scene == .Playing {
-		dir := facing_dir(g.prosio.facing + LAB_CAMERA[3])
-		offset = {dir.x * CAMERA_OFFSET.z, LAB_CAMERA[1], dir.y * CAMERA_OFFSET.z}
-		target.y = LAB_CAMERA[2] + g.prosio.height
-	}
 	eye := target + offset * g.camera_zoom
 
 	begin_frame(COLOR_SKY)
@@ -498,9 +478,6 @@ draw_frame :: proc(shot: cstring = nil) {
 		draw_menu()
 	case .Playing:
 		draw_ui()
-		if g.opts.lab {
-			draw_lab()
-		}
 	case .Paused:
 		draw_ui()
 		draw_menu()
@@ -517,6 +494,9 @@ draw_frame :: proc(shot: cstring = nil) {
 	if g.opts.shot_path != nil && g.frame == max(g.opts.shot_frame, 30) {
 		save_screenshot(g.opts.shot_path)
 		g.quit = true
+	}
+	when WORKBENCH {
+		if workbench_after_draw != nil {workbench_after_draw()}
 	}
 	if shot != nil {
 		save_screenshot(shot)

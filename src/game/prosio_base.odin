@@ -8,11 +8,11 @@ package game
 // shape numbers are in data/tuning/prosio_look.json.
 //
 // Drawn on the Bare pig in place of the body of shapes. Off in the game (its
-// art is not ready to show); on in the Test Meadow (-define:PROSIO_LAB=true,
-// which build_desktop.sh --lab sets), or with -define:PROSIO_BASE=true.
+// art is not ready to show); on in the workbench with its "skin on" command
+// (tools/workbench.sh --skin), or in a build with -define:PROSIO_BASE=true.
 // PROSIO_BASE_DATA builds its data in without showing it: tools/check.sh sets
 // it, so the skin's rules run against the game as it is played.
-PROSIO_BASE :: #config(PROSIO_BASE, #config(PROSIO_LAB, false))
+PROSIO_BASE :: #config(PROSIO_BASE, false)
 PROSIO_BASE_DATA :: PROSIO_BASE || #config(PROSIO_BASE_DATA, false)
 
 prosio_base_visible :: proc() -> bool {

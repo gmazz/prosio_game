@@ -24,6 +24,10 @@ All of these run from a shell and answer in text (and pictures you can open):
 | Screenshots of every place, menu and outfit, with his state in numbers beside each | `tools/tour.sh` |
 | One scripted run: a picture and his state at a chosen frame | `./build/desktop/prosio --pos 6 6 --shot out.png --frame 40` |
 
+## Changing it while it runs
+
+`tools/workbench.sh` opens the game in a window that rebuilds and swaps in new code whenever a file in `src/game`, `src/workbench` or `data` is saved, with Prosio where he was (desktop only). It can be driven from a shell: write a command to `build/workbench/command.txt` (any command of its menu, such as `go hills`, `put goat` or `kg 120`, and `shot FILE.png`, `frame-time`, `status`, `quit`) and read the answer in `build/workbench/answer.txt`. README.md, "The workbench", says more. The game the players get contains none of it.
+
 ## Playing it yourself
 
 The game is played in real time, which no program that thinks between moves can keep up with. So there is a way to play it a step at a time:

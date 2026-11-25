@@ -1,16 +1,7 @@
 {
   "_about": "How the game looks on the screen: the camera, the pixel sizes, and the sizes and timings of what is drawn over the meadow.",
   "camera": {
-    "CAMERA_OFFSET": {"Vec3": [0, 8.5, 10.6], "const": true, "about": "Where the camera sits, relative to the point it looks at."},
-    "LAB_CAMERA": {"[4]f32": [0.29, 2.6, 1.37, 0.31], "const": true, "about": "test meadow portrait distance, camera rise, target height and side angle"},
-    "LAB_ZOOM": {"Vec2": [0.44, 1.5], "const": true, "about": "closest and widest test meadow play camera"}
-  },
-  "test_meadow": {
-    "LAB_PLACEMENT_STEPS": {"untyped": 16, "about": "candidate directions to place a fixture around Prosio"},
-    "LAB_PLACEMENT_GAP": {"f32": 0.34, "about": "clear ground left between Prosio or a landmark and a test fixture"},
-    "LAB_APPLE_RADIUS": {"f32": 0.25, "about": "clearance for an apple fixture"},
-    "LAB_ROCK_RADIUS": {"f32": 0.62, "about": "radius of the liftable test rock"},
-    "LAB_NOTICE_SECONDS": {"f32": 2, "about": "duration of the unavailable-action notice"}
+    "CAMERA_OFFSET": {"Vec3": [0, 8.5, 10.6], "const": true, "about": "Where the camera sits, relative to the point it looks at."}
   },
   "forest_view": {
     "FOREST_REVEAL": {"f32": 0.9, "about": "in the forest, how much further round him the trees turn see-through (in crowns)"}

@@ -17,7 +17,7 @@ main_start :: proc "c" () {
 	context.allocator = runtime.nil_allocator()
 	context.temp_allocator = runtime.nil_allocator()
 	web_context = context
-	game.init({lab = #config(PROSIO_LAB, false)})
+	game.init({})
 }
 
 @(export)

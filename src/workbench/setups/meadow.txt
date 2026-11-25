@@ -1,0 +1,12 @@
+# The Test Meadow's scene, as it was: the bare pig at home with a goat and a
+# fox in front of him, what an apple pie needs in his sack, and his rod, a
+# piece of fence and a spear. (Load it with "load meadow"; F5 replays it.)
+outfit bare
+clear animals
+put goat
+put fox
+sack pie
+sack rod
+sack fence
+sack spear
+choose apple

@@ -47,8 +47,10 @@ run_rules :: proc() -> int {
 	rules_prosio_reactions()
 	rules_prosio_bind()
 	rules_prosio_look()
+	rules_workbench()
 	when game.PROSIO_BASE_DATA { rules_prosio_base() }
-	rules_test_meadow()
+	rules_workbench_commands()
+	rules_workbench_index()
 	rules_fighting()
 	rules_impacts()
 	rules_stones()
@@ -66,48 +68,6 @@ run_rules :: proc() -> int {
 	return failed
 }
 
-rules_test_meadow :: proc() {
-	section("test meadow")
-	fresh()
-	check("test controls take effect only in the test meadow", !game.lab_act(.Goat))
-	game.g.opts.lab = true
-	game.new_game()
-	p := &game.g.prosio
-	first_kg := p.kg
-	game.lab_adjust(.Fat, .71)
-	game.lab_adjust(.Arms, 1)
-	game.lab_adjust(.Legs, 0)
-	game.lab_adjust(.Lungs, .75)
-	check("test sliders update the actual body model and weight",
-		p.kg > first_kg && p.kg == game.body_kg() && p.trait[.Arms] == 1 &&
-		p.trait[.Legs] == -1 && p.trait[.Lungs] == .75 && p.fat > 70)
-	game.g.enemy_count = 0
-	fallen := game.lab_act(.Fallen_Goat)
-	step(1, {}, {.Grab})
-	check("a test goat can be grabbed with the real game controls",
-		fallen && p.carry == .Enemy && game.g.enemies[p.carry_index].ko)
-	game.new_game()
-	game.g.enemy_count = 0
-	apple := game.lab_act(.Apple)
-	first_apples := p.sack[.Apple]
-	step(1, {}, {.Action})
-	check("the test apple can be gathered and the sample meal can be eaten",
-		apple && p.sack[.Apple] > first_apples &&
-		game.lab_act(.Eat_Pumpkin) && p.meal_target > 0)
-	game.new_game()
-	game.g.enemy_count = 0
-	rock := game.lab_act(.Rock)
-	target, close := game.grab_target()
-	check("the test rock enters the normal grab system", rock && close && target.kind == .Rock)
-	oven := game.lab_act(.Oven)
-	step(1, {}, {.Action})
-	check("the oven shortcut puts Prosio in reach of the regular cooking menu", oven && game.scene == .Oven)
-	game.forced_pressed = {.Action}
-	game.update_cook_menu(1.0 / 60)
-	game.forced_pressed = {}
-	check("the test meadow starts with enough ingredients to bake an apple pie", game.g.stations[.Oven].baking)
-	fresh()
-}
 
 // Muscle that comes back, where his weight goes, and the weight a test asks for.
 rules_body :: proc() {
@@ -3676,4 +3636,63 @@ rules_assets :: proc() {
 	check("every model the game loads is packed from a GLB kept beside it (the animals, Prosio's skin and its bind frames, the pilot fox, every tree, rock and plant)",
 		len(missing) == 0,
 		len(missing) > 0 ? fmt.tprintf("%d missing, such as %s", len(missing), missing[0]) : fmt.tprintf("%d models", packed))
+}
+
+// The workbench (src/workbench, tools/workbench.sh) is built and run apart from
+// the game: the game the players get, desktop and web, contains none of it,
+// and the workbench never touches the saved game or the controls file.
+rules_workbench :: proc() {
+	section("the workbench")
+	// This program is built as the game is, without -define:WORKBENCH=true.
+	stray: [dynamic]string
+	dirs := []string{"src/game", "src/main_desktop", "src/main_web"} // (not src/check: it is not the game the players get, and tests the workbench's commands)
+	for dir in dirs {
+		files, _ := filepath.glob(fmt.tprintf("%s/*.odin", dir), context.temp_allocator)
+		for path in files {
+			text, err := os.read_entire_file(path, context.temp_allocator)
+			if err != nil {continue}
+			lines := strings.split_lines(string(text), context.temp_allocator)
+			depth := 0 // inside a when WORKBENCH block (by its braces)
+			for line, i in lines {
+				trimmed := strings.trim_space(line)
+				if strings.has_prefix(trimmed, "import") && strings.contains(trimmed, "workbench") {
+					append(&stray, fmt.tprintf("%s:%d imports the workbench", path, i + 1))
+				}
+				if depth == 0 && strings.has_prefix(trimmed, "when WORKBENCH {") {
+					depth = 1
+					continue
+				}
+				if depth > 0 {
+					depth += strings.count(line, "{") - strings.count(line, "}")
+					continue
+				}
+				if dir == "src/game" && strings.contains(line, "workbench_") && !strings.has_prefix(trimmed, "//") {
+					append(&stray, fmt.tprintf("%s:%d uses the workbench outside a when WORKBENCH block", path, i + 1))
+				}
+			}
+		}
+	}
+	for script in ([]string{"build_desktop.sh", "build_web.sh"}) {
+		text, _ := os.read_entire_file(script, context.temp_allocator)
+		if strings.contains(string(text), "WORKBENCH") {
+			append(&stray, fmt.tprintf("%s builds with the workbench", script))
+		}
+	}
+	check("the game the players get, desktop and web, contains no workbench code: it is built without WORKBENCH, nothing outside src/workbench imports it, and the game reaches it only inside when WORKBENCH blocks",
+		!game.WORKBENCH && len(stray) == 0, len(stray) > 0 ? stray[0] : "")
+
+	touches: [dynamic]string
+	starts_safe := false
+	files, _ := filepath.glob("src/workbench/*.odin", context.temp_allocator)
+	for path in files {
+		text, _ := os.read_entire_file(path, context.temp_allocator)
+		for call in ([]string{"store_read", "store_write", "load_controls", "save_controls", "save_game", "load_game"}) {
+			if strings.contains(string(text), fmt.tprintf("game.%s(", call)) {
+				append(&touches, fmt.tprintf("%s calls %s", filepath.base(path), call))
+			}
+		}
+		starts_safe ||= strings.contains(string(text), "game.g.opts = {no_save = true}")
+	}
+	check("the workbench never reads or writes the saved game or the controls file: it starts its game with no_save and calls nothing that touches them",
+		starts_safe && len(touches) == 0, len(touches) > 0 ? touches[0] : "")
 }

@@ -271,7 +271,7 @@ rules_prosio_look :: proc() {
 	fresh()
 	saved := game.outfit
 	game.outfit = game.PRESETS[.Bare]
-	check("the skin made in Blender is not shown in the game as played: the bare pig is drawn from shapes (the skin is on only in the Test Meadow, -define:PROSIO_LAB=true)",
+	check("the skin made in Blender is not shown in the game as played: the bare pig is drawn from shapes (it is on only in the workbench, with its skin command)",
 		!game.PROSIO_BASE && !game.prosio_base_visible() && game.prosio_base_head_lift() == 0)
 	packs := 0
 	bare_pack := false
