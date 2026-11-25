@@ -209,7 +209,10 @@ main :: proc() {
 		}
 	}
 
-	game.init(opts)
+	if !game.init(opts) {
+		fmt.eprintln(NO_DISPLAY)
+		os.exit(1)
+	}
 	if opts.agent {
 		agent_run(agent_path)
 		game.shutdown()
@@ -223,6 +226,14 @@ main :: proc() {
 	}
 	game.shutdown()
 }
+
+// Said on the console, and the game stops, when no window can be opened:
+// there is nothing to draw with. On a Mac this is the screen asleep when the
+// game starts (a script run at night). Not a text of the game's (data/text):
+// no player sees it, as there is no window to show it in; it is for whoever
+// ran the game from a shell, and tools/tour.sh and tools/play.sh look for
+// "no display" in it.
+NO_DISPLAY :: "prosio: no display: the window could not be opened, so there is nothing to draw with (on a Mac, is the screen asleep? caffeinate -u -t 5 wakes it)"
 
 // A scripted run ends by printing how Prosio is when the picture is taken,
 // so that a test can read numbers and not only look at pixels.

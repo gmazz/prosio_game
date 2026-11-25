@@ -48,6 +48,7 @@ run_rules :: proc() -> int {
 	rules_prosio_bind()
 	rules_prosio_look()
 	rules_workbench()
+	rules_no_display()
 	when game.PROSIO_BASE_DATA { rules_prosio_base() }
 	rules_workbench_commands()
 	rules_workbench_index()
@@ -2698,6 +2699,38 @@ rules_shake_salt_fog :: proc() {
 	p.pos = {game.WORLD_HALF.x + 10, 0}
 	step(1)
 	check("an animal thrown out of the meadow is lost in the fog, and he cannot walk into it", lost && game.beyond_edge(p.pos) < 0, fmt.tprintf("lost %v, he stands %.1f m inside the edge", lost, -game.beyond_edge(p.pos)))
+
+	// Bumped off the edge, as the bot did on seed 1: a turkey chasing along
+	// the southern fence, knocked outwards, flies into the fog and is lost.
+	// Flying out and, gone, lying where it was lost, beyond the fence, it is
+	// not counted by the bot's watch for animals beyond the fence; when
+	// another comes back, it is at its home inside the meadow.
+	fresh()
+	g.enemy_count = 0
+	p.pos = {43, -68.8}
+	game.add_enemy(.Turkey, {43.6, -game.WORLD_HALF.y + game.ENEMY_RADIUS[.Turkey]})
+	t = &g.enemies[0]
+	game.enemy_impact(t, game.normalize2(game.Vec2{12, -6.9}), 14)
+	flew := t.state == .Flying
+	counted, gone_frames := 0, 0
+	for _ in 0 ..< 240 {
+		step(1)
+		if t.state == .Gone {
+			gone_frames += 1
+		}
+		if animal_beyond_fence(t^) {
+			counted += 1
+		}
+	}
+	gone_at := t.pos
+	p.pos = {0, 0}
+	t.timer = 0
+	step(2)
+	// And one on its feet out there would be counted.
+	stray := game.Enemy{kind = .Turkey, state = .Chase, pos = gone_at}
+	check("a turkey bumped off the edge of the meadow is lost in the fog, not walking about beyond the fence, and the next one comes back inside",
+		flew && gone_frames > 0 && game.beyond_edge(gone_at) > 0 && counted == 0 && animal_beyond_fence(stray) && t.state == .Chase && game.beyond_edge(t.pos) < 0,
+		fmt.tprintf("flew %v, gone %d frames at (%.1f, %.1f), counted beyond the fence %d frames; back %v at (%.1f, %.1f)", flew, gone_frames, gone_at.x, gone_at.y, counted, t.state, t.pos.x, t.pos.y))
 }
 
 // His campfire: made at the workbench, set up anywhere clear, cooked and
@@ -3817,4 +3850,63 @@ rules_workbench :: proc() {
 	}
 	check("the workbench never reads or writes the saved game or the controls file: it starts its game with no_save and calls nothing that touches them",
 		starts_safe && len(touches) == 0, len(touches) > 0 ? touches[0] : "")
+}
+
+// With no screen to open a window on (a Mac whose screen is asleep), the
+// game, the workbench and the scripts that take pictures stop and say "no
+// display", instead of crashing at the first model sent to the graphics card
+// (90 crash reports, every one of them that). Opening the window needs a
+// screen, so this rule cannot open one; it reads the code that decides
+// instead: the window is checked as soon as it is asked for, nothing is
+// loaded without it, and each program and script that starts one says so
+// and stops.
+rules_no_display :: proc() {
+	section("no display")
+	read :: proc(path: string) -> string {
+		text, err := os.read_entire_file(path, context.temp_allocator)
+		return err == nil ? string(text) : ""
+	}
+	// The text of a procedure, from its first line to its closing brace.
+	body :: proc(text, name: string) -> string {
+		at := strings.index(text, fmt.tprintf("\n%s :: proc", name))
+		if at < 0 {return ""}
+		end := strings.index(text[at + 1:], "\n}\n")
+		return end < 0 ? text[at:] : text[at:at + 1 + end + 3]
+	}
+	// Where in a text something comes, or -1.
+	at :: proc(text, what: string) -> int {return strings.index(text, what)}
+
+	platform := read("src/game/platform.odin")
+	open := body(platform, "open_window")
+	init := body(platform, "platform_init")
+	game_init := body(read("src/game/game.odin"), "init")
+	desktop := read("src/main_desktop/main.odin")
+	host := read("src/workbench/host/main.odin")
+	wb := body(read("src/workbench/lib.odin"), "wb_open_window")
+	tour := read("tools/tour.sh")
+	play := read("tools/play.sh")
+	trouble: [dynamic]string
+	if at(open, "-> bool") < 0 || at(open, "if !rl.IsWindowReady() {") < at(open, "rl.InitWindow(") {
+		append(&trouble, "open_window does not check the window after InitWindow")
+	}
+	if at(init, "if !open_window(") < 0 || at(init, "if !open_window(") > at(init, "load_graphics()") {
+		append(&trouble, "platform_init loads the graphics without a window")
+	}
+	if at(game_init, "if !platform_init(") < 0 || at(game_init, "return false") < 0 {
+		append(&trouble, "game.init goes on without a window")
+	}
+	if at(desktop, "if !game.init(opts) {") < 0 || at(desktop, "fmt.eprintln(NO_DISPLAY)") < 0 || at(desktop, "os.exit(1)") < 0 || at(desktop, "\"prosio: no display") < 0 {
+		append(&trouble, "the desktop game does not stop and say no display")
+	}
+	if at(wb, "if !game.open_window(") < 0 || at(host, "if !api.open_window() {") < 0 || at(host, "append_line(ANSWER_FILE, NO_DISPLAY)") < 0 || at(host, "\"workbench: no display") < 0 {
+		append(&trouble, "the workbench does not stop and say no display, on the console and in its answers")
+	}
+	if at(tour, "grep -q \"no display\"") < 0 || at(tour, "exit 1") < 0 {
+		append(&trouble, "tools/tour.sh does not stop at no display")
+	}
+	if at(play, "grep -q \"no display\"") < 0 {
+		append(&trouble, "tools/play.sh does not pass no display on")
+	}
+	check("with no screen to open the window on, the game, a scripted run, the workbench, the tour and play.sh stop and say \"no display\" (read in the code: a window cannot be had here)",
+		len(trouble) == 0, len(trouble) == 0 ? "the window checked before any graphics; each says so and stops" : fmt.tprintf("%v", trouble[:]))
 }

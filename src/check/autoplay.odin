@@ -502,13 +502,16 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	if !can_act {
 		return
 	}
+	// (Food and plants are picked with empty hands: carrying a rock, E does
+	// nothing there, and the game's prompt says to put it down or throw it.
+	// The bot pressed it anyway on seed 4, and its E watch counted that.)
 	switch bot.goal {
 	case .Food:
-		if game.food_in_reach(p.pos, r + 0.75) != nil {
+		if p.carry == .Nothing && game.food_in_reach(p.pos, r + 0.75) != nil {
 			press_e(&tap, "food")
 		}
 	case .Plant:
-		if game.bush_in_reach(p.pos, r + 0.6) != nil {
+		if p.carry == .Nothing && game.bush_in_reach(p.pos, r + 0.6) != nil {
 			press_e(&tap, "a bush, hive or salt rock")
 		}
 	case .Station:
@@ -875,8 +878,8 @@ watch :: proc() {
 			note(.Through_A_Fence, fmt.tprintf("a %v (%v) from (%.2f, %.2f) to (%.2f, %.2f)", e.kind, e.state, bot.animal_was[i].x, bot.animal_was[i].y, e.pos.x, e.pos.y))
 		}
 		bot.animal_stood[i], bot.animal_was[i] = stands, e.pos
-		if abs(e.pos.x) > half.x + 0.5 || abs(e.pos.y) > half.y + 0.5 {
-			note(.Out_Of_Meadow, fmt.tprintf("a %v at (%.1f, %.1f)", e.kind, e.pos.x, e.pos.y))
+		if animal_beyond_fence(e) {
+			note(.Out_Of_Meadow, fmt.tprintf("a %v (%v) at (%.1f, %.1f)", e.kind, e.state, e.pos.x, e.pos.y))
 		}
 		if game.on_ground(&e) {
 			probe := e.pos
@@ -1035,4 +1038,16 @@ report :: proc(minutes, seed: int) -> bool {
 	}
 	_ = p
 	return odd == 0
+}
+
+// An animal outside the meadow's fence, which should never be. One knocked
+// or thrown over the edge sails out into the fog (Flying) and is lost there
+// (Gone): it is no longer in the meadow, though it keeps the place where it
+// was lost until another of its kind comes back at its home. Neither is
+// counted; one that came down out there and stayed would be. (Before this,
+// every turkey bumped into the fog was reported beyond the fence each frame
+// until the next came back, as on seeds 1, 2, 6 and 8.)
+animal_beyond_fence :: proc(e: game.Enemy) -> bool {
+	half := game.WORLD_HALF
+	return e.state != .Gone && e.state != .Flying && (abs(e.pos.x) > half.x + 0.5 || abs(e.pos.y) > half.y + 0.5)
 }

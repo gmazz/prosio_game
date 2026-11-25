@@ -81,6 +81,38 @@ rules_workbench_commands :: proc() {
 	}
 	check("every command the menu lists is one the workbench knows", len(unknown) == 0,
 		fmt.tprintf("%v", unknown))
+
+	// Asked for more animals than there is room for, the commands stop at
+	// the room the game has. (The first crowd command added its animals to
+	// the 33 already there: crowd 12 wrote past the last of the 40 places,
+	// and the workbench stopped dead; crash report workbench-...-032025.)
+	fresh()
+	room_ok := true
+	_, _ = cmd.run("put crowd 60")
+	room_ok &&= game.g.enemy_count == game.MAX_ENEMIES
+	for _ in 0 ..< 20 {
+		_, _ = cmd.run("put goat")
+		_, _ = cmd.run("put pen")
+		_, _ = cmd.run("put fallen-goat")
+	}
+	check("the workbench's commands never put more animals than the game has room for (put crowd 60, then goats, pens and fallen goats on top)",
+		room_ok && game.g.enemy_count <= game.MAX_ENEMIES, fmt.tprintf("%d animals, room for %d", game.g.enemy_count, game.MAX_ENEMIES))
+
+	// A swap is only as safe as what the libraries share and keep. Each
+	// library exports only its wb_ procedures: anything else of Odin's runtime
+	// it exported would be shared with the host and every earlier library,
+	// as its eight thread-local slots were, which filled after seven swaps
+	// (crash report workbench-...-031718: "no more thread-local cleaner slots"
+	// as the eighth library started). And each library swapped out frees what
+	// its runtime kept for the thread (about 11 MB a swap otherwise).
+	host, _ := os.read_entire_file("src/workbench/host/main.odin", context.temp_allocator)
+	lib, _ := os.read_entire_file("src/workbench/lib.odin", context.temp_allocator)
+	h, l := string(host), string(lib)
+	exports_only := strings.contains(h, "os.write_entire_file(EXPORTS, \"_wb_*\\n\")") && strings.contains(h, "-exported_symbols_list,")
+	release := strings.index(h, "api.release()")
+	released := release >= 0 && release < strings.index(h, "\tapi = next") && strings.contains(l, "wb_release :: proc() {\n\truntime.run_thread_local_cleaners()")
+	check("each library the workbench swaps in exports only its wb_ procedures, and each one swapped out frees what its runtime kept for the thread",
+		exports_only && released, fmt.tprintf("exports only wb_: %v; the old library released before the next takes over: %v", exports_only, released))
 }
 
 // The index (src/workbench/commands/index.odin): what moves, draws, tunes and

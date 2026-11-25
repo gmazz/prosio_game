@@ -25,7 +25,15 @@ shot_at() {
 	about="$3"
 	shift 3
 	rm -f "$OUT/$name.png" "$OUT/$name.txt" # so that an old picture is never taken for a new one
-	./build/desktop/prosio "$@" ${TOUR_LANG:+--lang "$TOUR_LANG"} --shot "$OUT/$name.png" --frame "$frame" 2>/dev/null | grep -v "^INFO\|^WARNING" > "$OUT/$name.txt" || true
+	./build/desktop/prosio "$@" ${TOUR_LANG:+--lang "$TOUR_LANG"} --shot "$OUT/$name.png" --frame "$frame" 2>"$OUT/errors.txt" | grep -v "^INFO\|^WARNING" > "$OUT/$name.txt" || true
+	# No window (on a Mac, the screen asleep): no picture can be taken, so
+	# the tour stops at once and says why, rather than listing every
+	# picture as missing.
+	if grep -q "no display" "$OUT/errors.txt"; then
+		grep "no display" "$OUT/errors.txt" >&2
+		echo "tools/tour.sh: stopped at $name.png; no pictures can be taken without a display" >&2
+		exit 1
+	fi
 	if [ -f "$OUT/$name.png" ]; then
 		echo "$name.png: $about" >> "$OUT/index.txt"
 	else
@@ -96,6 +104,7 @@ if command -v sips >/dev/null 2>&1; then
 	done
 fi
 
+rm -f "$OUT/errors.txt"
 echo "Took $(grep -vc MISSING "$OUT/index.txt") pictures into $OUT ($(grep -c MISSING "$OUT/index.txt") missing); see $OUT/index.txt"
 if ! grep -qv MISSING "$OUT/index.txt"; then
 	echo "None could be taken: the game needs a screen to open its window on. Is the display asleep?"

@@ -47,7 +47,7 @@ Status :: struct {
 // The library's procedures, found by name (wb_ and the field's name).
 Api :: struct {
 	lib:             dynlib.Library,
-	open_window:     proc(),
+	open_window:     proc() -> bool,
 	load_graphics:   proc(),
 	unload_graphics: proc(),
 	start:           proc(),
@@ -62,6 +62,7 @@ Api :: struct {
 	workbench:       proc() -> string,
 	take_workbench:  proc(text: string),
 	host_request:    proc() -> string,
+	release:         proc(),
 	shutdown:        proc(),
 }
 
@@ -73,6 +74,10 @@ Build :: struct {
 	path:     string, // the library it makes
 	why:      string,
 }
+
+// When no window can be opened (on a Mac, the screen asleep), so there is
+// nothing to draw with: the workbench stops. (As src/main_desktop says it.)
+NO_DISPLAY :: "workbench: no display: the window could not be opened, so there is nothing to draw with (on a Mac, is the screen asleep? caffeinate -u -t 5 wakes it)"
 
 api: Api
 status: Status
@@ -106,7 +111,13 @@ main :: proc() {
 	if !load(path, &api) {
 		os.exit(1)
 	}
-	api.open_window()
+	if !api.open_window() {
+		// Said on the console and in the answers, for whoever drives the
+		// workbench from a shell (an agent at night reads it there).
+		fmt.eprintln(NO_DISPLAY)
+		append_line(ANSWER_FILE, NO_DISPLAY)
+		os.exit(1)
+	}
 	api.load_graphics()
 	api.start()
 	api.set_status(status)
@@ -197,7 +208,11 @@ poll_build :: proc() {
 		next.take_workbench(workbench) // (the time and camera; the set-up is what was just replayed)
 	}
 	_, _ = g_size, kept_size
-	api = next // (the old library stays loaded: see ../lib.odin)
+	// The old library stays loaded (see ../lib.odin), but what its own copy
+	// of Odin's runtime keeps aside is freed now that everything has been
+	// handed across: about 11 MB a swap otherwise.
+	api.release()
+	api = next
 	status.phase = .Running
 	status.text = ""
 	status.swaps += 1

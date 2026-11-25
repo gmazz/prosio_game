@@ -188,14 +188,21 @@ set_hit_flash :: proc(strength: f32) {
 	rl.SetShaderValue(material.shader, flash_location, &value, .FLOAT)
 }
 
-platform_init :: proc(title: cstring, width, height: i32) {
-	open_window(title, width, height)
+// False if there is no window, and so nothing to draw with: see open_window.
+platform_init :: proc(title: cstring, width, height: i32) -> bool {
+	if !open_window(title, width, height) {
+		return false
+	}
 	load_graphics()
+	return true
 }
 
 // The window, opened once. (The workbench opens it once and then loads the
 // graphics again each time it swaps in new code: see src/workbench.)
-open_window :: proc(title: cstring, width, height: i32) {
+// False if it could not be opened, as on a Mac whose screen is asleep: then
+// there is no graphics context, and the first mesh sent to the graphics card
+// would crash. The caller stops and says so (no display).
+open_window :: proc(title: cstring, width, height: i32) -> bool {
 	flags := rl.ConfigFlags{.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_RESIZABLE}
 	when !IS_WEB {
 		flags += {.WINDOW_HIGHDPI}
@@ -203,7 +210,11 @@ open_window :: proc(title: cstring, width, height: i32) {
 	rl.SetConfigFlags(flags)
 	rl.SetTraceLogLevel(.WARNING) // no chatter about every file saved
 	rl.InitWindow(width, height, title)
+	if !rl.IsWindowReady() {
+		return false
+	}
 	rl.SetExitKey(.KEY_NULL)
+	return true
 }
 
 // The meshes, the shader and the font the game draws with.

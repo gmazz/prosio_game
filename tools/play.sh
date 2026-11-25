@@ -50,6 +50,9 @@ start)
 	echo $! > "$DIR/pid"
 	if await 0 "^Prosio, a step at a time" 20; then
 		grep "^Prosio, a step at a time" "$DIR/out"
+	elif grep -q "no display" "$DIR/out"; then
+		grep "no display" "$DIR/out" # (on a Mac, the screen asleep)
+		exit 1
 	else
 		echo "The game did not start; see $DIR/out"
 		exit 1

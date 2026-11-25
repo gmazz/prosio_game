@@ -60,12 +60,15 @@ work_start: time.Tick
 draw_start: time.Tick
 
 @(export, link_name = "wb_open_window")
-wb_open_window :: proc() {
-	game.open_window("Prosio — workbench", 1280, 720)
+wb_open_window :: proc() -> bool {
+	if !game.open_window("Prosio — workbench", 1280, 720) {
+		return false // no display: the host says so and stops
+	}
 	// Keeps running when the window is hidden or minimised (raylib otherwise
 	// waits for the window to come back), so it goes on building and taking
 	// commands.
 	rl.SetWindowState({.WINDOW_ALWAYS_RUN})
+	return true
 }
 
 @(export, link_name = "wb_load_graphics")
@@ -302,6 +305,19 @@ wb_command :: proc(line: string) -> string {
 		return fmt.tprintf("frame time: %.2f ms on average, %.2f at most; work in a frame %.2f ms on average, %.2f at most (the game's update %.2f, its drawing %.2f, the workbench %.2f); over the last %d frames, %d animals", avg, most, work, work_most, t.update, t.draw, t.bench, FRAME_SAMPLES, game.g.enemy_count)
 	}
 	return run_line(line)
+}
+
+// Called by the host on a library it has just swapped out, once the next one
+// has taken everything across. The library stays loaded (the game's state
+// holds texts inside it), and so would what its own copy of Odin's runtime
+// keeps for the thread: core:os's two arenas for temporary memory, about
+// 5.6 MB each once used, freed only when the thread ends, which for the
+// window's thread is when the workbench closes. Over 207 swaps that was
+// 2.3 GB. Run the runtime's cleaners for the thread now: nothing lasting is
+// kept in those arenas, and the old library is never called again.
+@(export, link_name = "wb_release")
+wb_release :: proc() {
+	runtime.run_thread_local_cleaners()
 }
 
 @(export, link_name = "wb_shutdown")

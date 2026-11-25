@@ -104,8 +104,12 @@ Scene :: enum {
 scene: Scene
 menu_choice: int
 
-init :: proc(opts: Options) {
-	platform_init(TEXT.window_title, 1280, 720)
+// False if no window could be opened (no display): nothing else may be
+// called then, and the caller stops.
+init :: proc(opts: Options) -> bool {
+	if !platform_init(TEXT.window_title, 1280, 720) {
+		return false
+	}
 	g.opts = opts
 	keyboard_enabled = opts.shot_path == nil && !opts.agent
 	load_controls()
@@ -128,6 +132,7 @@ init :: proc(opts: Options) {
 	if opts.load_list {
 		show_load_examples()
 	}
+	return true
 }
 
 // Builds the meadow afresh and puts the saved Prosio in it, if there is one.
