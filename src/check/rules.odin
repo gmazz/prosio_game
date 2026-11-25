@@ -57,6 +57,7 @@ run_rules :: proc() -> int {
 	rules_stones()
 	rules_workshop()
 	rules_saving()
+	rules_backups()
 	rules_moving()
 	rules_packed_animals()
 	rules_animal_bending()

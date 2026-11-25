@@ -494,6 +494,9 @@ old_save_6: Save_6
 old_save_5: Save_5
 old_save_4: Save_4
 old_save_3: Save_3
+// Room for a saved game of any version, as read from a file.
+SAVE_ROOM :: max(size_of(Save), size_of(Save_6), size_of(Save_5), size_of(Save_4), size_of(Save_3))
+save_bytes: [SAVE_ROOM]u8
 
 save_game :: proc() {
 	if g.opts.shot_path != nil || g.opts.no_save || g.prosio.fail != .None {
@@ -544,19 +547,17 @@ save_game :: proc() {
 	}
 	store_write(([^]u8)(save)[:size_of(Save)])
 	has_save = true
+	saved_at = clock_now()
 }
 
-// Puts a saved Prosio into the game just built, with what he had built in
-// the meadow. False if there is none (or it is from a version of the game
-// that cannot be carried over).
-load_game :: proc() -> bool {
-	if g.opts.shot_path != nil || g.opts.no_save {
-		return false
-	}
+// Reads a saved game (of this version, or an older one carried over) into
+// save_buffer. False if it is not one: the wrong size, a version it cannot
+// carry over, or numbers that make no sense.
+read_save :: proc(bytes: []u8) -> bool {
 	save := &save_buffer
 	save^ = {}
-	bytes := ([^]u8)(save)[:size_of(Save)]
-	n := store_read(bytes)
+	n := len(bytes)
+	copy(([^]u8)(save)[:size_of(Save)], bytes[:min(n, size_of(Save))])
 	if n == size_of(Save_3) && save.version == 3 {
 		copy(([^]u8)(&old_save_3)[:size_of(Save_3)], bytes[:size_of(Save_3)])
 		if old_save_3.size != size_of(Save_3) {
@@ -598,6 +599,21 @@ load_game :: proc() -> bool {
 	if math.is_nan(save.fat) || save.fat < 0 || save.fat >= FAT_MAX {
 		return false
 	}
+	return true
+}
+
+// Puts a saved Prosio into the game just built, with what he had built in
+// the meadow. False if there is none (or it is from a version of the game
+// that cannot be carried over).
+load_game :: proc() -> bool {
+	if g.opts.shot_path != nil || g.opts.no_save {
+		return false
+	}
+	n := store_read(save_bytes[:])
+	if !read_save(save_bytes[:n]) {
+		return false
+	}
+	save := &save_buffer
 	p := &g.prosio
 	p.fat = save.fat
 	p.trait = save.trait

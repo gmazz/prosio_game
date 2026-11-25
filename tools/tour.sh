@@ -55,6 +55,8 @@ shot workbench "The workbench at home, across the yard from the oven: a table wi
 
 # The menus.
 shot menu_main "The main menu" --menu
+shot menu_main_load "The main menu with backups to load: LOAD under the language" --menu --load-list
+shot menu_load "The LOAD list: saved games newest first, as a date and time; the fifth cannot be read (grey); the second chosen" --load-list
 shot menu_oven "The oven's menu: six recipes, what each needs, how many to make" --pos -4 -0.3 --stock --tap a
 shot menu_fire "The fire's menu: fried egg, grilled fish, roast meat" --pos -15.5 -41.7 --stock --tap a
 shot menu_bench "The workbench's menu: six plans (fence, scarecrow, rod, spear, gate, larder), what each is for and what it needs" --pos 1.5 8.8 --stock --tap a

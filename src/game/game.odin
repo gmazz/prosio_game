@@ -25,6 +25,7 @@ Options :: struct {
 	tap2_frame: int,
 	release_at: int, // stop holding the --hold buttons on this frame
 	menu:       bool, // start on the menu even in a test run
+	load_list:  bool, // a test run with example backups (in memory only): the LOAD list open, or LOAD on the menu with menu
 	crowd:      bool, // put a few animals round Prosio at the start
 	bodies:     bool, // put a dead turkey, a dead goat and a fox round him at the start
 	swimmers:   bool, // put a turkey and a goat swimming in the pond, and a drowned turkey floating
@@ -97,6 +98,7 @@ Scene :: enum {
 	Oven, // choosing what to make at the oven, the fire or the churn; the game waits
 	Bag, // the sack and outfit menu; the game waits
 	Larder, // moving things between the sack and a larder; the game waits
+	Load, // choosing a backup to load (saves.odin), from the main or pause menu
 }
 
 scene: Scene
@@ -120,8 +122,12 @@ init :: proc(opts: Options) {
 	}
 	continue_game()
 	set_ground_layout() // the same in every game
+	list_backups()
 	// Test runs go straight into the game.
 	scene = ((opts.shot_path != nil || opts.agent || opts.start_tipsy) && !opts.menu) ? .Playing : .Menu
+	if opts.load_list {
+		show_load_examples()
+	}
 }
 
 // Builds the meadow afresh and puts the saved Prosio in it, if there is one.
@@ -331,8 +337,14 @@ update_menu :: proc() {
 	switch choice {
 	case .Play:
 		scene = .Playing // the game is already there, behind the menu
+	case .Load:
+		list_backups()
+		load_from, load_choice = scene, 0
+		scene = .Load
 	case .Restart:
-		// A new Prosio: the old one is forgotten.
+		// A new Prosio; the old one is kept as a backup first, so nothing
+		// is lost (saves.odin).
+		back_up_save()
 		new_game()
 		save_game()
 		scene = .Playing
@@ -416,6 +428,11 @@ update_frame :: proc(dt: f32) {
 		update_bag(dt)
 	case .Larder:
 		update_larder_menu()
+	case .Load:
+		update_load_list()
+		if load_from == .Menu {
+			g.time += dt
+		}
 	case .Playing:
 		if button_pressed(.Menu) {
 			scene = .Paused
@@ -430,7 +447,7 @@ update_frame :: proc(dt: f32) {
 		// He is saved every so often as the game goes on.
 		save_t -= dt
 		if save_t <= 0 {
-			save_t = 15
+			save_t = SAVE_EVERY
 			save_game()
 		}
 		simulate(dt)
@@ -490,6 +507,11 @@ draw_frame :: proc(shot: cstring = nil) {
 	case .Larder:
 		draw_ui()
 		draw_larder_menu()
+	case .Load:
+		if load_from == .Paused {
+			draw_ui()
+		}
+		draw_load_list()
 	}
 
 	if g.opts.shot_path != nil && g.frame == max(g.opts.shot_frame, 30) {

@@ -28,6 +28,7 @@
 					let text = "";
 					for (let i = 0; i < size; i++) text += String.fromCharCode(bytes[i]);
 					localStorage.setItem(which ? "prosio-controls" : "prosio-save", btoa(text));
+					if (!which) localStorage.setItem("prosio-save-time", String(Date.now()));
 				} catch (e) {}
 			},
 			store_load: (which, pointer, room) => {
@@ -43,8 +44,73 @@
 					return 0;
 				}
 			},
+			// The clock, in local time: year, month, day, hour, minute, second.
+			clock_local: (pointer, unused) => {
+				putClock(pointer, new Date());
+			},
+			// When the saved game was written (0 if that is not known).
+			store_saved_time: (pointer) => {
+				const at = Number(localStorage.getItem("prosio-save-time"));
+				if (!at) return 0;
+				putClock(pointer, new Date(at));
+				return 1;
+			},
+			// The backups of the saved game (see saves.odin): each under its
+			// own key, the newest `keep` kept.
+			backup_save: (name, nameSize, pointer, size, keep) => {
+				try {
+					const bytes = new Uint8Array(odinMemory.memory.buffer, pointer, size);
+					let text = "";
+					for (let i = 0; i < size; i++) text += String.fromCharCode(bytes[i]);
+					localStorage.setItem(BACKUP + readName(name, nameSize), btoa(text));
+					const names = backupNames();
+					names.sort((a, b) => backupOrder(b) - backupOrder(a));
+					for (const old of names.slice(keep)) localStorage.removeItem(BACKUP + old);
+				} catch (e) {}
+			},
+			backup_load: (name, nameSize, pointer, room) => {
+				try {
+					const saved = localStorage.getItem(BACKUP + readName(name, nameSize));
+					if (!saved) return 0;
+					const text = atob(saved);
+					if (text.length > room) return 0;
+					const bytes = new Uint8Array(odinMemory.memory.buffer, pointer, room);
+					for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+					return text.length;
+				} catch (e) {
+					return 0;
+				}
+			},
+			backup_names: (pointer, room) => {
+				const text = backupNames().join("\n");
+				if (text.length > room) return 0;
+				const bytes = new Uint8Array(odinMemory.memory.buffer, pointer, room);
+				for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 255;
+				return text.length;
+			},
 		},
 	};
+	const BACKUP = "prosio-backup:";
+	function putClock(pointer, d) {
+		const out = new Int32Array(odinMemory.memory.buffer, pointer, 6);
+		out.set([d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()]);
+	}
+	function readName(pointer, size) {
+		return String.fromCharCode(...new Uint8Array(odinMemory.memory.buffer, pointer, size));
+	}
+	function backupNames() {
+		const names = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key.startsWith(BACKUP)) names.push(key.slice(BACKUP.length));
+		}
+		return names;
+	}
+	// prosio_DDMMYY_HHMMSS.sav, as a number that grows with the time.
+	function backupOrder(name) {
+		const m = /^prosio_(\d\d)(\d\d)(\d\d)_(\d{6})\.sav$/.exec(name);
+		return m ? Number(m[3] + m[2] + m[1] + m[4]) : 0;
+	}
 
 	var Module = {
 		canvas: document.getElementById("canvas"),

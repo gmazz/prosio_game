@@ -24,6 +24,8 @@ main :: proc() {
 	//   --tap2 g          a second set of buttons to press once...
 	//   --tap2-at 90      ...on this frame
 	//   --menu            show the menu instead of starting the game
+	//   --load-list       example backups, in memory: the LOAD list open (with
+	//                     --menu, LOAD on the main menu); nothing is read or written
 	//   --crowd           put turkeys and goats round Prosio at the start
 	//   --tipsy           preview the stagger in a fresh meadow without saves
 	//   --far             with --near: five metres off, to throw at
@@ -151,6 +153,8 @@ main :: proc() {
 			}
 		case "--menu":
 			opts.menu = true
+		case "--load-list":
+			opts.load_list = true // example backups, for the tour
 		case "--far":
 			opts.far = true
 		case "--pebbles":

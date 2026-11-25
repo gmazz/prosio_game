@@ -76,9 +76,17 @@ The screen is kept simple, for a child:
 
 ### Menus
 
-The game opens on a main menu (Play, the pixel size, the language, and Quit on the desktop). `Esc` pauses, with Resume, the pixel size, the language, Start over and Exit to menu. The game is in English and Polish: choosing the language on either menu changes every word at once, and the choice is kept with the controls (the line `LANGUAGE pl` in the controls file, or in the browser's storage), so the game opens in it next time.
+The game opens on a main menu (Play, the pixel size, the language, Load when there is a backup to load, and Quit on the desktop). `Esc` pauses, with Resume, the pixel size, the language, Load, Start over and Exit to menu. The game is in English and Polish: choosing the language on either menu changes every word at once, and the choice is kept with the controls (the line `LANGUAGE pl` in the controls file, or in the browser's storage), so the game opens in it next time.
 
-**Saving.** A Prosio saved by an earlier version of the game (before pebbles, before wood and the workbench, before gates, larders and the three kitchen skills, or before the campfire) is carried over as he was; his one old cooking skill becomes all three kitchen skills. Prosio is saved every 15 seconds of play, when the game is paused, when it goes back to the menu, and the moment he goes down (as the pig who will wake up at home, so leaving the game while he lies there does not undo it): his fat, muscles and skills, his nutrient levels, his sack, his outfit, the recipes and plans he knows, what he has uncovered of the map, and what he has built in the meadow: his fences and gates (open or shut), his scarecrows, his larders with what is in them, his campfire, and the animals in his pens (up to 240 pieces of fence, 8 scarecrows, 4 larders and 12 animals); and how fresh the food in his sack is. On the desktop this is the file `prosio.sav` beside the program; in the browser it is kept in the browser's own storage for the page. With a saved Prosio the main menu says Continue instead of Play, and has Start over, which begins again with a new pig. The rest of the meadow starts afresh each sitting: food, the other animals, a spear left lying and what is in the oven are not saved.
+**Saving.** A Prosio saved by an earlier version of the game (before pebbles, before wood and the workbench, before gates, larders and the three kitchen skills, or before the campfire) is carried over as he was; his one old cooking skill becomes all three kitchen skills. Prosio is saved every 15 seconds of play, when the game is paused, when it goes back to the menu, and the moment he goes down (as the pig who will wake up at home, so leaving the game while he lies there does not undo it): his fat, muscles and skills, his nutrient levels, his sack, his outfit, the recipes and plans he knows, what he has uncovered of the map, and what he has built in the meadow: his fences and gates (open or shut), his scarecrows, his larders with what is in them, his campfire, and the animals in his pens (up to 240 pieces of fence, 8 scarecrows, 4 larders and 12 animals); and how fresh the food in his sack is. On the desktop this is the file `prosio.sav` beside the program; in the browser it is kept in the browser's own storage for the page. With a saved Prosio the main menu says Continue instead of Play, and has Start over, which begins again with a new pig (the old one is kept as a backup first: see below). The rest of the meadow starts afresh each sitting: food, the other animals, a spear left lying and what is in the oven are not saved.
+
+### Saving, backups and loading
+
+Starting over or loading another game never loses the one there was. Before Start over or Load throws the game away, the saved game, as it stands, is first copied to a backup named for when it was saved, `prosio_DDMMYY_HHMMSS.sav` in local time (a game saved on 25 November 2026 at 23:15:07 is `prosio_251126_231507.sav`), in the folder `saves` beside the saved game. The game is saved when it is paused or left for the menu, so that is the game as it was a moment before. A backup already there with the same bytes is not made twice; two different saves in the same second take the next free second. Every backup is kept.
+
+**Load**, on the main and pause menus whenever there is a backup, lists the newest 50, newest at the top, each as the day and time it was saved in the game's language (25 November 2026, 23:15:07). They are put in order by the time in their names, not their names as text (day first does not sort) or the files' dates (which copying changes); a file in the folder whose name is not a backup's is left out, and one this version cannot read is shown grey and cannot be chosen. Up and down choose, Confirm loads, the pause button goes back. Loading backs up the game being left, makes the chosen one the saved game, and goes on with him in a freshly built meadow, as Continue does; a backup from an earlier version is carried over as the saved game is.
+
+In the browser there is no folder: the newest 10 backups are kept in the browser's own storage for the page, each under its own name, with the same Load list. Test runs, a program playing (`tools/play.sh`) and the workbench neither make nor list backups. How often the game is saved, the folder's name, how many the list shows and how many the browser keeps are in `data/tuning/saving.json`.
 
  The menus of the oven, the fire and the churn, and the sack, outfit and map menu, also pause the game.
 
@@ -765,6 +773,8 @@ src/
                      stamina
     body.odin        his muscles and skills, which follow what he does; waking
                      up after the game is over; saving
+    saves.odin       backups of the saved game before Start over and Load,
+                     and the Load list
     kitchen.odin     the sack, calories, recipes and plans, the oven, the fire,
                      the churn, the mill, and their menus and pixel icons
     mixing.odin      the rules of mixing a bowl of things and heating the mix
@@ -945,6 +955,7 @@ The desktop build takes options that script a run, save a picture and quit. As i
 | `--shot name.png` | save a picture, then quit |
 | `--frame 150` | which frame to take the picture on |
 | `--menu` | show the menu instead of starting the game |
+| `--load-list` | twelve example backups, in memory (nothing is read or written): the Load list open, or with `--menu` the main menu showing Load; for the tour |
 | `--seed 7` | build a different meadow (the game itself always builds the same one) |
 | `--crowd` | put turkeys, a goat and the billy goat round Prosio at the start, the first turkey within reach, for trying the club |
 | `--bodies` | put a dead turkey (within reach), a dead goat and a fox with a stolen apple round him, and a rabbit and a crow making off |
@@ -988,6 +999,7 @@ The game never reads these files: `tools/gen_data` (run by the build scripts and
 | `world.json` | The meadow's size, home, the pond, paths, the map, how far he sees (`meadow`); the fog (`fog`); how much food there is and how fast it grows and comes back, apples, berries, eggs (`growing`); salt rocks and pebble patches (`salt_and_pebbles`); the forest, its clearings and trails, how trees hide things, shaking a tree (`forest`); trees from models: heights, crowns, models, how they vary, leaf colours (`trees`); grass, ferns, bushes and logs (`plants`); how many of each thing the game keeps room for (`limits`) |
 | `outfit.json` | The whole outfits (`outfits`); what each shirt and top is like, and how thick a layer is (`clothes`) |
 | `screen.json` | The camera (`camera`); trees going see-through round him (`forest_view`); the pixel sizes (`pixels`); the need pictures, weight bar and health bars (`panels`); how many sack boxes show (`sack`); the sack page's grid, where the main and pause menus' choices go, how small a help line too long for its menu may get, and how close the BODY page's lines may come in a short window (`menus`); how long the line about a place shows (`places`) |
+| `saving.json` | How often the game is saved, and the backups: their folder, how many the Load list shows, how many the browser keeps (`saving`) |
 | `colours.json` | Every colour, by where it is used |
 | `controls.json` | The keys and Xbox buttons each action starts with, which can be changed (`buttons`); the controller's dead zones (`controller`) |
 
