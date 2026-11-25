@@ -40,6 +40,7 @@ run_rules :: proc() -> int {
 	rules_diet()
 	rules_energy()
 	rules_body()
+	rules_day_budget()
 	rules_world()
 	rules_kitchen()
 	rules_animals()
@@ -106,14 +107,18 @@ rules_body :: proc() {
 	g.round_count = 0
 	p.pos = {-60, -10}
 	p.need[.Carbs] = 60
+	p.need[.Protein] = 0 // (protein used up is counted as his muscle's, but is neither fat nor carbs)
 	before := game.energy_kg()
 	step(1800, {.Right})
 	counted: f32
 	for kg in g.burned {
-		counted += kg
+		counted += f32(kg)
 	}
 	lost := before - game.energy_kg()
-	check("what he burns is counted by what it went on", g.burned[.Walking] > 0.3 && g.burned[.Muscle] > 0.05 && g.burned[.Fighting] == 0 && abs(counted - lost) < 0.15, fmt.tprintf("half a minute's walk: walking %.2f kg, muscle %.2f kg, counted %.2f kg, fat and carbs down %.2f kg", g.burned[.Walking], g.burned[.Muscle], counted, lost))
+	// (Half a minute's walk is about 8.5 kcal, 0.04 kg; his muscles burn
+	// about 10 kcal in that time. Counted to the gram: what is left over
+	// is the rounding of his carbs' level.)
+	check("what he burns is counted by what it went on, to the gram", g.burned[.Walking] > 0.03 && g.burned[.Muscle] > 0.03 && g.burned[.Fighting] == 0 && abs(counted - lost) < 0.001, fmt.tprintf("half a minute's walk: walking %.4f kg, muscle %.4f kg, counted %.5f kg, fat and carbs down %.5f kg", g.burned[.Walking], g.burned[.Muscle], counted, lost))
 
 	// A test that asks for a weight gets it, whatever else it asks for.
 	g.opts = {no_save = true, start_kg = 66, has_needs = true, needs = {95, 95, 90, 95, 50, 50}, has_traits = true, traits = {1, 1, 0.8, 1, 0.5, 0.3, 0.6, 0.6, 0.6}}
@@ -1243,7 +1248,7 @@ rules_weight :: proc() {
 		}
 		before := g.burned[.Walking]
 		step(600, {.Right})
-		return g.burned[.Walking] - before, g.prosio.trait[.Legs]
+		return f32(g.burned[.Walking] - before), g.prosio.trait[.Legs]
 	}
 	burn_light, legs_light := walk(0)
 	burn_heavy, legs_heavy := walk(16)
@@ -1665,10 +1670,10 @@ rules_kitchen :: proc() {
 	half := p.trait[.Baking]
 	titles[1] = game.cook_title(.Oven)
 	p.trait[.Legs] = 0.5
-	for _ in 0 ..< 60 * 60 * 20 {
+	for _ in 0 ..< int(game.DAY_SECONDS) * 2 * 60 {
 		game.update_body(1.0 / 60)
 	}
-	check("eleven bakes take him half way to master baker; a cooking skill never fades, though his legs do", half > 0.45 && half < 0.55 && abs(p.trait[.Baking] - half) < 0.0001 && p.trait[.Legs] < 0.3 && titles[0] == "Beginner baker" && titles[1] == "Apprentice baker", fmt.tprintf("baking %.2f after 11, %.2f twenty minutes later; legs 0.50 to %.2f; called %s, then %s", half, p.trait[.Baking], p.trait[.Legs], titles[0], titles[1]))
+	check("eleven bakes take him half way to master baker; a cooking skill never fades, though his legs lose half in two days of play", half > 0.45 && half < 0.55 && abs(p.trait[.Baking] - half) < 0.0001 && abs(p.trait[.Legs] - 0.25) < 0.01 && titles[0] == "Beginner baker" && titles[1] == "Apprentice baker", fmt.tprintf("baking %.2f after 11, %.2f two days later; legs 0.50 to %.3f; called %s, then %s", half, p.trait[.Baking], p.trait[.Legs], titles[0], titles[1]))
 }
 
 // Animals do what they are for.
@@ -1736,7 +1741,7 @@ rules_animals :: proc() {
 		p.pos = fire + game.FIRE_BLOCK.xz + {0, 1.6}
 		step(1, {}, {.Action})
 		step(5)
-		check(fmt.tprintf("a dead %v is chopped into %d pieces of meat at the fire", kind, game.MEAT_FROM[kind]), p.sack[.Meat] == game.MEAT_FROM[kind] && p.carry == .Nothing, fmt.tprintf("%d meat", p.sack[.Meat]))
+		check(fmt.tprintf("a dead %v is chopped into %d pieces of meat at the fire: its MEAT_KG", kind, game.meat_pieces(kind)), p.sack[.Meat] == game.meat_pieces(kind) && p.carry == .Nothing, fmt.tprintf("%d meat", p.sack[.Meat]))
 	}
 
 	fresh()
@@ -2047,18 +2052,23 @@ rules_workshop :: proc() {
 	step(90)
 	check("an animal with fences all round it is penned: it stays and leaves him alone, until there is a gap", penned && stayed && quiet && !e.penned && e.home == wild, fmt.tprintf("penned %v, stayed in %v, bruises %.0f; with a piece taken out: penned %v, its home back in the wild %v", penned, stayed, p.bruises, e.penned, e.home == wild))
 
-	// A penned turkey lays: within two minutes, an egg in the pen. Shaken,
-	// a turkey hardly ever lets one go.
+	// A penned turkey lays two to four eggs a day: within PEN_EGG_EVERY, an
+	// egg in the pen (looked for every minute, as an egg lies there only
+	// EGG_LIFE). Shaken, a turkey hardly ever lets one go.
 	alone()
 	x, y = game.fence_cell(p.pos)
 	ring(x + 3, y, 1, 1)
 	game.add_enemy(.Turkey, middle(x + 3, y, 1, 1))
-	step(60 * 125)
 	laid := 0
-	for &f in g.foods[:g.food_count] {
-		laid += f.kind == .Egg && !f.gone && game.fenced_in(f.pos) ? 1 : 0
+	waited := 0
+	for ; laid == 0 && f32(waited) < game.PEN_EGG_EVERY.y + 60; waited += 60 {
+		step(60 * 60)
+		for &f in g.foods[:g.food_count] {
+			laid += f.kind == .Egg && !f.gone && game.fenced_in(f.pos) ? 1 : 0
+		}
 	}
-	check("a penned turkey lays an egg in its pen every minute or two; shaking one hardly ever drops an egg", laid >= 1 && game.SHAKE_EGG <= 0.02, fmt.tprintf("%d eggs laid in the pen in two minutes; the chance an egg falls out at each swing is %.2f", laid, game.SHAKE_EGG))
+	a_day := [2]f32{game.DAY_SECONDS / game.PEN_EGG_EVERY.y, game.DAY_SECONDS / game.PEN_EGG_EVERY.x}
+	check("a penned turkey lays two to four eggs a day in its pen; shaking one hardly ever drops an egg", laid >= 1 && a_day == {2, 4} && game.SHAKE_EGG <= 0.02, fmt.tprintf("an egg in the pen after %d minutes (%v to %v a day); the chance an egg falls out at each swing is %.2f", waited / 60, a_day[0], a_day[1], game.SHAKE_EGG))
 
 	// The workbench stands across the yard from the oven.
 	apart := length(g.stations[.Bench].pos - g.stations[.Oven].pos)
@@ -2199,7 +2209,7 @@ rules_workshop :: proc() {
 		before := p.sack_kcal[.Meat]
 		step(2, {}, {.Action})
 		step(10)
-		fresh_meat[i] = (p.sack_kcal[.Meat] - before) / 2
+		fresh_meat[i] = (p.sack_kcal[.Meat] - before) / f32(game.meat_pieces(.Turkey))
 	}
 	check("meat chopped from a body that has lain a long while is poorer", fresh_meat[0] == 300 && fresh_meat[1] < 150, fmt.tprintf("a piece from a fresh body %.0f kcal, from one that lay 200 s %.0f kcal", fresh_meat[0], fresh_meat[1]))
 
@@ -2244,7 +2254,7 @@ rules_workshop :: proc() {
 	check("a goat in a pen stands to be milked with E, and does not butt him", e.penned && p.sack[.Milk] == 1 && p.bruises == 0, fmt.tprintf("penned %v, milk %d, bruises %.0f", e.penned, p.sack[.Milk], p.bruises))
 
 	// The end of a penned animal: the next of its kind comes back in the wild.
-	game.leave(e)
+	game.leave(e, false)
 	check("a penned animal that is killed does not come back in the pen", !e.penned && !game.fenced_in(e.home), fmt.tprintf("penned %v, its home fenced in %v", e.penned, game.fenced_in(e.home)))
 
 	// A crow at the wheat, and a scarecrow stood up seven metres off.

@@ -364,7 +364,7 @@ agent_line :: proc() {
 	if g.in_region {
 		fmt.printf(" in %s", game.TEXT.region_name[g.region])
 	}
-	fmt.printf(", %.1f kg, stamina %.0f, %s", p.kg, p.stamina, agent_carrying())
+	fmt.printf(", %.1f kg, stamina %.0f, stomach %.0f%%%s, %s", p.kg, p.stamina, 100 * p.stomach / game.STOMACH_HOLDS, game.stomach_full() ? " (full)" : "", agent_carrying())
 	if p.height > 0.05 {
 		fmt.printf(", %.1f m off the ground", p.height)
 	}

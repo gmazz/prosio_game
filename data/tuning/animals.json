@@ -16,11 +16,12 @@
     "ENEMY_SPEED": {"[Enemy_Kind]f32": {"Turkey": 2.8, "Goat": 3.2, "Billy": 2.9, "Fox": 3.4}, "about": "(faster than a turkey: a goat is a runner)"},
     "GOAT_CHARGE": {"f32": 1.8, "about": "how many times its own speed a goat charges at"},
     "ENEMY_GRIP": {"[Enemy_Kind]f32": {"Turkey": 560, "Goat": 450, "Billy": 500, "Fox": 600}, "about": "its grip in the bump above: how much of his momentum (kg times m/s) it soaks up before it moves at all; raise it and a bump throws it less"},
-    "MEAT_FROM": {
-      "[Enemy_Kind]int": {"Turkey": 2, "Goat": 5, "Billy": 8, "Fox": 0},
-      "about": "Knocked out, a turkey or a goat is dead: its body lies where it fell for BODY_LIFE, and chopped up at the fire it gives this many pieces of meat. A fox only slinks off for a while. Another animal takes a dead one's place, but not for a good while (seconds, somewhere in this range): so hunting thins the flock, and with it the eggs."
+    "MEAT_KG": {
+      "[Enemy_Kind]f32": {"Turkey": 3, "Goat": 10, "Billy": 16, "Fox": 0},
+      "about": "Knocked out, a turkey or a goat is dead: its body lies where it fell for BODY_LIFE, and chopped up at the fire it gives this many kilograms of meat, in pieces of ITEM_KG[.Meat] (food.json): a turkey 16 pieces, about 4,800 kcal; a goat 53, about 15,900; the billy goat 84, about 25,300. (A real carcass gives about twice as much; this is less, for balance.) A fox only slinks off for a while. Raise one and that kind gives more meat"
     },
-    "RESPAWN": {"[Enemy_Kind]Vec2": {"Turkey": [300, 480], "Goat": [480, 720], "Billy": [600, 900], "Fox": [60, 120]}, "about": "seconds, at random in this range, before another of each kind takes the place of one that is gone"},
+    "KILLED_BACK": {"Vec2": ["6.5 * DAY_SECONDS", "7.5 * DAY_SECONDS"], "const": true, "about": "seconds, at random in this range, before another takes the place of an animal that was killed (chopped up, rotted away or drowned): about a season, seven days of play, so the meadow can be hunted out and a pen is the sure way to have meat; raise it and the flocks take longer to come back"},
+    "RESPAWN": {"[Enemy_Kind]Vec2": {"Turkey": ["300 * MEADOW_SLOW", "480 * MEADOW_SLOW"], "Goat": ["480 * MEADOW_SLOW", "720 * MEADOW_SLOW"], "Billy": ["600 * MEADOW_SLOW", "900 * MEADOW_SLOW"], "Fox": ["60 * MEADOW_SLOW", "120 * MEADOW_SLOW"]}, "about": "seconds, at random in this range, before another of each kind takes the place of one that is gone but was not killed: lost in the fog, or a fox that slunk off (as it was, times MEADOW_SLOW: a turkey 75 to 120 minutes, a fox 15 to 30)"},
     "BODY_LIFE": {"f32": 240, "about": "seconds a dead body lies where it fell before it is gone; the longer it has lain, the poorer its meat"},
     "LEASH": {
       "[Enemy_Kind]f32": {"Turkey": 30, "Goat": 26, "Billy": 26, "Fox": 1000},
@@ -29,10 +30,10 @@
     "GIVE_UP": {"f32": 8, "about": "seconds it ambles back home once it has gone past its LEASH, whatever he does"}
   },
   "eggs_milk_and_the_fox": {
-    "EGG_EVERY": {"Vec2": [600, 1200], "const": true, "about": "a turkey lays an egg every so many seconds, at random in this range: only now and then"},
+    "EGG_EVERY": {"Vec2": ["600 * MEADOW_SLOW", "1200 * MEADOW_SLOW"], "const": true, "about": "a turkey lays an egg every so many seconds, at random in this range: only now and then (as it was, times MEADOW_SLOW)"},
     "SHAKE_EGG": {"f32": 0.01, "about": "chance that shaking a held turkey shakes an egg out of it: hardly ever"},
-    "PEN_EGG_EVERY": {"Vec2": [60, 120], "const": true, "about": "a penned turkey, settled and fed, lays far more often"},
-    "MILK_EVERY": {"f32": 180, "about": "seconds until a milked goat has milk again"},
+    "PEN_EGG_EVERY": {"Vec2": ["60 * MEADOW_SLOW", "120 * MEADOW_SLOW"], "const": true, "about": "a penned turkey, settled and fed, lays far more often: two to four eggs a day"},
+    "MILK_EVERY": {"f32": "180 * MEADOW_SLOW", "about": "seconds until a milked goat has milk again: 45 minutes, so a jug or two a day"},
     "SOUR_SIGHT": {
       "f32": 22,
       "about": "A goat he has hit will not lick him, however salty he is, until it has not seen him (he is further off than SOUR_SIGHT) for SOUR_FORGET seconds."

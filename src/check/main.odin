@@ -42,6 +42,8 @@ main :: proc() {
 					seed, _ = strconv.parse_int(args[i + 1])
 					i += 1
 				}
+			case "--forager":
+				forager.on = true // play sensibly, and report the day's budget (forager.odin)
 			}
 		}
 		os.exit(autoplay(minutes, seed) ? 0 : 1)

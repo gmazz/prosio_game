@@ -359,14 +359,14 @@ build_world :: proc() {
 	add_round(g.stations[.Churn].pos + CHURN_STOOL.xz, 0.3, .Block)
 	g.mill.pos = {43, 22}
 	add_round(g.mill.pos, MILL_RADIUS, .Mill)
-	// The wheat fields and the garden beds: small, as the budget allows a
-	// dozen sheaves, ten pumpkins and sixteen cabbages.
-	add_field({47, 13}, {52, 17}, .Wheat, 2, 2)
-	add_field({56, 19}, {61, 23}, .Wheat, 2, 2)
-	add_field({48, 25}, {53, 29}, .Wheat, 2, 2)
-	add_field({-22, 41}, {-15, 46}, .Pumpkin, 3, 2)
-	add_field({-9, 44}, {-4, 48}, .Pumpkin, 2, 2)
-	add_field({-20, 51}, {-12, 57}, .Cabbage, 4, 4)
+	// The wheat fields and the garden beds: sparse, as the budget
+	// (FOOD_BUDGET) allows six sheaves, five pumpkins and eight cabbages.
+	add_field({47, 13}, {52, 17}, .Wheat, 2, 1)
+	add_field({56, 19}, {61, 23}, .Wheat, 2, 1)
+	add_field({48, 25}, {53, 29}, .Wheat, 2, 1)
+	add_field({-22, 41}, {-15, 46}, .Pumpkin, 3, 1)
+	add_field({-9, 44}, {-4, 48}, .Pumpkin, 2, 1)
+	add_field({-20, 51}, {-12, 57}, .Cabbage, 4, 2)
 	// The bee meadow's three hives.
 	for pos, i in ([MAX_HIVES]Vec2{{-54, 54}, {-46.5, 58}, {-50, 51}}) {
 		add_hive(i, pos)

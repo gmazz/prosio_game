@@ -551,7 +551,7 @@ show_effects :: proc(d, master: game.Dish, opts: Mix_Options) {
 	} else {
 		fmt.printf("      %.0f kcal;  weight %.0f g;  hardness %.2f", d.kcal, d.grams, d.hardness)
 	}
-	if d.matter[.Alcohol] > 0.05 {fmt.printf(";  alcohol %.1f%%", 100 * d.matter[.Alcohol] / d.grams)}
+	if d.matter[.Alcohol] > 0.05 {fmt.printf(";  alcohol %.1f%% by weight, %.1f%% by volume", 100 * d.matter[.Alcohol] / d.grams, 100 * d.matter[.Alcohol] / game.ALCOHOL_DENSITY / d.grams)}
 	if d.heat > 0 {fmt.printf(";  chili %.1f/kg", d.heat)}
 	if d.heated {
 		fmt.printf(";  %.2f logs, %.0f s wait", d.wood, game.cook_seconds(d.minutes))

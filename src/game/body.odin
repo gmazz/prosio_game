@@ -9,9 +9,9 @@ import "core:math"
 // what he has been doing lately.
 //
 //   Doing the thing that trains a trait raises it, by less the higher it
-//   already is. Left alone it fades, losing half in 18 minutes of play. So a
-//   habit shows on him after a few minutes, and he cannot keep everything up
-//   at once.
+//   already is. Left alone it fades, losing half in two days of play (FADE).
+//   Muscle is trained, wastes and comes back at MUSCLE_PACE of the pace of
+//   the skills: a body changes over days, as the day's food does.
 //
 //   Muscle is built out of protein, kilogram for kilogram: training takes
 //   it from the protein in him, and with little there it builds little.
@@ -84,6 +84,7 @@ train :: proc(t: Trait, work: f32) {
 	p := &g.prosio
 	gain := work * (1 - p.trait[t])
 	if is_muscle(t) {
+		gain *= MUSCLE_PACE
 		// Muscle is built out of the protein in him, kilogram for kilogram:
 		// little to spare, little muscle; none, none.
 		supply := protein_to_spare() * (full_of(.Protein) ? BULK : 1)

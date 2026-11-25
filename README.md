@@ -144,12 +144,14 @@ There is one set of books, in kilograms. **Prosio's weight is nothing but the su
 
 Two more things he needs weigh nothing: vitamins and electrolytes. Food gives all of its points of these only while he is under half full of them; above that he takes in less and less, and nothing when full.
 
-**Food is made of the same stuff.** Each food has a composition: the share of its calories that is carbs, fat, protein, fibre, vitamins and electrolytes, adding up to 100% (the tables in [The sack and the oven](#the-sack-and-the-oven) give them all). A piece puts into him exactly those shares of its calories and nothing it is not made of, and a piece twice as rich puts in twice as much of each. Each share goes in at a fixed rate: carbs, fat and protein 200 kcal to the kilogram, fibre 60 kcal to the kilogram, vitamins and electrolytes a point of their level for each kcal. So a food's calories count all of it; only its carbs, fat and protein are energy. Food holds no water: that comes from the pond. Eating puts each share into the part of him that is the same thing, and the books balance in energy, not in weight. A food weighs what it really does for its calories (carbs and protein 4 kcal to the gram, fat 9, fibre 2, as in life), but Prosio is an animal with an extremely efficient metabolism: 200 kcal change him by a kilogram, where a real body needs about 7,700. That is why his shape changes in days, and why a meal can put more weight on him than it weighs (the flour from a sheaf weighs 100 g, and its 340 kcal put 1.7 kg on him):
+**Food is made of the same stuff.** Each food has a composition: the share of its calories that is carbs, fat, protein, fibre, vitamins and electrolytes, adding up to 100% (the tables in [The sack and the oven](#the-sack-and-the-oven) give them all). A piece puts into him exactly those shares of its calories and nothing it is not made of, and a piece twice as rich puts in twice as much of each. Each share goes in at a fixed rate: carbs, fat and protein 200 kcal to the kilogram, fibre 60 kcal to the kilogram, vitamins and electrolytes a point of their level for each kcal. So a food's calories count all of it; only its carbs, fat and protein are energy. The water in a food is not among its calories, but eaten it waters him as a drink would: a cabbage is 0.92 of its kilogram water, a pumpkin over 1.3 kg (each raw food's share is its row in the mixing table, a dish's is `ITEM_WATER` in `food.json`). Eating puts each share into the part of him that is the same thing, and the books balance in energy, not in weight. A food weighs what it really does for its calories (carbs and protein 4 kcal to the gram, fat 9, fibre 2, as in life), but Prosio is an animal with an extremely efficient metabolism: 200 kcal change him by a kilogram, where a real body needs about 7,700. That is why his shape changes in days, and why a meal can put more weight on him than it weighs (the flour from a sheaf weighs 100 g, and its 340 kcal put 1.7 kg on him):
 
 - **Carbs** go into his carbs. What they cannot hold turns to fat: one loaf fills them, and a second goes almost all to fat.
 - **Fat** goes straight onto his fat.
 - **Protein** goes into his protein. What that cannot hold passes through him. Protein never turns into carbs, so eggs, fish, meat and cheese put next to no carbs into him.
 - **Fibre** goes into his; what will not fit passes through.
+
+**His stomach** says how much he can eat at once. A piece takes room in it by its weight (a litre to the kilogram), and it holds a litre; it empties at a steady pace, a full litre in 5 hours of the game's day (12.5 minutes of play), so about 4.8 kg of food a day. From 90% full he is full: `Q` then says "My tummy is full! I need a while before I can eat more." and nothing is eaten, until some has gone on. A piece bigger than what is left, even a whole pumpkin (1.5 kg) into an empty stomach, still goes down, and fills it past full. A bar under his stamina, with a bowl, shows how full it is (orange when full). What he eats still goes into him at once: the stomach only limits how much more he can take. So the light foods (cabbage, 250 kcal a litre; pumpkin, 270; berries, 500) cannot keep him on their own, and the rich ones (nuts, honey, cheese, butter, bread, pies) are what keep weight on him.
 
 **What he burns** comes out of his carbs and his fat, and **muscle is what burns it**: every kilogram of muscle uses energy all the time, so a muscular pig needs proportionally more feeding than a lean one (see [Burning weight](#burning-weight)).
 
@@ -173,30 +175,23 @@ So a lean, strong, well-fed Prosio (8 kg of fat, 30 of muscle, everything else f
 
 ### Burning weight
 
-Everything he does burns some, from very little for walking to more for fighting and most for being hurt. There is no exercise to do: keeping busy is enough.
+A day is 60 minutes of play (`DAY_SECONDS` in `world.json`), and what he burns is set for it: an 80 kg Prosio with ordinary muscle eats about 2,000 kcal a day, in four or five meals, to stay as he is on an active day, and about 1,200 on a day of rest. Everything he does burns some, from very little for walking to more for fighting. There is no exercise to do: keeping busy is enough. (A kilogram of him is 200 kcal, so 2,000 kcal is 10 kg.)
 
-| What | Burns |
-|---|---|
-| Walking | 0.02 kg per second (about 1.2 kg a minute), times his weight / 80 kg |
-| Sprinting | 0.06 kg per second, times his weight / 80 kg |
-| Picking something up | 0.03 kg |
-| One jump | 0.06 kg |
-| One bump, grab, bash or throw | 0.2 kg |
-| His muscles, all the time | 0.014 kg a minute for each kg of muscle, carbs first: 0.11 kg a minute wasted (8 kg), 0.18 ordinary (13 kg), 0.41 at the most (30 kg) |
+| What | Burns | Over an active day |
+|---|---|---|
+| His muscles, all the time | 92 kcal a day for each kg of muscle, carbs first: 740 kcal a day wasted (8 kg), 1,200 ordinary (13 kg), 2,770 at the most (30 kg) | 1,200 kcal |
+| Walking | 17 kcal a minute, times his weight / 80 kg | 30 minutes: 520 kcal |
+| Sprinting | 52 kcal a minute, times his weight / 80 kg | 2 minutes: 104 kcal |
+| Picking something up | 0.43 kcal | 150 things: 65 kcal |
+| One jump | 0.87 kcal | 30 jumps: 26 kcal |
+| One bump, grab, bash or throw | 2.9 kcal | 30 of them: 86 kcal |
+| | | **2,000 kcal** |
+
+A rule checks the active day comes to 2,000 kcal and a day of rest to 1,200, and that letting a day pass burns what the numbers say. So a strong pig needs proportionally more: 2,300 kcal a day at rest with 25 kg of muscle, 3,100 on an active day.
 
 Sprinting, jumping and fighting take carbs first too; walking and picking take from carbs and fat together. Being pecked, butted or stung burns nothing: it bruises him (see [Being shoved](#being-shoved)).
 
-Five minutes of walking with nothing to eat takes an ordinary Prosio from 80 to about 71.5 kg: 4 kg off his fat, over 2 off his carbs, 1.5 of water, and the rest fibre and protein used up (some of the protein goes into his legs). Ten seconds in the middle of an angry flock of turkeys can cost him 2 kg.
-
-How muscle changes what he needs, in scripted runs:
-
-| | Wasted (8 kg) | Ordinary (13 kg) | Muscular (25 kg) | Most muscle (30 kg) |
-|---|---|---|---|---|
-| Burned in 10 minutes standing still | 0.8 kg | 1.1 kg | 2.8 kg | 3.5 kg |
-| Burned in 5 minutes walking | 5.7 kg | 6.4 kg | 7.9 kg | 8.6 kg |
-| With no fat and full carbs, faints after | | 51 min | 27 min | 22 min |
-
-So a strong pig is hungry: he gets through his carbs in under 20 minutes at rest and wants bread, honey or fruit, where an ordinary one hardly notices.
+A day eating nothing takes an active, ordinary Prosio from 80 to about 70 kg; eating 3,000 kcal on an active day puts 5 kg on him. A change of shape is a matter of two or three days of play. Each frame's burning is a few hundred-thousandths of a kilogram, smaller than the steps a number the size of his fat can take, so what rounding leaves out is carried to the next frame (`fat_add`): the books balance to the gram.
 
 ## The sack and the oven
 
@@ -213,31 +208,31 @@ His weight on the screen is his body alone; the load is shown with the sack.
 
 **Food goes off.** In the sack each kind of food loses half its calories in a set time, and its freshness with them: fish, meat and milk in 10 minutes; berries, mushrooms, eggs, fried eggs, grilled fish and roast in 20; pies, muffins and bread in 30 (a nut cake 40); apples, pumpkins and cabbages in an hour; cheese in two. Grain, flour, nuts, honey, salt and butter keep. Once its freshness is under 30% it is thrown out ("Pee-yew! My RAW FISH went bad. Out it goes!"). The sack menu says whether what he has is fresh, a bit stale or going off. As with calories, the sack keeps one freshness for each kind: a fresh apple put in with stale ones makes them a little fresher on average. **A larder** keeps food five times as long (see [Wood and the workshop](#wood-and-the-workshop)).
 
-**Food is scarce.** Of each kind there is never more in the whole meadow than 4,000 kcal's worth, counted at full size (1,200 for mushrooms, which are so light there would be far too many). That is a ceiling, not a promise:
+**Food is scarce.** Of each kind there is never more in the whole meadow than 2,000 kcal's worth, about a day's food, counted at full size (600 for mushrooms, which are so light there would be far too many). That is a ceiling, not a promise. And everything that grows or comes back takes 15 times as long as it did when a session was a few minutes long (`MEADOW_SLOW` in `world.json`): so no single kind feeds him, and he has to range over the meadow. (Wood is not food, and falls as often as it did.)
 
 | Food | Where | At most | Comes back |
 |---|---|---|---|
-| Pumpkins | Two beds in the garden | 10 | A new one sprouts 4 to 9 minutes after one is picked, and takes 5 minutes to grow |
-| Wheat | Three small fields | 12 sheaves | Sprouts after 4 to 9 minutes, grows in about 4 |
-| Apples | 14 wild apple trees in the forest | 42 (3 a tree, counting those lying under it) | A tree starts a new apple every 2 to 5 minutes; it ripens in about 3 |
-| Berries | 40 bushes in the forest | 80 bunches (2 a bush) | A picked bush starts another bunch after 1 to 3 minutes; it ripens in 2 |
-| Mushrooms | In the shade of the forest trees | 40 | Sprouts after 1.5 to 4 minutes, grows in under 2 |
-| Eggs | Wherever the turkeys are | 10 lying about | A turkey in the wild lays one only every 10 to 20 minutes, a penned one every 1 to 2 minutes (see [Wood and the workshop](#wood-and-the-workshop)); an egg lies for 4 minutes |
-| Cabbages | A bed in the garden | 16 | Sprouts after 3 to 8 minutes, grows in 4 |
-| Nuts | Little heaps under the forest trees | 22 handfuls | A new heap starts after 2.5 to 7 minutes, and more nuts drop on it for 3 |
-| Rock salt | Pink crystals standing on four big grey rocks in the goat hills | 8 lumps, 2 a rock (salt is no energy, so no budget) | A rock grows another lump after 5 to 10 minutes |
-| Fish | In the pond | 6 | Another swims in 4 to 8 minutes after one is caught |
-| Honey | Three hives in the bee meadow | 6 combs (2 a hive) | The bees fill another comb in 4 to 8 minutes |
+| Pumpkins | Two beds in the garden | 5 | A new one sprouts 60 to 135 minutes after one is picked, and takes 75 minutes to grow |
+| Wheat | Three small fields | 6 sheaves | Sprouts after 60 to 135 minutes, grows in about 65 |
+| Apples | 7 wild apple trees in the forest | 21 (3 a tree, counting those lying under it) | A tree starts a new apple every 30 to 75 minutes; it ripens in 50 |
+| Berries | 20 bushes in the forest | 40 bunches (2 a bush) | A picked bush starts another bunch after 15 to 40 minutes; it ripens in 30 |
+| Mushrooms | In the shade of the forest trees | 20 | Sprouts after 22 to 60 minutes, grows in 25 |
+| Eggs | Wherever the turkeys are | 10 lying about | A turkey in the wild lays one only every 2.5 to 5 hours, a penned one every 15 to 30 minutes, two to four a day (see [Wood and the workshop](#wood-and-the-workshop)); an egg lies for 4 minutes |
+| Cabbages | A bed in the garden | 8 | Sprouts after 50 to 120 minutes, grows in 60 |
+| Nuts | Little heaps under the forest trees | 11 handfuls | A new heap starts after 37 to 100 minutes, and more nuts drop on it for 45 |
+| Rock salt | Pink crystals standing on four big grey rocks in the goat hills | 8 lumps, 2 a rock (salt is no energy, so no budget) | A rock grows another lump after 75 to 150 minutes |
+| Fish | In the pond | 6 | Another swims in one to two hours after one is caught |
+| Honey | Three hives in the bee meadow | 6 combs (2 a hive) | The bees fill another comb in one to two hours |
 | Wood | Fallen branches under the forest trees | 36 branches (not food: see [Wood and the workshop](#wood-and-the-workshop)) | Another falls where one lay 2 to 5 minutes after it is picked up |
-| Milk | The five goats | a mug from each | A milked goat has milk again after 3 minutes |
-| Meat | Turkeys and goats, once dead | 2 pieces from a turkey, 5 from a goat, 8 from the billy goat | Another turkey takes a dead one's place after 5 to 8 minutes, a goat after 8 to 12, the billy goat after 10 to 15 |
+| Milk | The five goats | a mug from each | A milked goat has milk again after 45 minutes: a jug or two a day |
+| Meat | Turkeys and goats, once dead | 3 kg from a turkey (16 pieces, about 4,800 kcal), 10 kg from a goat (53), 16 kg from the billy goat (84) | One that was killed is replaced only after about a season, 6.5 to 7.5 days of play: the meadow can be hunted out, and a pen is the sure way to have meat. One lost in the fog is replaced after 75 to 120 minutes for a turkey (a goat 2 to 3 hours, the billy goat 2.5 to 3.75), a fox that slunk off after 15 to 30 minutes |
 
 **Things grow, and can be picked too early.** A new piece sprouts small and green, with a quarter of its calories, and grows to full size and colour; picked early it is worth less, and the prompt says what it is worth now ("E: pick it now (164 kcal, still growing)"). Each piece's full size also differs by up to 15% either way, so one ripe pumpkin is 350 kcal and the next 450. At the start of a game everything is at a different stage. The sack keeps the calories of each kind of thing all together, not piece by piece: three apples of 150, 100 and 50 kcal are 300 kcal of apples, and any one of them taken out is worth the average, 100. The sack shows what one piece of each kind is worth, and, for the one chosen in its menu, what it is made of: a bar of its composition, each share in per cent, and what one piece puts into him.
 
 - **Apple trees:** a ripe apple drops now and then, and lies for a minute and a half before it rots. **Bump an apple tree** (or slam an animal or throw one into it) and its apples come down, ripe or not: the harder the hit, the more. **Standing right at a tree** (no more than 0.6 m from its trunk) **and facing it** (within 30 degrees either side), the bump button does not charge: he takes hold of the trunk with both hooves and shakes it for most of a second, for the stamina of a bump, as hard as his arms are strong (`strength`: 1 for ordinary arms, up to 1.8 when built, down to 0.6 when wasted away; see [Body and skills](#body-and-skills)). The crown shakes that much, and about two apples come down for ordinary arms, one for weak ones, up to all three for strong ones.
 - **A turkey** held by the legs and shaken with `Space` hardly ever lets an egg drop: one swing in a hundred. Eggs come from turkeys laying, and most of them from turkeys in a pen.
 
-**Rabbits and crows eat what is left standing.** Two rabbits live in burrows by the garden and two crows circle over the wheat. Every minute or three one comes out for a crop that is at least 60% grown, far from Prosio, and eats it down over 14 seconds: not away altogether, but back to a much smaller size. Within 50 m he hears it start ("Caw, caw! A crow is at my wheat!"). They run when he comes within about 5 metres, and from his wind. A pebble does it from a distance: a stone passing or landing within 2.5 m sends one off, and it then stays away two and a half times as long. So ripe crops are best picked, or guarded: with a sack of pebbles, with a scarecrow against the crows, or with a fence against the rabbits (see [Wood and the workshop](#wood-and-the-workshop)).
+**Rabbits and crows eat what is left standing.** Two rabbits live in burrows by the garden and two crows circle over the wheat. Every 12 to 37 minutes one comes out for a crop that is at least 60% grown, far from Prosio, and eats it down over 14 seconds: not away altogether, but back to a much smaller size. Within 50 m he hears it start ("Caw, caw! A crow is at my wheat!"). They run when he comes within about 5 metres, and from his wind. A pebble does it from a distance: a stone passing or landing within 2.5 m sends one off, and it then stays away two and a half times as long. So ripe crops are best picked, or guarded: with a sack of pebbles, with a scarecrow against the crows, or with a fence against the rabbits (see [Wood and the workshop](#wood-and-the-workshop)).
 
 **Pebbles** are for throwing, not eating. Nine patches of them lie about the meadow (three in the goat hills, two on the pond's bank, one each near home, in the forest, by the turkeys and by the fields); `E` takes a handful of three, a patch holds six, and another works its way up every half minute to a minute. See [Grabbing and throwing](#grabbing-and-throwing) for what they do.
 
@@ -330,8 +325,8 @@ His body is drawn from simple shapes in code, so it changes smoothly with every 
 Prosio becomes what he does. Besides his fat he has **nine traits**: the muscle of his arms and of his legs, four skills of the body, and three of the kitchen. Each is a level that follows what he has been doing lately:
 
 - **Doing the thing trains it.** Each time, the trait gains a share of what it still lacks, so it rises quickly at first and more slowly near the top.
-- **What is in his body fades when left alone; what he knows how to do stays.** His muscles and the four skills of the body fade, as in real life: it loses half of what he had built in about 18 minutes of play (only play counts, not time with the game closed). So a habit shows on him after a few minutes, and he cannot keep everything up at once.
-- **Muscle is built out of protein, kilogram for kilogram.** Training takes it from the protein in him: with little there it builds little, with none it builds nothing. So a goat's five pieces of roast meat are over 6 kg of muscle waiting to be trained, and a pig that eats no protein stays ordinary however hard he works. When he lacks protein (or is starving) his muscles waste away below their ordinary size, in about 11 minutes, and come back in about 8 once he is fed.
+- **What is in his body fades when left alone; what he knows how to do stays.** His muscles and the four skills of the body fade, as in real life: it loses half of what he had built in two days of play (only play counts, not time with the game closed). Muscle is trained, wastes and comes back at a seventh of the pace it did when a session was a few minutes long (`MUSCLE_PACE`): a body changes over days, as the day's food does.
+- **Muscle is built out of protein, kilogram for kilogram.** Training takes it from the protein in him: with little there it builds little, with none it builds nothing. So a goat's meat is many kilograms of muscle waiting to be trained, and a pig that eats no protein stays ordinary however hard he works. When he lacks protein (or is starving) his muscles waste away below their ordinary size, in about 77 minutes, and come back in about an hour once he is fed.
 - **Muscle is heavy and hungry.** It adds to his weight, and every kilogram of it burns energy all the time, carbs first and then fat (see [Burning weight](#burning-weight)). Muscle that fades or wastes simply goes, as burned fat does: it is not something to live on.
 
 | Trait | Grows by | At its most | Shows as |
@@ -401,7 +396,7 @@ The way to pen a turkey or a fox is to lift it over the fence (`F` at the fence)
 
 The oven's and the fire's fixed recipes are to give way to a mixing bowl: what comes out will follow from what goes in, from what is done to it, and from how long and how hot (the design is `docs/plans/wd1-mixing-and-book.md`, with `wd1b-quantities-times-effects.md` in place of its sections 1, 3 and 4, and `wd1c-real-food-rules.md` on top of both). So far only the rules exist, in `src/game/mixing.odin`; nothing in the game uses them yet, and the game plays as it did.
 
-**Food is real.** A bowl takes real amounts: grams, millilitres of milk or water, eggs by number, salt by the gram or the pinch (2 g), chili and dill by the pinch; up to 4 kinds and 5 kg. Everything in a bowl is weight, split into water, starch, sugar, fat, protein, fibre, salt, acid, alcohol and the rest, from each food's real calories to the gram (carbs and protein 4 kcal a gram, fat 9, fibre 2), what those calories are made of, its share of water, the share of its carbs that is sugar, and its acid. A food also has how bitter and how hot it is, how much of its protein sets, how many microorganisms it starts with, and marks: a leafy or a firm vegetable, a fruit, grows in the ground (soil on it), wants cooking (potato, aubergine), stays in pieces, mashes into a dough (potato, banana), keeps in its shell (an egg). Besides what is in the sack there are water, chili and twenty foods for the rules only, not yet in the meadow: potato, onion, carrot, beetroot, cucumber, tomato, cauliflower, aubergine, zucchini, radicchio, dill, lemon, orange, peach, pear, plum, cherry, grapes and banana, with their water and calories from ordinary nutrition tables. Every food is made of what it weighs (a rule).
+**Food is real.** A bowl takes real amounts: grams, millilitres of milk or water, eggs by number, salt by the gram, chili and dill by the pinch (2 g); up to 4 kinds and 5 kg. Everything in a bowl is weight, split into water, starch, sugar, fat, protein, fibre, salt, acid, alcohol and the rest, from each food's real calories to the gram (carbs and protein 4 kcal a gram, fat 9, fibre 2), what those calories are made of, its share of water, the share of its carbs that is sugar, and its acid. A food also has how bitter and how hot it is, how much of its protein sets, how many microorganisms it starts with, and marks: a leafy or a firm vegetable, a fruit, grows in the ground (soil on it), wants cooking (potato, aubergine), stays in pieces, mashes into a dough (potato, banana), keeps in its shell (an egg). Besides what is in the sack there are water, chili and twenty foods for the rules only, not yet in the meadow: potato, onion, carrot, beetroot, cucumber, tomato, cauliflower, aubergine, zucchini, radicchio, dill, lemon, orange, peach, pear, plum, cherry, grapes and banana, with their water and calories from ordinary nutrition tables. Every food is made of what it weighs (a rule).
 
 **Before mixing**, it can be **washed** (what grows in the ground loses most of its microorganisms, to a hundredth) or **pressed** (fruit and vegetables to juice).
 
@@ -413,7 +408,7 @@ The oven's and the fire's fixed recipes are to give way to a mixing bowl: what c
 
 **Boiling**, in a pot of water on the fire, is at 100 degrees for a time. Nothing burns in a pot; too short is raw in the middle and far too long falls apart, and starch takes up water (noodles come out heavier than they went in). A dough boiled is, by its shape, dumplings (wrapped), noodles (strips or flat), small dumplings (small lumps; a batter too) or a poor boiled lump; slop and crumbs are porridge, an egg a boiled egg, a drink a hot drink (boiled milk is safe), a soup a soup, and pieces or vegetables boiled. Heat drives alcohol off: 20 minutes' boiling leaves a twentieth.
 
-**Leaving to stand**, in a crock for days: its microorganisms grow as anywhere, and as they do, if it is 12 degrees or warmer, in a brine of 1 to 6% salt its sugar turns to acid until the acid stops them: **pickles**, which keep for months (500 g cucumber, 500 ml water and 15 g salt, a week at 20 degrees). With too little salt it rots first; with too much, or in the cold, nothing happens. A sweet drink without salt turns its sugar to alcohol: **wine** (500 g grapes pressed, 10 days); left longer open to the air, its alcohol turns to acid: **vinegar**. Alcohol is a part of the food, in grams. What alcohol and chili do to him comes with the next step.
+**Leaving to stand**, in a crock for days: its microorganisms grow as anywhere, and as they do, if it is 12 degrees or warmer, in a brine of 1 to 6% salt its sugar turns to acid until the acid stops them: **pickles**, which keep for months (500 g cucumber, 500 ml water and 15 g salt, a week at 20 degrees). With too little salt it rots first; with too much, or in the cold, nothing happens. A sweet drink without salt turns its sugar to alcohol: **wine** (500 g grapes pressed, 10 days: 11.6% by volume, as on a bottle, the grapes being sweet wine grapes); left longer open to the air, its alcohol turns to acid: **vinegar**. Alcohol is a part of the food, in grams. What alcohol and chili do to him comes with the next step.
 
 **Microorganisms** are a count a gram, as a power of ten, from what went in. Kept, they grow, fastest at blood heat, slower in the cold but not stopping (at 4 degrees about a quarter as fast as at 24), and not at all frozen; and slower the less water is free to them, and the more salt, sugar, acid and alcohol in that water. Heat kills them, next to nothing under 60 degrees and quickly over 70. Over 1,000 a gram it is **unsafe**: a tummy ache. Over a million it is **spoiled for good**: it stinks, cooking does not save it, and he will not eat it. A day here is 24 of the rules' hours. They are tuned to how long things really keep: raw meat must be cooked the same day at 24 degrees and keeps two days at 4; grilled meat keeps two days at 24 and a week at 4; raw milk is unsafe as it comes, and safe boiled; an egg keeps two weeks in its shell at 24; salted, pickled or frozen, months. Raw dough is unsafe too, bread baked a third of its time is unsafe in the middle, and an unwashed carrot makes a salad unsafe.
 
@@ -459,8 +454,8 @@ Four of his parts are **stores** that fill and empty as he eats and lives: carbs
 
 - **Eating** fills them with what the food contains (see the tables in [The sack and the oven](#the-sack-and-the-oven)).
 - **Carbs** are what his muscles burn, all the time and faster when he works: the more muscle, the faster they go (see [Burning weight](#burning-weight)).
-- **The others**, at rest, each lose a thousandth of what is in them every second, so half in about 11 minutes: protein is used up mending him (it counts as burned, for his muscle, and never turns into carbs); fibre passes.
-- **Water** runs down steadily: a full drink lasts a good quarter of an hour, less if he sprints. `E` at the pond fills it; food holds no water.
+- **The others**, at rest, each lose half of what is in them in a day of play (`NEED_FADE`); too much of any moves on in a few minutes as before (`SHED`): protein is used up mending him (it counts as burned, for his muscle, and never turns into carbs); fibre passes.
+- **Water** runs down steadily: a full drink lasts a good quarter of an hour, less if he sprints. `E` at the pond fills it, and the water in what he eats adds to it (three or four drinks a day).
 
 A game starts with everything half full and water at 80%.
 
@@ -882,7 +877,7 @@ It is made of a host that is never reloaded (`src/workbench/host`) and the game 
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (260 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (268 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -892,6 +887,12 @@ tools/check.sh
 
 ```bash
 tools/check.sh autoplay --minutes 30 --seed 3
+```
+
+**The forager** (`--forager`) is the same bot told to play sensibly, to measure the day's budget: it gathers what is ripe while its sack holds less than a day's food, cooks at the oven, the fire and the churn when it has the makings, grinds wheat, fetches wood for cooking, drinks when thirsty, eats a bite whenever he is under 80 kg and his stomach has room, choosing the richest food for the room it takes (or what he lacks), and otherwise rests at home. It does not hunt, fish, rob hives, shake apple trees or build. At the end of each day of play its report gives what he burned (being alive, and doing things), what came into the sack for each minute of gathering and cooking, what went off and what the foxes took, what he ate and how many litres, how often his stomach stopped him, his weight, fat and muscle, and what stood ripe in the meadow by kind (`src/check/forager.odin`).
+
+```bash
+tools/check.sh autoplay --forager --minutes 180 --seed 1
 ```
 
 **The tour** takes about forty screenshots: every part of the meadow, every menu, each whole outfit, and a few unusual states. They go into `build/tour`, with an `index.txt` saying what each should show, a `.txt` beside each picture giving how Prosio is at that moment in numbers, and half-size copies in `build/tour/small`. It takes about a minute and opens a window for a moment for each picture.
@@ -992,13 +993,13 @@ The game never reads these files: `tools/gen_data` (run by the build scripts and
 |---|---|
 | `prosio.json` | Prosio himself: his fat and its zones (`fat`); his size, stamina and the time a bump, a stoop and a jump take (`moving`); what gets worse with fat, lean against fat: walking speed, sprint boost and drain, bump speed and cost, jump cost, stamina coming back (`lean_to_fat`); what everything burns, and what a load does (`burning`); bruises (`bruises`); his muscles, how traits fade and waste (`muscle`); what each thing he does trains (`training`); what each trait is worth (`skills`); what waking up costs (`waking_up`); his shape (`shape`); how long his body reacts to a meal, wind, hiccups and tipsiness, and how far it leans and spreads its arms (`reactions`) |
 | `prosio_look.json` | How he looks, apart from how the game plays: blinking, smiling and his brows (`face`); where the 36 parts of his pose sit and how big they are, the eyes and mouth drawn on his skin, and how the skin is outlined (`base_sculpt`) |
-| `diet.json` | His needs: how big each store is (`stores`); where each level starts, where lacking, full and too much begin, how fast levels fall, thirst, drinking and licked salt (`levels`); what full and lacking do (`full_and_lacking`); what too much does (`too_much`) |
-| `food.json` | The sack and its size, calories to a kilogram (`sack`); each thing's weight, room and calories (`things`); what each food is made of, real calories to the gram, and every food a mixing bowl takes, with its water, sugar, acid, marks and microorganisms (`made_of`); the rules of mixing, shaping, heating, boiling, standing in a crock and microorganisms (`mixing`); how fast food goes off, and a body (`going_off`); the oven, fire, churn, bench, mill and campfire: time, cooking bonus, skill, size, and every recipe and plan (`making`) |
-| `animals.json` | Turkeys, goats, the billy goat and foxes: weight, size, speed, grip, meat, coming back, how far they follow (`all_animals`); eggs, milk, goats he hit, foxes (`eggs_milk_and_the_fox`); swimming, drowning, sinking (`swimming`); health and blows (`health_and_blows`); bold and wary animals, a frightened flock (`boldness_and_alarm`); the animal-pack goats' and fox's walk, gallop, turning and head (`pack_animals_moving`); their body following a turn, giving way, struggling (`pack_animals_body`); a body dragged along the ground (`dragging`); what a blow does: push, stumble, fall, launch, tumble, get up (`impacts`, `impact_pose`) |
+| `diet.json` | His needs: how big each store is (`stores`); where each level starts, where lacking, full and too much begin, how fast levels fall, thirst, drinking and licked salt (`levels`); his stomach: how much room food takes, what it holds, when he is full, how fast it empties (`stomach`); what full and lacking do (`full_and_lacking`); what too much does (`too_much`) |
+| `food.json` | The sack and its size, calories to a kilogram (`sack`); each thing's weight, room, calories and the water in what has no mixing row (`things`); what each food is made of, real calories to the gram, and every food a mixing bowl takes, with its water, sugar, acid, marks and microorganisms (`made_of`); the rules of mixing, shaping, heating, boiling, standing in a crock and microorganisms (`mixing`); how fast food goes off, and a body (`going_off`); the oven, fire, churn, bench, mill and campfire: time, cooking bonus, skill, size, and every recipe and plan (`making`) |
+| `animals.json` | Turkeys, goats, the billy goat and foxes: weight, size, speed, grip, meat in kilograms, coming back (after a season if killed), how far they follow (`all_animals`); eggs, milk, goats he hit, foxes (`eggs_milk_and_the_fox`); swimming, drowning, sinking (`swimming`); health and blows (`health_and_blows`); bold and wary animals, a frightened flock (`boldness_and_alarm`); the animal-pack goats' and fox's walk, gallop, turning and head (`pack_animals_moving`); their body following a turn, giving way, struggling (`pack_animals_body`); a body dragged along the ground (`dragging`); what a blow does: push, stumble, fall, launch, tumble, get up (`impacts`, `impact_pose`) |
 | `critters.json` | Fish (`fish`); rabbits and crows (`pests`); bees and hives (`bees`) |
 | `handling.json` | Throwing stones and pebbles, aiming, winding up (`throwing`); grabbing, lifting, holding, dragging, rock weight (`holding`); a body skipping along (`skipping`); swinging, slams and bashes (`bashing`); how rocks are drawn (`rocks`) |
 | `building.json` | Wood and the workbench (`wood_and_bench`); the fence grid, jumping over, pens, lifting animals over (`fences`); scarecrow, rod and spear (`scarecrow_rod_spear`); the larder (`larder`); the campfire (`campfire`) |
-| `world.json` | The meadow's size, home, the pond, paths, the map, how far he sees (`meadow`); the fog (`fog`); how much food there is and how fast it grows and comes back, apples, berries, eggs (`growing`); salt rocks and pebble patches (`salt_and_pebbles`); the forest, its clearings and trails, how trees hide things, shaking a tree (`forest`); trees from models: heights, crowns, models, how they vary, leaf colours (`trees`); grass, ferns, bushes and logs (`plants`); how many of each thing the game keeps room for (`limits`) |
+| `world.json` | The meadow's size, home, the pond, paths, the map, how far he sees (`meadow`); the fog (`fog`); the day: its length in play, and how many times as long everything that grows or comes back takes (`day`); how much food there is and how fast it grows and comes back, apples, berries, eggs (`growing`); salt rocks and pebble patches (`salt_and_pebbles`); the forest, its clearings and trails, how trees hide things, shaking a tree (`forest`); trees from models: heights, crowns, models, how they vary, leaf colours (`trees`); grass, ferns, bushes and logs (`plants`); how many of each thing the game keeps room for (`limits`) |
 | `outfit.json` | The whole outfits (`outfits`); what each shirt and top is like, and how thick a layer is (`clothes`) |
 | `screen.json` | The camera (`camera`); trees going see-through round him (`forest_view`); the pixel sizes (`pixels`); the need pictures, weight bar and health bars (`panels`); how many sack boxes show (`sack`); the sack page's grid, where the main and pause menus' choices go, how small a help line too long for its menu may get, and how close the BODY page's lines may come in a short window (`menus`); how long the line about a place shows (`places`) |
 | `saving.json` | How often the game is saved, and the backups: their folder, how many the Load list shows, how many the browser keeps (`saving`) |

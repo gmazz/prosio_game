@@ -253,7 +253,7 @@ print_state :: proc() {
 	for t in game.Trait {
 		fmt.printf(" %v %.2f", t, p.trait[t])
 	}
-	fmt.printf("\nstamina %.0f, carrying %v, says: %s\n", p.stamina, p.carry, p.bubble_t > 0 ? string(p.bubble) : "(nothing)")
+	fmt.printf("\nstamina %.0f, stomach %.2f of %.2f litres, carrying %v, says: %s\n", p.stamina, p.stomach, game.STOMACH_HOLDS, p.carry, p.bubble_t > 0 ? string(p.bubble) : "(nothing)")
 	fmt.print("sack:")
 	for n, item in p.sack {
 		if n > 0 {

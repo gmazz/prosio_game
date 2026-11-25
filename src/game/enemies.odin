@@ -294,7 +294,7 @@ update_enemies :: proc(dt: f32) {
 			}
 			if e.body_t <= 0 {
 				burst({e.pos.x, 0.3, e.pos.y}, 8, 2, COLOR_DUST, 0.12)
-				leave(&e)
+				leave(&e, true)
 			}
 
 		case .Chase:
@@ -404,7 +404,7 @@ update_enemies :: proc(dt: f32) {
 				if length2(e.pos - p.pos) < 25 {
 					say(TEXT.into_the_fog, 1.4)
 				}
-				leave(&e)
+				leave(&e, false)
 				continue
 			}
 			if ENEMY_KG[e.kind] > FENCE_HEAVY && e.y < FENCE_TOP + 0.6 {
@@ -494,7 +494,7 @@ update_enemies :: proc(dt: f32) {
 				}
 				if sunk(e) >= SINK_DEPTH {
 					burst({e.pos.x, 0.1, e.pos.y}, 6, 1, POND_SPLASH, 0.06)
-					leave(&e)
+					leave(&e, true)
 				}
 				break
 			}
@@ -542,7 +542,7 @@ update_enemies :: proc(dt: f32) {
 			e.y = 0
 			touch_prosio(&e, false)
 			if e.state == .Dizzy && ready && (e.impact.kind == .None || e.impact.age > 0) {
-				if e.ko && MEAT_FROM[e.kind] > 0 {
+				if e.ko && MEAT_KG[e.kind] > 0 {
 					// That was the end of it: its body stays.
 					e.state = .Dead
 					if e.body_t <= 0 {
@@ -551,7 +551,7 @@ update_enemies :: proc(dt: f32) {
 					}
 				} else if e.ko {
 					burst({e.pos.x, 0.6, e.pos.y}, 18, 5, COLOR_STAR, 0.15)
-					leave(&e)
+					leave(&e, false)
 				} else {
 					e.state = .Chase
 					e.impact = {}
@@ -794,12 +794,21 @@ drop_loot :: proc(e: ^Enemy) {
 }
 
 // It is gone, and another will not take its place for a good while.
-leave :: proc(e: ^Enemy) {
+// It is gone: another takes its place at its home in time, after about a
+// season if it was killed (KILLED_BACK), sooner if it was only lost in the
+// fog or slunk off (RESPAWN).
+leave :: proc(e: ^Enemy, killed: bool) {
 	unpen(e) // the next one comes back where its kind lives, not in the pen
 	e.state = .Gone
 	e.impact = {}
-	e.timer = random_range(RESPAWN[e.kind].x, RESPAWN[e.kind].y)
+	back := killed ? KILLED_BACK : RESPAWN[e.kind]
+	e.timer = random_range(back.x, back.y)
 	e.has_loot = false
+}
+
+// The pieces of meat a dead animal gives: its MEAT_KG in pieces of meat.
+meat_pieces :: proc(kind: Enemy_Kind) -> int {
+	return int(math.round(MEAT_KG[kind] / ITEM_KG[.Meat]))
 }
 
 // E with an animal in his hand: a goat is milked; a dead turkey or goat is
@@ -808,7 +817,7 @@ use_held_animal :: proc() {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
 	switch {
-	case e.ko && MEAT_FROM[e.kind] == 0:
+	case e.ko && MEAT_KG[e.kind] == 0:
 		answer(TEXT.nobody_eats_fox)
 	case e.ko:
 		fire, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2)
@@ -826,13 +835,13 @@ use_held_animal :: proc() {
 		if e.body_t > 0 {
 			fresh = lerp(BODY_MEAT_LEAST, 1, clamp(e.body_t / BODY_LIFE, 0, 1))
 		}
-		for _ in 0 ..< min(MEAT_FROM[e.kind], room) {
+		for _ in 0 ..< min(meat_pieces(e.kind), room) {
 			sack_add(.Meat, math.round(RAW_KCAL[.Meat] * fresh), fresh)
 		}
 		p.sack_sel = .Meat
 		block := g.stations[fire].pos + FIRE_BLOCK.xz
 		burst({block.x, 0.7, block.y}, 12, 3, COLOR_STAR, 0.08)
-		leave(e)
+		leave(e, true)
 		p.carry = .Nothing
 		p.lift_t = 0
 		p.carry_kg = 0

@@ -29,7 +29,8 @@ import "core:math"
 //   protein  into his protein; what will not fit passes through
 //   fibre    into his; what will not fit passes through
 //
-// (Protein never turns into carbs. Water he drinks at the pond.)
+// (Protein never turns into carbs. Water he drinks at the pond, and gets
+// from the water in what he eats: see swallow.)
 //
 // What he burns comes out of his carbs and his fat. His muscle burns all
 // the time, in proportion to how much of it there is, and that, with
@@ -75,7 +76,8 @@ Need :: enum {
 // 100). A piece puts into him those shares of its calories and nothing else:
 // a piece twice as rich puts in twice as much of each. (So a food's calories
 // count all of it, not only what can make him fatter: only the carbs, fat
-// and protein in it are energy. Water comes only from the pond.)
+// and protein in it are energy. The water in a food is not among its
+// calories: see item_water and swallow.)
 //
 // Into him each share goes at a fixed rate: carbs, fat and protein at
 // KCAL_PER_KG to the kilogram, fibre at FIBRE_KCAL to the kilogram, and
@@ -162,8 +164,8 @@ store_add :: proc(n: Need, kg: f32) -> (over: f32) {
 // He has eaten this: each part of it goes to the same part of him.
 eat :: proc(m: Meal) {
 	p := &g.prosio
-	p.fat += m.fat
-	p.fat += store_add(.Carbs, m.carbs) // what his carbs cannot hold turns to fat
+	fat_add(m.fat)
+	fat_add(store_add(.Carbs, m.carbs)) // what his carbs cannot hold turns to fat
 	store_add(.Protein, m.protein) // spare protein passes through him, as spare fibre does
 	store_add(.Fibre, m.fibre)
 	for points, n in ([Need]f32{.Carbs = 0, .Protein = 0, .Fibre = 0, .Water = 0, .Vitamins = m.vitamins, .Electrolytes = m.salts}) {
@@ -177,6 +179,35 @@ eat :: proc(m: Meal) {
 	train(.Gut, GUT_WORK * m.fibre)
 }
 
+// The share of a thing's weight that is water: from its row in MIXABLE
+// (less what is not eaten of it), or for a dish or wheat from ITEM_WATER.
+item_water :: proc(item: Item) -> f32 {
+	for m in MIXABLE {
+		if m.in_sack && m.item == item && m.unit != .Pinch {
+			return m.water * (1 - m.waste)
+		}
+	}
+	return ITEM_WATER[item]
+}
+
+// The room a piece of this takes in his stomach, in litres.
+stomach_room :: proc(item: Item) -> f32 {
+	return ITEM_KG[item] * STOMACH_K
+}
+
+// Full: he cannot eat anything more until some of it has gone on.
+stomach_full :: proc() -> bool {
+	return g.prosio.stomach >= STOMACH_HOLDS * STOMACH_FULL
+}
+
+// He has swallowed a piece of this: it takes room in his stomach, and the
+// water in it waters him.
+swallow :: proc(item: Item) {
+	p := &g.prosio
+	p.stomach += stomach_room(item)
+	store_add(.Water, ITEM_KG[item] * item_water(item))
+}
+
 // Weight burned, as energy. Muscle work (carbs_first: his muscles keeping
 // going, sprinting, jumping, fighting) takes carbs first, and fat only when
 // they are gone; anything else takes carbs in proportion to how full they
@@ -188,16 +219,29 @@ eat :: proc(m: Meal) {
 burn :: proc(kg: f32, why: Burn_For, carbs_first := false) {
 	p := &g.prosio
 	cost := kg * (full_of(.Protein) ? BULK_BURN : 1)
-	had := energy_kg()
-	defer g.burned[why] += had - energy_kg()
 	share := carbs_first ? 1 : p.need[.Carbs] / 100
 	from_carbs := min(cost * share, store_kg(.Carbs))
 	store_add(.Carbs, -from_carbs)
 	cost -= from_carbs
 	from_fat := min(cost, max(p.fat, 0))
-	p.fat -= from_fat
+	fat_add(-from_fat)
 	cost -= from_fat
-	store_add(.Carbs, -min(cost, store_kg(.Carbs)))
+	last := min(cost, store_kg(.Carbs))
+	store_add(.Carbs, -last)
+	g.burned[why] += f64(from_carbs + from_fat + last)
+}
+
+// Adds to his fat (or takes from it), keeping what rounding leaves out for
+// next time. A frame's burning is a few hundred-thousandths of a kilogram,
+// smaller than the steps a number the size of his fat can take: without
+// this his fat would come off a few per cent too fast or too slow,
+// depending on how much of it there is.
+fat_add :: proc(kg: f32) {
+	p := &g.prosio
+	want := kg + p.fat_carry
+	was := p.fat
+	p.fat = was + want
+	p.fat_carry = want - (p.fat - was)
 }
 
 // What the burning was for. The kilograms that went on each are added up
@@ -339,17 +383,17 @@ update_diet :: proc(dt: f32) {
 		if n == .Water || (n == .Carbs && !too_much(n)) {
 			continue
 		}
-		used := p.need[n] * NEED_FADE * (too_much(n) ? SHED : 1) * dt
+		used := p.need[n] * (too_much(n) ? SHED : NEED_FADE) * dt
 		kg := used * STORE_KG[n] / 100
 		surplus := too_much(n)
 		p.need[n] -= used
 		#partial switch n {
 		case .Carbs:
 			if surplus {
-				p.fat += kg
+				fat_add(kg)
 			}
 		case .Protein:
-			g.burned[.Muscle] += kg
+			g.burned[.Muscle] += f64(kg)
 		}
 	}
 	thirst := THIRST
@@ -362,6 +406,8 @@ update_diet :: proc(dt: f32) {
 		thirst *= SALTY_THIRST
 	}
 	p.need[.Water] = max(p.need[.Water] - thirst * dt, 0)
+	// His stomach empties at a steady pace.
+	p.stomach = max(p.stomach - STOMACH_HOLDS / STOMACH_EMPTIES * dt, 0)
 
 	for n in Need {
 		state := need_state(n)
@@ -615,7 +661,8 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	width = 6 * icon + 5 * gap
 	weight_y := y + icon + 5 * s + bar_h + 12 * s
 	stamina_y := weight_y + 22 * s
-	height = stamina_y + 14 * s - y
+	stomach_y := stamina_y + 22 * s
+	height = stomach_y + 14 * s - y
 	ui_round_rect(x - pad, y - pad, width + 2 * pad, height + 2 * pad, UI_PANEL, 0.15)
 	blink := math.mod(g.time, 0.6) < 0.3
 	for n, k in HUD_NEEDS {
@@ -670,8 +717,15 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 		bw := (bar_w - 4 * s) * clamp(p.bruises / STAMINA_MAX, 0, 1)
 		ui_rect(bar_x + bar_w - 2 * s - bw, stamina_y + 2 * s, bw, 8 * s, UI_BRUISE)
 	}
+
+	// How full his stomach is: when the bar is full he cannot eat more.
+	draw_pixels(STOMACH_ICON, x, stomach_y - 2 * s, 16 * s)
+	ui_rect(bar_x, stomach_y, bar_w, 12 * s, UI_DARK)
+	ui_rect(bar_x + 2 * s, stomach_y + 2 * s, (bar_w - 4 * s) * clamp(p.stomach / STOMACH_HOLDS, 0, 1), 8 * s, stomach_full() ? UI_ORANGE : STOMACH_BAR)
 	return
 }
+
+STOMACH_BAR :: Color{204, 142, 82, 255}
 
 // The bands of the weight bar, by his fat (kg, out of FAT_MAX): starving at
 // the thin end, lean, chubby, huge, and too fat for his heart.
@@ -786,6 +840,21 @@ SCALE_ICON := [12]string {
 	"kEeeeeeeeeEk",
 	"kEEEEEEEEEEk",
 	".kkkkkkkkkk.",
+}
+// A bowl of food: how full his stomach is.
+STOMACH_ICON := [12]string {
+	"............",
+	"............",
+	"............",
+	".kkkkkkkkkk.",
+	".kttttttttk.",
+	"kbbbbbbbbbbk",
+	"kbnnnnnnnnbk",
+	".kbnnnnnnbk.",
+	"..kbbbbbbk..",
+	"...kkkkkk...",
+	"....kkkk....",
+	"............",
 }
 BOLT_ICON := [12]string {
 	"......kkkk..",

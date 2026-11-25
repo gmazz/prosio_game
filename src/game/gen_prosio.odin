@@ -55,24 +55,24 @@ JUMP_COST :: Vec2{4, 22}
 STAMINA_REGEN :: Vec2{50, 8}
 
 // ---- burning ----
-// Everything he does burns some of his weight, a little for everyday things and more for fighting. Walking and running burn in proportion to his weight: these are for an 80 kg Prosio.
+// Everything he does burns some of his weight, a little for everyday things and more for fighting. Walking and running burn in proportion to his weight: these are for an 80 kg Prosio. Set for a day of 60 minutes (DAY_SECONDS in world.json) in which he eats about 2,000 kcal: an active day (30 minutes walking, 2 sprinting, 150 things picked, 30 jumps, 30 bumps, grabs, bashes or throws) burns about 800 kcal doing things, on top of the 1,200 his muscles burn (BASAL); a day of rest, about 1,200 in all. Each is in kg of his weight (KCAL_PER_KG to the kilogram, in food.json): 0.072 of what it was when a session was a few minutes long, all in the same proportions.
 
-// kg per second of walking
-WALK_BURN :: f32(0.02)
-// kg per second of sprinting
-SPRINT_BURN :: f32(0.06)
+// kg per second of walking: 17 kcal a minute (520 kcal in 30 minutes)
+WALK_BURN :: f32(17.0 / KCAL_PER_KG / 60)
+// kg per second of sprinting: 52 kcal a minute
+SPRINT_BURN :: f32(52.0 / KCAL_PER_KG / 60)
 // the share of the sack's weight his legs feel (it is on his back, well packed)
 LOAD_EASE :: f32(0.6)
 // so with 16 kg in the sack his legs train 1.36 times as fast
 LOAD_TRAIN :: f32(3)
 // a sack this share of his weight, and he says so
 LOAD_HEAVY :: f32(0.3)
-// kg per thing picked up
-GATHER_BURN :: f32(0.03)
-// kg per jump
-JUMP_BURN :: f32(0.06)
-// kg per bump, grab, bash or throw
-FIGHT_BURN :: f32(0.2)
+// kg per thing picked up: 0.43 kcal
+GATHER_BURN :: f32(0.43 / KCAL_PER_KG)
+// kg per jump: 0.87 kcal
+JUMP_BURN :: f32(0.87 / KCAL_PER_KG)
+// kg per bump, grab, bash or throw: 2.9 kcal
+FIGHT_BURN :: f32(2.9 / KCAL_PER_KG)
 
 // ---- bruises ----
 // A knock from an animal, or a sting, leaves a bruise: no weight is lost, but the top of his stamina comes down by that much until it mends, so a battered Prosio cannot sprint or fight for long and has to get away. The bruises never take more than BRUISE_MOST, which leaves him BRUISE_FLOOR of his stamina to run with; bruised that far, the next thing is that he is knocked out, and wakes up at home.
@@ -97,16 +97,18 @@ BRUISE_WARN :: f32(0.7)
 ARMS_KG :: [3]f32{3, 5, 12}
 // his leg muscles, in kg, likewise
 LEGS_KG :: [3]f32{5, 8, 18}
-// the share of a trait lost every second it is not used: half in 18 minutes
-FADE :: f32(0.00064)
-// how fast muscle wastes each second without protein, or starving: ordinary to wasted in 11 minutes
-WASTE :: f32(0.0015)
-// and how fast wasted muscle comes back to ordinary once he is fed
-RECOVER :: f32(0.002)
+// the share of a muscle or a skill of the body lost every second it is not used: half in two days (0.6931 is the natural log of 2)
+FADE :: f32(0.6931 / (2 * DAY_SECONDS))
+// training, wasting and recovering muscle go at this share of the pace they had when a session was a few minutes long: a seventh. (Training the skills of the body and of the kitchen is not slowed.)
+MUSCLE_PACE :: f32(1.0 / 7)
+// how fast muscle wastes each second without protein, or starving: ordinary to wasted in 77 minutes
+WASTE :: f32(0.0015 * MUSCLE_PACE)
+// and how fast wasted muscle comes back to ordinary once he is fed: in about an hour
+RECOVER :: f32(0.002 * MUSCLE_PACE)
 // full of protein, muscle builds this much faster
 BULK :: f32(2)
-// kg of energy each kg of muscle burns every second: 0.18 kg a minute for ordinary muscle, 0.41 at the most, 0.11 wasted
-BASAL :: f32(0.00023)
+// kg of energy each kg of muscle burns every second: 92 kcal a day, so 1,200 kcal a day for ordinary muscle (13 kg), 2,770 at the most (30 kg), 740 wasted (8 kg). It is what he burns for being alive, whatever he does
+BASAL :: f32(92.0 / KCAL_PER_KG / DAY_SECONDS)
 
 // ---- training ----
 // How much each thing he does trains (a trait gains this share of what it still lacks).

@@ -38,6 +38,8 @@ Prosio :: struct {
 	safe_t:       f32, // time left during which enemies cannot shove him again
 	eat_t:        f32, // time left in the munching animation
 	meal_fill, meal_target, meal_hold_t: f32, // temporary visual fullness after a meal
+	stomach:      f32, // litres of food in his stomach (see STOMACH_HOLDS)
+	fat_carry:    f32, // what rounding left out of his fat last time (see fat_add)
 	gas_pose_t, hiccup_pose_t, tipsy_pose_t: f32, // transient reaction poses
 	pick_t:       f32, // time left picking something up
 	shake_t:      f32, // time left shaking a tree he has hold of

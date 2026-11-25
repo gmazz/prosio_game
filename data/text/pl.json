@@ -517,6 +517,7 @@
       "sack_full": "Mój worek jest pełny!",
       "not_ripe": "Jeszcze niedojrzałe... ale i tak do worka.",
       "sack_empty": "Mój worek jest pusty! {Action} podnosi jedzenie.",
+      "stomach_full": "Mam pełny brzuszek! Muszę chwilę poczekać, zanim zjem więcej.",
       "no_room": "Nie ma na to miejsca w worku!",
       "cannot_make_here": "Jeszcze nie umiem tu nic zrobić!",
       "no_room_flour": "Nie ma w worku miejsca na mąkę!",

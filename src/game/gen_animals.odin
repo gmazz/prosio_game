@@ -23,10 +23,12 @@ ENEMY_SPEED := [Enemy_Kind]f32{.Turkey = 2.8, .Goat = 3.2, .Billy = 2.9, .Fox = 
 GOAT_CHARGE :: f32(1.8)
 // its grip in the bump above: how much of his momentum (kg times m/s) it soaks up before it moves at all; raise it and a bump throws it less
 ENEMY_GRIP := [Enemy_Kind]f32{.Turkey = 560, .Goat = 450, .Billy = 500, .Fox = 600}
-// Knocked out, a turkey or a goat is dead: its body lies where it fell for BODY_LIFE, and chopped up at the fire it gives this many pieces of meat. A fox only slinks off for a while. Another animal takes a dead one's place, but not for a good while (seconds, somewhere in this range): so hunting thins the flock, and with it the eggs.
-MEAT_FROM := [Enemy_Kind]int{.Turkey = 2, .Goat = 5, .Billy = 8, .Fox = 0}
-// seconds, at random in this range, before another of each kind takes the place of one that is gone
-RESPAWN := [Enemy_Kind]Vec2{.Turkey = {300, 480}, .Goat = {480, 720}, .Billy = {600, 900}, .Fox = {60, 120}}
+// Knocked out, a turkey or a goat is dead: its body lies where it fell for BODY_LIFE, and chopped up at the fire it gives this many kilograms of meat, in pieces of ITEM_KG[.Meat] (food.json): a turkey 16 pieces, about 4,800 kcal; a goat 53, about 15,900; the billy goat 84, about 25,300. (A real carcass gives about twice as much; this is less, for balance.) A fox only slinks off for a while. Raise one and that kind gives more meat
+MEAT_KG := [Enemy_Kind]f32{.Turkey = 3, .Goat = 10, .Billy = 16, .Fox = 0}
+// seconds, at random in this range, before another takes the place of an animal that was killed (chopped up, rotted away or drowned): about a season, seven days of play, so the meadow can be hunted out and a pen is the sure way to have meat; raise it and the flocks take longer to come back
+KILLED_BACK :: Vec2{6.5 * DAY_SECONDS, 7.5 * DAY_SECONDS}
+// seconds, at random in this range, before another of each kind takes the place of one that is gone but was not killed: lost in the fog, or a fox that slunk off (as it was, times MEADOW_SLOW: a turkey 75 to 120 minutes, a fox 15 to 30)
+RESPAWN := [Enemy_Kind]Vec2{.Turkey = {300 * MEADOW_SLOW, 480 * MEADOW_SLOW}, .Goat = {480 * MEADOW_SLOW, 720 * MEADOW_SLOW}, .Billy = {600 * MEADOW_SLOW, 900 * MEADOW_SLOW}, .Fox = {60 * MEADOW_SLOW, 120 * MEADOW_SLOW}}
 // seconds a dead body lies where it fell before it is gone; the longer it has lain, the poorer its meat
 BODY_LIFE :: f32(240)
 // An animal that has chased him this far from its home gives up, and ambles back for GIVE_UP seconds whatever he does.
@@ -35,14 +37,14 @@ LEASH := [Enemy_Kind]f32{.Turkey = 30, .Goat = 26, .Billy = 26, .Fox = 1000}
 GIVE_UP :: f32(8)
 
 // ---- eggs_milk_and_the_fox ----
-// a turkey lays an egg every so many seconds, at random in this range: only now and then
-EGG_EVERY :: Vec2{600, 1200}
+// a turkey lays an egg every so many seconds, at random in this range: only now and then (as it was, times MEADOW_SLOW)
+EGG_EVERY :: Vec2{600 * MEADOW_SLOW, 1200 * MEADOW_SLOW}
 // chance that shaking a held turkey shakes an egg out of it: hardly ever
 SHAKE_EGG :: f32(0.01)
-// a penned turkey, settled and fed, lays far more often
-PEN_EGG_EVERY :: Vec2{60, 120}
-// seconds until a milked goat has milk again
-MILK_EVERY :: f32(180)
+// a penned turkey, settled and fed, lays far more often: two to four eggs a day
+PEN_EGG_EVERY :: Vec2{60 * MEADOW_SLOW, 120 * MEADOW_SLOW}
+// seconds until a milked goat has milk again: 45 minutes, so a jug or two a day
+MILK_EVERY :: f32(180 * MEADOW_SLOW)
 // A goat he has hit will not lick him, however salty he is, until it has not seen him (he is further off than SOUR_SIGHT) for SOUR_FORGET seconds.
 SOUR_SIGHT :: f32(22)
 // seconds a goat he hit must go without seeing him before it will lick him again; raise it and it bears a grudge longer

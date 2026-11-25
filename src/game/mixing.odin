@@ -1085,6 +1085,12 @@ wood_logs :: proc(temperature, minutes: f32) -> f32 {
 	return WOOD_PER_HOUR * minutes / 60 * max(temperature - ROOM_TEMP, 0) / (WOOD_AT - ROOM_TEMP)
 }
 
+// A drink's alcohol by volume, as on a bottle: the alcohol's millilitres
+// to the drink's, a gram of the drink taken as a millilitre.
+alcohol_by_volume :: proc(m: Mix) -> f32 {
+	return m.grams > 0 ? m.matter[.Alcohol] / ALCOHOL_DENSITY / m.grams : 0
+}
+
 // Real seconds the wait takes: for cooking, and for mixing.
 cook_seconds :: proc(minutes: f32) -> f32 {
 	return min(minutes * DIAL_MINUTE_SECONDS, COOK_WAIT_MOST)

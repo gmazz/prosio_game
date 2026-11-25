@@ -396,8 +396,13 @@ eat_from_sack :: proc() {
 		answer(TEXT.eat_text[item])
 		return
 	}
+	if stomach_full() {
+		answer(TEXT.stomach_full)
+		return
+	}
 	meal := item_meal(item, sack_take(item, 1))
 	eat(meal)
+	swallow(item)
 	sack_step(0)
 	say(TEXT.eat_text[item])
 	p.eat_t = PROSIO_MEAL_EAT_TIME

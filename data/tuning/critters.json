@@ -5,7 +5,7 @@
       "untyped": 6,
       "about": "Fish swim about the pond. They are shy of a pig on the move, but one that stands still on the bank makes them curious, and they drift over: then F grabs the nearest, if it is within reach."
     },
-    "FISH_BACK": {"Vec2": [240, 480], "const": true, "about": "seconds until another fish takes a caught one's place"},
+    "FISH_BACK": {"Vec2": ["240 * MEADOW_SLOW", "480 * MEADOW_SLOW"], "const": true, "about": "seconds until another fish takes a caught one's place: one to two hours (as it was, times MEADOW_SLOW in world.json)"},
     "FISH_REACH": {"f32": 1.25, "about": "how far beyond himself he can grab one"},
     "FISH_FRIGHT": {"Vec2": [12, 22], "const": true, "about": "seconds a grab into the water keeps the fish away"},
     "FISH_SHY": {"f32": 4.5, "about": "fish this near a moving Prosio dart away"},
@@ -14,7 +14,7 @@
   "pests": {
     "_about": "Rabbits after the cabbages, crows after the wheat.",
     "MAX_PESTS": {"untyped": 4, "about": "rabbits and crows on the meadow, a count, each with its own home"},
-    "PEST_AWAY": {"Vec2": [50, 150], "const": true, "about": "seconds between raids"},
+    "PEST_AWAY": {"Vec2": ["50 * MEADOW_SLOW", "150 * MEADOW_SLOW"], "const": true, "about": "seconds between raids (as it was, times MEADOW_SLOW: the crops grow that much slower too)"},
     "PEST_SPEED": {"[Pest_Kind]f32": {"Rabbit": 3.2, "Crow": 5}, "about": "how fast each comes for the crops, m/s"},
     "PEST_FLEE": {"[Pest_Kind]f32": {"Rabbit": 7.5, "Crow": 8}, "about": "and how fast it runs off, m/s"},
     "PEST_SCARE": {"[Pest_Kind]f32": {"Rabbit": 4.5, "Crow": 6}, "about": "how near Prosio can get"},
@@ -36,7 +36,7 @@
       "about": "Bees. Each hive in the bee meadow has a swarm that minds its own business until Prosio comes close: then it is after him, stinging, until he has been out of its reach for a while. His wind sends bees back into the hive and keeps them quiet for a time, and with enough fat on him the stings hardly hurt."
     },
     "MAX_HONEY": {"untyped": 2, "about": "combs in one hive"},
-    "HONEY_REGROW": {"Vec2": [240, 480], "const": true, "about": "seconds until the bees have made another"},
+    "HONEY_REGROW": {"Vec2": ["240 * MEADOW_SLOW", "480 * MEADOW_SLOW"], "const": true, "about": "seconds until the bees have made another: a comb every hour or two"},
     "HIVE_RADIUS": {"f32": 0.42, "about": "how big a hive is on the ground, in metres"},
     "HIVE_GUARD": {"f32": 3.6, "about": "nearer the hive than this, and they come out"},
     "BEE_SPEED": {"f32": 6.2, "about": "faster than he walks, slower than a lean sprint"},

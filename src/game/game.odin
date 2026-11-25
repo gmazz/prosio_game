@@ -53,7 +53,7 @@ Game :: struct {
 	food_count:    int,
 	fields:        [MAX_FIELDS]Field,
 	field_count:   int,
-	burned:        [Burn_For]f32, // kg of fat and carbs burned so far, by what it went on
+	burned:        [Burn_For]f64, // kg of fat and carbs burned so far, by what it went on (f64: a frame's is tiny beside hours of it)
 	grabs:         int, // how many times he has taken hold of something (for the testing tools)
 	seen:          [MAP_W * MAP_H]bool, // the squares of the map he has uncovered
 	seen_region:   [Region_Kind]bool, // the parts of the meadow he has been to

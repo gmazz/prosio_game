@@ -24,14 +24,21 @@
     "NEED_HIGH": {"f32": 70, "about": "above this he is full of it"},
     "NEED_OVER": {"f32": 90, "about": "above this it is too much"},
     "WATER_LOW": {"f32": 25, "about": "below this he lacks water (water has its own line, higher than NEED_LOW)"},
-    "NEED_FADE": {"f32": 0.001, "about": "the share of each level used up every second, at rest: half of it in 11 minutes"},
-    "SHED": {"f32": 6, "about": "above NEED_OVER it moves on this many times as fast"},
+    "NEED_FADE": {"f32": "0.6931 / DAY_SECONDS", "about": "the share of his protein, fibre, vitamins and electrolytes used up every second, at rest: half of each in a day (0.6931 is the natural log of 2). Carbs are burned instead (see BASAL in prosio.json), and water has its own THIRST"},
+    "SHED": {"f32": 0.006, "about": "above NEED_OVER the share of it that moves on every second: too much of anything is over in a few minutes, as it was before the day was long (it does not follow NEED_FADE)"},
     "THIRST": {"f32": 0.1, "about": "water level used up every second: a full drink lasts a good quarter of an hour"},
     "TOO_LONG": {"f32": 180, "about": "seconds without water, vitamins or electrolytes before the game is over"},
     "DRINK_TIME": {"f32": 0.9, "about": "seconds a drink takes"},
     "LICK": {"f32": 0.25, "about": "electrolytes the goats lick off him each second"},
     "DRINK_SALT": {"f32": 25, "about": "electrolytes a drink washes out of him,"},
     "DRINK_SALT_FLOOR": {"f32": 40, "about": "but no lower than this"}
+  },
+  "stomach": {
+    "_about": "His stomach: it limits how much he eats at once, by volume. What he eats takes room in it (its weight in ITEM_KG, food.json, times STOMACH_K) and leaves it at a steady pace. He can eat while it is not full; a big piece (a pumpkin) may fill it past full, and then he must wait. What he eats still goes into him at once: the stomach only says how much more he can take.",
+    "STOMACH_K": {"f32": 1, "about": "litres of stomach a kilogram of food takes; raise it and food is bulkier"},
+    "STOMACH_HOLDS": {"f32": 1, "about": "litres his stomach holds: about a kilogram of food at once; raise it and he eats more at a sitting"},
+    "STOMACH_FULL": {"f32": 0.9, "about": "he is full from this share of what it holds, and eats nothing more until it is below it again: after a cabbage, about two minutes; raise it towards 1 and he waits less"},
+    "STOMACH_EMPTIES": {"f32": "5.0 / 24 * DAY_SECONDS", "about": "seconds a full stomach takes to empty: 5 hours of the game's day, 12.5 minutes of play, so about 4.8 kg of food a day (it was 8 hours, and he could not eat enough to keep his weight); raise it and he eats less a day"}
   },
   "full_and_lacking": {
     "_about": "What full and lacking do, in numbers.",

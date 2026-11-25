@@ -37,10 +37,10 @@ NEED_HIGH :: f32(70)
 NEED_OVER :: f32(90)
 // below this he lacks water (water has its own line, higher than NEED_LOW)
 WATER_LOW :: f32(25)
-// the share of each level used up every second, at rest: half of it in 11 minutes
-NEED_FADE :: f32(0.001)
-// above NEED_OVER it moves on this many times as fast
-SHED :: f32(6)
+// the share of his protein, fibre, vitamins and electrolytes used up every second, at rest: half of each in a day (0.6931 is the natural log of 2). Carbs are burned instead (see BASAL in prosio.json), and water has its own THIRST
+NEED_FADE :: f32(0.6931 / DAY_SECONDS)
+// above NEED_OVER the share of it that moves on every second: too much of anything is over in a few minutes, as it was before the day was long (it does not follow NEED_FADE)
+SHED :: f32(0.006)
 // water level used up every second: a full drink lasts a good quarter of an hour
 THIRST :: f32(0.1)
 // seconds without water, vitamins or electrolytes before the game is over
@@ -53,6 +53,18 @@ LICK :: f32(0.25)
 DRINK_SALT :: f32(25)
 // but no lower than this
 DRINK_SALT_FLOOR :: f32(40)
+
+// ---- stomach ----
+// His stomach: it limits how much he eats at once, by volume. What he eats takes room in it (its weight in ITEM_KG, food.json, times STOMACH_K) and leaves it at a steady pace. He can eat while it is not full; a big piece (a pumpkin) may fill it past full, and then he must wait. What he eats still goes into him at once: the stomach only says how much more he can take.
+
+// litres of stomach a kilogram of food takes; raise it and food is bulkier
+STOMACH_K :: f32(1)
+// litres his stomach holds: about a kilogram of food at once; raise it and he eats more at a sitting
+STOMACH_HOLDS :: f32(1)
+// he is full from this share of what it holds, and eats nothing more until it is below it again: after a cabbage, about two minutes; raise it towards 1 and he waits less
+STOMACH_FULL :: f32(0.9)
+// seconds a full stomach takes to empty: 5 hours of the game's day, 12.5 minutes of play, so about 4.8 kg of food a day (it was 8 hours, and he could not eat enough to keep his weight); raise it and he eats less a day
+STOMACH_EMPTIES :: f32(5.0 / 24 * DAY_SECONDS)
 
 // ---- full_and_lacking ----
 // What full and lacking do, in numbers.

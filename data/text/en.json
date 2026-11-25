@@ -542,6 +542,7 @@
       "sack_full": "My sack is full!",
       "not_ripe": "Not ripe yet... into the sack anyway.",
       "sack_empty": "My sack is empty! {Action} picks food up.",
+      "stomach_full": "My tummy is full! I need a while before I can eat more.",
       "no_room": "No room in my sack for it!",
       "cannot_make_here": "I don't know how to make anything here yet!",
       "no_room_flour": "No room in my sack for flour!",

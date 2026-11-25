@@ -168,6 +168,12 @@ autoplay :: proc(minutes: int, seed: int) -> bool {
 		bot.rng = 1
 	}
 	stats = {fat_low = 999, kg_low = 999}
+	if forager.on {
+		forager.want_food = 2000 // gathers until the sack holds a day's food
+		forager.sack_kcal = sack_food_kcal()
+		forager.last_bite = -1000
+		forager.last_refused = -1000
+	}
 	stats.fails = make(map[string]int)
 	stats.said = make(map[string]int)
 	frames := minutes * 60 * 60
@@ -244,6 +250,9 @@ autoplay :: proc(minutes: int, seed: int) -> bool {
 				stats.traits_high[t] = max(stats.traits_high[t], level)
 			}
 		}
+		if forager.on {
+			forager_tick(frame)
+		}
 		if frame % (5 * 60 * 60) == 0 {
 			append(&stats.samples, [6]f32{p.kg, p.fat, game.part_kg(.Muscle), game.store_kg(.Carbs), game.store_kg(.Protein), p.stamina})
 		}
@@ -268,13 +277,16 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 			if (rec.dish == .Rod || rec.dish == .Gate) && p.sack[rec.dish] > 0 || rec.dish == .Larder && (p.sack[.Larder] > 0 || game.larder_count() > 0) {
 				continue // one rod, one gate at a time and one larder are enough
 			}
+			if forager.on && !game.is_food(rec.dish) {
+				continue // the forager makes food, as much as it can at once
+			}
 			if game.max_batch(rec) > 0 && (choice < 0 || rand() < 0.5) {
 				choice = i
 			}
 		}
 		if choice >= 0 {
 			game.cook_choice = choice
-			game.cook_count = 1 + int(rand() * 3)
+			game.cook_count = forager.on ? game.max_batch(recipes[choice]) : 1 + int(rand() * 3)
 			game.forced_pressed = {.Confirm}
 		} else {
 			game.forced_pressed = {.Menu}
@@ -324,8 +336,14 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	bot.goal_t -= 1.0 / 60
 	can_act := p.dazed_t <= 0 && p.dash_t <= 0 && p.eat_t <= 0 && p.pick_t <= 0 && p.ache_t <= 0 && !p.airborne
 
+	// The forager eats when it should, and does none of what follows but
+	// go about its goals.
+	if forager.on && can_act && p.carry == .Nothing && forager_eat(&tap) {
+		return
+	}
+
 	// A pebble now and then, at whatever is about.
-	if can_act && p.carry == .Nothing && !p.winding && p.sack[.Pebble] > 0 && bot.wind == 0 && rand() < 0.004 {
+	if !forager.on && can_act && p.carry == .Nothing && !p.winding && p.sack[.Pebble] > 0 && bot.wind == 0 && rand() < 0.004 {
 		p.sack_sel = .Pebble
 		tap += {.Grab}
 		bot.wind = 5 + int(rand() * 60)
@@ -334,7 +352,7 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	}
 
 	// A spear now and then, the same way.
-	if can_act && p.carry == .Nothing && !p.winding && p.sack[.Spear] > 0 && bot.wind == 0 && rand() < 0.004 {
+	if !forager.on && can_act && p.carry == .Nothing && !p.winding && p.sack[.Spear] > 0 && bot.wind == 0 && rand() < 0.004 {
 		p.sack_sel = .Spear
 		tap += {.Grab}
 		bot.wind = 5 + int(rand() * 70)
@@ -344,7 +362,7 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 
 	// What it has built goes up wherever it happens to be: a piece of fence
 	// often joins the last one, so now and then a pen comes of it.
-	if can_act && p.carry == .Nothing && !p.winding && bot.wind == 0 {
+	if !forager.on && can_act && p.carry == .Nothing && !p.winding && bot.wind == 0 {
 		for item in ([4]game.Item{.Fence, .Gate, .Scarecrow, .Larder}) {
 			if p.sack[item] > 0 && rand() < (item == .Fence || item == .Gate ? 0.01 : 0.002) {
 				standing := g.fence_count + game.scarecrow_count() + game.larder_count()
@@ -375,7 +393,9 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	}
 
 	// Eat now and then, and always when running low.
-	if can_act && p.carry == .Nothing && game.sack_has_food() && (p.fat < 30 || game.lacks(.Carbs) || rand() < 0.002) {
+	// (Not with a full stomach: he would only say so, and a bot pressing Q
+	// every frame while short of carbs never got to the pond and dried out.)
+	if !forager.on && can_act && p.carry == .Nothing && game.sack_has_food() && !game.stomach_full() && (p.fat < 30 || game.lacks(.Carbs) || rand() < 0.002) {
 		buf: [len(game.Item)]game.Item
 		owned := game.owned_items(&buf)
 		for _ in 0 ..< 6 {
@@ -393,7 +413,7 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	// Holding something.
 	if p.carry == .Enemy && bot.goal != .Hold && bot.goal != .Fire_Block {
 		e := &g.enemies[p.carry_index]
-		if e.ko && game.MEAT_FROM[e.kind] > 0 && rand() < 0.7 {
+		if e.ko && game.MEAT_KG[e.kind] > 0 && rand() < 0.7 {
 			bot.goal, bot.goal_t = .Fire_Block, 90
 			bot.target = g.stations[.Fire].pos
 		} else {
@@ -424,7 +444,11 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 			bot.release_grab = g.grabs
 			stats.throws += bot.wind > 0 ? 1 : 0
 		}
-		choose_goal()
+		if forager.on {
+			forager_goal()
+		} else {
+			choose_goal()
+		}
 	}
 
 	// Where it is going now.
@@ -529,7 +553,13 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 			}
 		}
 	case .Pond:
-		if game.pond_in_reach(p.pos, r) {
+		if game.pond_in_reach(p.pos, r) && forager.on {
+			if p.need[.Water] < 95 {
+				press_e(&tap, "the pond")
+			} else {
+				bot.goal_t = 0 // drunk its fill
+			}
+		} else if game.pond_in_reach(p.pos, r) {
 			if rand() < 0.5 && p.need[.Water] < 90 {
 				press_e(&tap, "the pond")
 			} else if rand() < 0.02 {
@@ -944,7 +974,7 @@ watch :: proc() {
 report :: proc(minutes, seed: int) -> bool {
 	g := &game.g
 	p := &g.prosio
-	fmt.printf("AUTOPLAY REPORT: meadow and bot seed %d, %d minutes of game time\n", seed, minutes)
+	fmt.printf("AUTOPLAY REPORT: meadow and bot seed %d, %d minutes of game time%s\n", seed, minutes, forager.on ? ", the forager" : "")
 	odd := 0
 	for s in seen {
 		odd += s.count
@@ -1016,10 +1046,10 @@ report :: proc(minutes, seed: int) -> bool {
 	fmt.println("\n== What his weight went on (kg of fat and carbs burned)")
 	burned: f32
 	for kg in g.burned {
-		burned += kg
+		burned += f32(kg)
 	}
 	for kg, why in g.burned {
-		fmt.printf("%-10v %6.1f kg  %3.0f%%\n", why, kg, burned > 0 ? kg / burned * 100 : 0)
+		fmt.printf("%-10v %6.1f kg  %3.0f%%\n", why, kg, burned > 0 ? f32(kg) / burned * 100 : 0)
 	}
 	fmt.printf("in all     %6.1f kg, %.2f kg a minute; the food he ate was worth %.1f kg\n", burned, burned / f32(minutes), stats.eaten_kg)
 
@@ -1037,6 +1067,9 @@ report :: proc(minutes, seed: int) -> bool {
 		fmt.printf("%5d  %s\n", line.n, line.text)
 	}
 	_ = p
+	if forager.on {
+		forager_report()
+	}
 	return odd == 0
 }
 

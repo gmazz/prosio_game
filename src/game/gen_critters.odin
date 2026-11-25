@@ -7,8 +7,8 @@ package game
 // ---- fish ----
 // Fish swim about the pond. They are shy of a pig on the move, but one that stands still on the bank makes them curious, and they drift over: then F grabs the nearest, if it is within reach.
 MAX_FISH :: 6
-// seconds until another fish takes a caught one's place
-FISH_BACK :: Vec2{240, 480}
+// seconds until another fish takes a caught one's place: one to two hours (as it was, times MEADOW_SLOW in world.json)
+FISH_BACK :: Vec2{240 * MEADOW_SLOW, 480 * MEADOW_SLOW}
 // how far beyond himself he can grab one
 FISH_REACH :: f32(1.25)
 // seconds a grab into the water keeps the fish away
@@ -23,8 +23,8 @@ FISH_CURIOUS :: f32(7)
 
 // rabbits and crows on the meadow, a count, each with its own home
 MAX_PESTS :: 4
-// seconds between raids
-PEST_AWAY :: Vec2{50, 150}
+// seconds between raids (as it was, times MEADOW_SLOW: the crops grow that much slower too)
+PEST_AWAY :: Vec2{50 * MEADOW_SLOW, 150 * MEADOW_SLOW}
 // how fast each comes for the crops, m/s
 PEST_SPEED := [Pest_Kind]f32{.Rabbit = 3.2, .Crow = 5}
 // and how fast it runs off, m/s
@@ -53,8 +53,8 @@ PEST_HEARD :: f32(50)
 MAX_HIVES :: 3
 // combs in one hive
 MAX_HONEY :: 2
-// seconds until the bees have made another
-HONEY_REGROW :: Vec2{240, 480}
+// seconds until the bees have made another: a comb every hour or two
+HONEY_REGROW :: Vec2{240 * MEADOW_SLOW, 480 * MEADOW_SLOW}
 // how big a hive is on the ground, in metres
 HIVE_RADIUS :: f32(0.42)
 // nearer the hive than this, and they come out

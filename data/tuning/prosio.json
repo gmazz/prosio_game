@@ -35,15 +35,15 @@
     "STAMINA_REGEN": {"Vec2": [50, 8], "const": true, "about": "stamina that comes back each second (curving like the walk)"}
   },
   "burning": {
-    "_about": "Everything he does burns some of his weight, a little for everyday things and more for fighting. Walking and running burn in proportion to his weight: these are for an 80 kg Prosio.",
-    "WALK_BURN": {"f32": 0.02, "about": "kg per second of walking"},
-    "SPRINT_BURN": {"f32": 0.06, "about": "kg per second of sprinting"},
+    "_about": "Everything he does burns some of his weight, a little for everyday things and more for fighting. Walking and running burn in proportion to his weight: these are for an 80 kg Prosio. Set for a day of 60 minutes (DAY_SECONDS in world.json) in which he eats about 2,000 kcal: an active day (30 minutes walking, 2 sprinting, 150 things picked, 30 jumps, 30 bumps, grabs, bashes or throws) burns about 800 kcal doing things, on top of the 1,200 his muscles burn (BASAL); a day of rest, about 1,200 in all. Each is in kg of his weight (KCAL_PER_KG to the kilogram, in food.json): 0.072 of what it was when a session was a few minutes long, all in the same proportions.",
+    "WALK_BURN": {"f32": "17.0 / KCAL_PER_KG / 60", "about": "kg per second of walking: 17 kcal a minute (520 kcal in 30 minutes)"},
+    "SPRINT_BURN": {"f32": "52.0 / KCAL_PER_KG / 60", "about": "kg per second of sprinting: 52 kcal a minute"},
     "LOAD_EASE": {"f32": 0.6, "about": "the share of the sack's weight his legs feel (it is on his back, well packed)"},
     "LOAD_TRAIN": {"f32": 3, "about": "so with 16 kg in the sack his legs train 1.36 times as fast"},
     "LOAD_HEAVY": {"f32": 0.3, "about": "a sack this share of his weight, and he says so"},
-    "GATHER_BURN": {"f32": 0.03, "about": "kg per thing picked up"},
-    "JUMP_BURN": {"f32": 0.06, "about": "kg per jump"},
-    "FIGHT_BURN": {"f32": 0.2, "about": "kg per bump, grab, bash or throw"}
+    "GATHER_BURN": {"f32": "0.43 / KCAL_PER_KG", "about": "kg per thing picked up: 0.43 kcal"},
+    "JUMP_BURN": {"f32": "0.87 / KCAL_PER_KG", "about": "kg per jump: 0.87 kcal"},
+    "FIGHT_BURN": {"f32": "2.9 / KCAL_PER_KG", "about": "kg per bump, grab, bash or throw: 2.9 kcal"}
   },
   "bruises": {
     "BRUISE_FLOOR": {
@@ -61,11 +61,12 @@
     "_about": "A trait's level is 0 when ordinary and 1 at the most it can be; a muscle can go below 0, down to -1, when it has wasted away.",
     "ARMS_KG": {"[3]f32": [3, 5, 12], "const": true, "about": "His muscles, in kg: wasted away, ordinary, and the most they can be."},
     "LEGS_KG": {"[3]f32": [5, 8, 18], "const": true, "about": "his leg muscles, in kg, likewise"},
-    "FADE": {"f32": 0.00064, "about": "the share of a trait lost every second it is not used: half in 18 minutes"},
-    "WASTE": {"f32": 0.0015, "about": "how fast muscle wastes each second without protein, or starving: ordinary to wasted in 11 minutes"},
-    "RECOVER": {"f32": 0.002, "about": "and how fast wasted muscle comes back to ordinary once he is fed"},
+    "FADE": {"f32": "0.6931 / (2 * DAY_SECONDS)", "about": "the share of a muscle or a skill of the body lost every second it is not used: half in two days (0.6931 is the natural log of 2)"},
+    "MUSCLE_PACE": {"f32": "1.0 / 7", "about": "training, wasting and recovering muscle go at this share of the pace they had when a session was a few minutes long: a seventh. (Training the skills of the body and of the kitchen is not slowed.)"},
+    "WASTE": {"f32": "0.0015 * MUSCLE_PACE", "about": "how fast muscle wastes each second without protein, or starving: ordinary to wasted in 77 minutes"},
+    "RECOVER": {"f32": "0.002 * MUSCLE_PACE", "about": "and how fast wasted muscle comes back to ordinary once he is fed: in about an hour"},
     "BULK": {"f32": 2, "about": "full of protein, muscle builds this much faster"},
-    "BASAL": {"f32": 0.00023, "about": "kg of energy each kg of muscle burns every second: 0.18 kg a minute for ordinary muscle, 0.41 at the most, 0.11 wasted"}
+    "BASAL": {"f32": "92.0 / KCAL_PER_KG / DAY_SECONDS", "about": "kg of energy each kg of muscle burns every second: 92 kcal a day, so 1,200 kcal a day for ordinary muscle (13 kg), 2,770 at the most (30 kg), 740 wasted (8 kg). It is what he burns for being alive, whatever he does"}
   },
   "training": {
     "_about": "How much each thing he does trains (a trait gains this share of what it still lacks).",

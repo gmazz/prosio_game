@@ -49,6 +49,11 @@
       },
       "about": "What one of each thing weighs, kg. A food's is its real weight for its calories (RAW_KCAL), at its real calories to the gram (see NUTRIENT_KCAL); a fish is weighed whole, half of it eaten (MIXABLE waste). Raise one and he carries more for the same food."
     },
+    "ITEM_WATER": {
+      "[Item]f32": {"Wheat": 0.13, "Apple_Pie": 0.5, "Pumpkin_Pie": 0.6, "Berry_Muffins": 0.35, "Mushroom_Pie": 0.55, "Nut_Cake": 0.25, "Bread": 0.36, "Fried_Egg": 0.7, "Grilled_Fish": 0.33, "Roast": 0.6},
+      "partial": true,
+      "about": "The share of a thing's weight that is water, for what has no row of its own in MIXABLE (below), which gives it for the rest (a fish's counts only the half of it eaten). Eaten, the water in it goes into his water as a drink's would: a pumpkin's 1.35 kg is over a quarter of a drink. Raise one and that food waters him more"
+    },
     "ITEM_LITRES": {
       "[Item]f32": {
         "Apple": 0.3,
@@ -167,7 +172,7 @@
         "Salt": {
           "item": "Salt",
           "in_sack": true,
-          "unit": "Pinch",
+          "unit": "Gram",
           "water": 0,
           "kcal_100g": 1600,
           "shares": [0, 0, 0, 0, 0, 100]
@@ -429,7 +434,7 @@
           "acid": 0.002,
           "microbes": 2,
           "marks": ["Fruit", "Pieces"],
-          "kcal_100g": 69,
+          "kcal_100g": 80,
           "shares": [92, 2, 3, 2, 0, 1]
         },
         "Banana": {
@@ -761,6 +766,7 @@
     "WATER_PER_ALCOHOL": {"f32": 0.39, "about": "and grams of water with it; raise it and vinegar comes out heavier"},
     "PICKLED_ACID": {"f32": 0.004, "about": "soured to this share of acid it is pickles; raise it and pickles take longer"},
     "WINE_ALCOHOL": {"f32": 0.03, "about": "with this share of alcohol it is wine; raise it and wine must be stronger"},
+    "ALCOHOL_DENSITY": {"f32": 0.79, "about": "grams in a millilitre of alcohol, to give a drink's strength by volume, as on a bottle (the drink taken as a gram to the millilitre): grapes pressed and left to stand make wine of 11 to 12% by volume, as they are sweet wine grapes (80 kcal in 100 g); raise it and the same alcohol reads weaker"},
     "VINEGAR_ACID": {
       "f32": 0.03,
       "about": "turned to this share of acid, with little alcohol left, it is vinegar; raise it and vinegar takes longer"
