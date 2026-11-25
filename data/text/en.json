@@ -504,6 +504,7 @@
       "Resume": "RESUME",
       "Look": "",
       "Language": "",
+      "Load": "LOAD",
       "Restart": "START OVER",
       "Exit_To_Menu": "EXIT TO MENU",
       "Quit": "QUIT"
@@ -526,6 +527,12 @@
     "paused": "PAUSED",
     "subtitle": "all belly, no brakes",
     "continue_game": "CONTINUE",
+    "load_title": "LOAD A SAVED GAME",
+    "load_when": {"text": "{day} {month} {year}, {time}", "about": "a backup on the LOAD list: when the game in it was saved ({time} is 23:15:07)"},
+    "load_broken": {"text": "{when}: cannot be read", "about": "a backup on the LOAD list that this version cannot load"},
+    "month_name": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    "load_note": "The game you leave is kept too: it will be on this list.",
+    "load_help": "Choose: UP / DOWN     Load: {Confirm}     Back: {Menu}",
     "menu_help": "Choose: UP / DOWN     Select: {Confirm}     Pixel size any time: 1 to 9",
     "window_title": {"text": "Prosio", "about": "the window's title"}
   },

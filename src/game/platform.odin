@@ -1019,6 +1019,155 @@ store_read :: proc(data: []u8, which: Store = .Save) -> int {
 	}
 }
 
+// The clock, in local time, to the second: for naming the backups of the
+// saved game (saves.odin). The rules set it (clock_fixed), so that names and
+// their order can be tested.
+Clock :: struct {
+	year, month, day, hour, minute, second: int,
+}
+clock_fixed: Maybe(Clock)
+
+clock_now :: proc() -> Clock {
+	if c, fixed := clock_fixed.?; fixed {
+		return c
+	}
+	when IS_WEB {
+		f: [6]i32
+		clock_local(&f[0], 0)
+		return {int(f[0]), int(f[1]), int(f[2]), int(f[3]), int(f[4]), int(f[5])}
+	} else {
+		return clock_of(c_time(nil))
+	}
+}
+
+when !IS_WEB {
+	// The C library's clock (only the fields read here of its struct tm).
+	foreign import c_library "system:c"
+	@(private = "file")
+	C_Tm :: struct {
+		sec, min, hour, mday, mon, year: i32,
+	}
+	@(default_calling_convention = "c", private = "file")
+	foreign c_library {
+		@(link_name = "time")
+		c_time :: proc(t: ^i64) -> i64 ---
+		@(link_name = "localtime")
+		c_localtime :: proc(t: ^i64) -> ^C_Tm ---
+	}
+
+	@(private = "file")
+	clock_of :: proc(t: i64) -> Clock {
+		t := t
+		tm := c_localtime(&t)
+		if tm == nil {
+			return {}
+		}
+		return {int(tm.year) + 1900, int(tm.mon) + 1, int(tm.mday), int(tm.hour), int(tm.min), int(tm.sec)}
+	}
+}
+
+// When the saved game was last written (false if it never was, or that
+// cannot be told).
+store_saved_at :: proc() -> (Clock, bool) {
+	when IS_WEB {
+		f: [6]i32
+		if store_saved_time(&f[0]) == 0 {
+			return {}, false
+		}
+		return {int(f[0]), int(f[1]), int(f[2]), int(f[3]), int(f[4]), int(f[5])}, true
+	} else {
+		path := rl.TextFormat("%s%s", rl.GetApplicationDirectory(), STORE_FILE[.Save])
+		if !rl.FileExists(path) {
+			return {}, false
+		}
+		return clock_of(i64(rl.GetFileModTime(path))), true
+	}
+}
+
+// The backups of the saved game: files in BACKUP_FOLDER beside it on the
+// desktop, and the newest WEB_BACKUPS in the browser's own storage.
+when IS_WEB {
+	@(default_calling_convention = "c")
+	foreign store {
+		clock_local :: proc(out: ^i32, unused: i32) ---
+		store_saved_time :: proc(out: ^i32) -> i32 ---
+		backup_save :: proc(name: [^]u8, name_size: i32, data: [^]u8, size: i32, keep: i32) ---
+		backup_load :: proc(name: [^]u8, name_size: i32, data: [^]u8, room: i32) -> i32 ---
+		backup_names :: proc(out: [^]u8, room: i32) -> i32 ---
+	}
+} else {
+	@(private = "file")
+	backup_path :: proc(name: string) -> cstring {
+		c: [64]u8
+		copy(c[:len(c) - 1], name)
+		return rl.TextFormat("%s%s/%s", rl.GetApplicationDirectory(), BACKUP_FOLDER, cstring(&c[0]))
+	}
+}
+
+backup_write :: proc(name: string, data: []u8) -> bool {
+	when IS_WEB {
+		backup_save(raw_data(name), i32(len(name)), raw_data(data), i32(len(data)), WEB_BACKUPS)
+		return true
+	} else {
+		folder := rl.TextFormat("%s%s", rl.GetApplicationDirectory(), BACKUP_FOLDER)
+		if !rl.DirectoryExists(folder) && rl.MakeDirectory(folder) != 0 {
+			return false
+		}
+		return rl.SaveFileData(backup_path(name), raw_data(data), i32(len(data)))
+	}
+}
+
+// Reads a backup into data; how many bytes it holds (0 if it is not there,
+// or does not fit).
+backup_read :: proc(name: string, data: []u8) -> int {
+	when IS_WEB {
+		return int(backup_load(raw_data(name), i32(len(name)), raw_data(data), i32(len(data))))
+	} else {
+		path := backup_path(name)
+		if !rl.FileExists(path) {
+			return 0
+		}
+		size: i32
+		bytes := rl.LoadFileData(path, &size)
+		if bytes == nil {
+			return 0
+		}
+		defer rl.UnloadFileData(bytes)
+		if int(size) > len(data) {
+			return 0
+		}
+		copy(data, bytes[:size])
+		return int(size)
+	}
+}
+
+// Calls visit with the name of every file in the backups' folder.
+backup_each :: proc(visit: proc(name: string)) {
+	when IS_WEB {
+		@(static) names: [WEB_BACKUPS * 40 + 400]u8
+		n := int(backup_names(&names[0], i32(len(names))))
+		start := 0
+		for i in 0 ..= n {
+			if i == n || names[i] == '\n' {
+				if i > start {
+					visit(string(names[start:i]))
+				}
+				start = i + 1
+			}
+		}
+	} else {
+		folder := rl.TextFormat("%s%s", rl.GetApplicationDirectory(), BACKUP_FOLDER)
+		if !rl.DirectoryExists(folder) {
+			return
+		}
+		files := rl.LoadDirectoryFiles(folder)
+		defer rl.UnloadDirectoryFiles(files)
+		for path in files.paths[:files.count] {
+			visit(string(rl.GetFileName(path)))
+		}
+	}
+}
+
 save_screenshot :: proc(path: cstring) {
 	// Entering and leaving 2D mode flushes pending UI drawing first.
 	rl.BeginMode2D({zoom = 1})

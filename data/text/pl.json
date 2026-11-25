@@ -483,6 +483,7 @@
       "Resume": "WRÓĆ DO GRY",
       "Look": "",
       "Language": "",
+      "Load": "WCZYTAJ",
       "Restart": "OD NOWA",
       "Exit_To_Menu": "WYJDŹ DO MENU",
       "Quit": "WYJDŹ"
@@ -502,6 +503,12 @@
     "paused": "PAUZA",
     "subtitle": "sam brzuch, zero hamulców",
     "continue_game": "GRAJ DALEJ",
+    "load_title": "WCZYTAJ ZAPISANĄ GRĘ",
+    "load_when": "{day} {month} {year}, {time}",
+    "load_broken": "{when}: nie da się wczytać",
+    "month_name": ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"],
+    "load_note": "Gra, którą zostawiasz, też zostaje: będzie na tej liście.",
+    "load_help": "Wybór: GÓRA / DÓŁ     Wczytaj: {Confirm}     Wróć: {Menu}",
     "menu_help": "Wybór: GÓRA / DÓŁ     Zatwierdź: {Confirm}     Wielkość pikseli w każdej chwili: 1 do 9",
     "window_title": "Prosio"
   },

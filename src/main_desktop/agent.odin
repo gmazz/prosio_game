@@ -391,6 +391,8 @@ agent_scene_name :: proc() -> string {
 		return "sack, body, outfit and map menu"
 	case .Larder:
 		return "larder"
+	case .Load:
+		return "list of saved games to load"
 	case .Playing:
 	}
 	return "game"
@@ -455,6 +457,13 @@ agent_look :: proc(radius: f32) {
 		buf: [len(game.Item)]game.Item
 		for item, i in game.larder_rows(l, &buf) {
 			fmt.printfln("  %s %s: %d in the sack, %d in the larder", i == game.larder_choice ? ">" : " ", game.TEXT.item_name[item], p.sack[item], l.stock[item])
+		}
+		return
+	case .Load:
+		// (A program playing never sees it: it makes and lists no backups.)
+		fmt.println("The list of saved games to load is open. u and d choose, e loads, p closes.")
+		for b, i in game.backups[:game.backup_count] {
+			fmt.printfln("  %s %s", i == game.load_choice ? ">" : " ", game.backup_when(b.saved))
 		}
 		return
 	case .Bag:

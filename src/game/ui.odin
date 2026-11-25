@@ -373,6 +373,7 @@ Menu_Item :: enum {
 	Resume,
 	Look,
 	Language,
+	Load,
 	Restart,
 	Exit_To_Menu,
 	Quit,
@@ -405,14 +406,15 @@ menu_item_text :: proc(item: Menu_Item) -> cstring {
 // With a saved Prosio, the main menu carries on with him, or starts over
 // with a new one. (The browser has nothing to quit to.)
 // The language can be changed there too, when the game has more than one.
-MENU_MAIN := [?]Menu_Item{.Play, .Look, .Language, .Restart, .Quit}
-MENU_PAUSE := [?]Menu_Item{.Resume, .Look, .Language, .Restart, .Exit_To_Menu}
+// LOAD shows only when there is a backup to load (saves.odin).
+MENU_MAIN := [?]Menu_Item{.Play, .Look, .Language, .Load, .Restart, .Quit}
+MENU_PAUSE := [?]Menu_Item{.Resume, .Look, .Language, .Load, .Restart, .Exit_To_Menu}
 
 menu_items :: proc() -> []Menu_Item {
 	@(static) list: [max(len(MENU_MAIN), len(MENU_PAUSE))]Menu_Item
 	n := 0
 	for item in (scene == .Paused ? MENU_PAUSE[:] : MENU_MAIN[:]) {
-		if (item == .Restart && !has_save && scene != .Paused) || (item == .Quit && IS_WEB) || (item == .Language && len(Language) < 2) {
+		if (item == .Restart && !has_save && scene != .Paused) || (item == .Quit && IS_WEB) || (item == .Load && backup_count == 0) || (item == .Language && len(Language) < 2) {
 			continue
 		}
 		list[n] = item
