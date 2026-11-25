@@ -1,14 +1,15 @@
 package workbench
 
-// The command menu: F1 opens a list of every command (commands/commands.odin);
+// The command menu: Shift+1 (!) opens a list of every command (commands/commands.odin);
 // typing narrows it, the arrows choose, Enter runs (or, for a command that
 // needs more, puts it on the line to finish), Esc closes. While it is open
 // the game has no keyboard.
 //
-// Keys that work without it: F2 shows and hides the editor (editor.odin), F5
-// replays the current set-up, F6 pauses and goes on, F7 steps a frame while
-// paused. With the free camera on, the arrows
-// move the camera.
+// Keys that work without it, while the game has the keys (as keys.txt sets
+// them; see keys.odin): Shift+2 shows and hides the editor (editor.odin),
+// Shift+3 replays the current set-up, Shift+4 pauses and goes on, Shift+5
+// steps a frame while paused. With the free camera on, the arrows move the
+// camera.
 
 import cmd "commands"
 import game "../game"
@@ -35,41 +36,48 @@ menu: Menu
 
 // Keys for the workbench, each frame, before the game moves on.
 workbench_keys :: proc(dt: f32) {
-	if rl.IsKeyPressed(.F1) {
-		menu.open = !menu.open
-		clear(&menu.input)
-		menu.selected = 0
-	}
-	if rl.IsKeyPressed(.F2) {
-		editor.visible = !editor.visible
-		editor.focused = editor.visible
+	keys_follow_file()
+	// The workbench's own keys act only while the game has the keys (see
+	// keys.odin); wherever you are typing they type themselves.
+	typing := menu.open || inspector_edit.active || (editor.visible && editor.focused)
+	action, acted := bench_key_pressed()
+	acted &&= !typing
+	if acted {
+		for rl.GetCharPressed() != 0 {} // (the character it typed goes nowhere)
+		switch action {
+		case .Menu:
+			menu.open = true
+			clear(&menu.input)
+			menu.selected = 0
+		case .Editor:
+			editor.visible = !editor.visible
+			editor.focused = editor.visible
+		case .Replay: say(cmd.replay())
+		case .Pause: say(run_line("pause"))
+		case .Step: say(run_line("step"))
+		}
 	}
 	if !menu.open {
 		editor_mouse()
 		inspect_mouse()
 	}
-	if menu.open {
-		menu_keys()
-	} else if inspector_edit.active {
-		inspector_keys()
-	} else if editor.visible && editor.focused {
-		editor_keys()
-	} else {
-		switch {
-		case rl.IsKeyPressed(.F5): say(cmd.replay())
-		case rl.IsKeyPressed(.F6): say(run_line("pause"))
-		case rl.IsKeyPressed(.F7): say(run_line("step"))
-		}
-		if cmd.view.free {
-			move: game.Vec2
-			if rl.IsKeyDown(.LEFT) {move.x -= 1}
-			if rl.IsKeyDown(.RIGHT) {move.x += 1}
-			if rl.IsKeyDown(.UP) {move.y -= 1}
-			if rl.IsKeyDown(.DOWN) {move.y += 1}
-			cmd.view.at += move * FREE_CAMERA_SPEED * dt
-		}
+	switch {
+	case acted: // (nothing else this frame)
+	case menu.open: menu_keys()
+	case inspector_edit.active: inspector_keys()
+	case editor.visible && editor.focused: editor_keys()
+	case cmd.view.free:
+		move: game.Vec2
+		if rl.IsKeyDown(.LEFT) {move.x -= 1}
+		if rl.IsKeyDown(.RIGHT) {move.x += 1}
+		if rl.IsKeyDown(.UP) {move.y -= 1}
+		if rl.IsKeyDown(.DOWN) {move.y += 1}
+		cmd.view.at += move * FREE_CAMERA_SPEED * dt
 	}
-	game.keyboard_enabled = !menu.open && !cmd.view.free && !(editor.visible && editor.focused) && !inspector_edit.active
+	// The game has the keys when nothing of the workbench's does, and not on
+	// the frame a workbench key acts (Shift+1 would also set the pixel size)
+	// or the workbench was typing (Esc leaving the editor would also pause).
+	game.keyboard_enabled = !acted && !typing && !menu.open && !cmd.view.free && !(editor.visible && editor.focused) && !inspector_edit.active
 }
 
 menu_keys :: proc() {

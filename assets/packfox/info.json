@@ -4,6 +4,9 @@
  "scale": 0.5513545,
  "bones": ["Body", "Back", "BackShoulder.L", "BackLeg.L", "BackUpperLeg.L", "BackLowerLeg.L", "BackShoulder.R", "BackLeg.R", "BackUpperLeg.R", "BackLowerLeg.R", "Tail1", "Tail2", "Tail3", "Tail4", "Tail5", "Tail6", "Tail7", "Tail8", "Torso", "Torso2", "FrontShoulder.L", "FrontUpperLeg.L", "FrontLowerLeg.L", "FrontShoulder.R", "FrontUpperLeg.R", "FrontLowerLeg.R", "Torso3", "Neck1", "Neck2", "Neck3", "Ear1.L", "Ear2.L", "Ear3.L", "Ear4.L", "Ear1.R", "Ear2.R", "Ear3.R", "Ear4.R", "Head", "PoleTarget.L", "PoleTarget.R", "PoleTargetBack.L", "PoleTargetBack.R", "IKBackLeg.L", "FFB.L", "IKBackLeg.R", "FFB.R", "IKFrontLeg.L", "FF.L", "IKFrontLeg.R", "FF.R"],
  "parents": [-1, 0, 1, 2, 3, 4, 1, 6, 7, 8, 1, 10, 11, 12, 13, 14, 15, 16, 1, 18, 19, 20, 21, 19, 23, 24, 19, 26, 27, 28, 29, 30, 31, 32, 29, 34, 35, 36, 29, 0, 0, 0, 0, -1, 43, -1, 45, -1, 47, -1, 49],
+ "points": 926,
+ "corners": 5544,
+ "points_by_bones": [158, 283, 210, 275],
  "groups": [
   {"name": "Black", "first": 0, "count": 42},
   {"name": "Eyes", "first": 42, "count": 24},

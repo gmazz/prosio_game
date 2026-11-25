@@ -88,6 +88,7 @@
   "pack_animals_moving": {
     "_about": "The goats and the fox drawn from the animal pack: when they walk and gallop, how they turn, and their heads. How it goes from standing to walking to galloping, by its speed (m/s): each blends into the next, on one stride cycle, so nothing jumps. A goat on four legs cannot slide sideways (see quad_steer):",
     "QUAD_EYE_SIZE": {"f32": 0.047, "about": "small closed or crossed eye marks in this rig's units"},
+    "QUAD_VIEW_ROOM": {"f32": 1.6, "about": "an animal out of the picture is not bent or drawn: how much further than at rest any of it may reach in a pose (lying down, held, kicking), as a share of its reach at rest"},
     "QUAD_GRAB_KICK": {"f32": 0.4, "about": "how far a held animal's free legs kick out as it struggles, as a share of its radius"},
     "QUAD_GRAB_TWIST": {"f32": 0.16, "about": "how far (radians) a held animal's front half twists and rolls as it struggles"},
     "QUAD_WALK_FROM": {"f32": 0.08, "about": "it starts to walk,"},

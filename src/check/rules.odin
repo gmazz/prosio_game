@@ -51,6 +51,7 @@ run_rules :: proc() -> int {
 	when game.PROSIO_BASE_DATA { rules_prosio_base() }
 	rules_workbench_commands()
 	rules_workbench_index()
+	rules_workbench_keys()
 	rules_fighting()
 	rules_impacts()
 	rules_stones()
@@ -58,6 +59,7 @@ run_rules :: proc() -> int {
 	rules_saving()
 	rules_moving()
 	rules_packed_animals()
+	rules_animal_bending()
 	rules_controls()
 	rules_shake_salt_fog()
 	rules_campfire()
@@ -421,7 +423,7 @@ rules_packed_animals :: proc() {
 	broken := 0
 	what := ""
 	for &m, k in game.QUAD_MODELS {
-		if len(m.mesh) == 0 {
+		if len(m.points) == 0 {
 			continue // (one compiled in only with its build switch on)
 		}
 		nb := len(m.bones)
@@ -435,21 +437,27 @@ rules_packed_animals :: proc() {
 				what = fmt.tprintf("%v has no %s", k, name)
 			}
 		}
-		if len(m.rest) != nb || len(m.frames) != frames * nb || len(m.mesh) % 3 != 0 {
+		if len(m.rest) != nb || len(m.frames) != frames * nb || len(m.corners) % 3 != 0 {
 			broken += 1
 			what = fmt.tprintf("%v: %d rest frames for %d bones, %d frames for %d", k, len(m.rest), nb, len(m.frames), frames * nb)
 		}
-		for v in m.mesh {
+		for c in m.corners {
+			if int(c) >= len(m.points) {
+				broken += 1
+				what = fmt.tprintf("%v: a corner names point %d of %d", k, c, len(m.points))
+			}
+		}
+		for pt in m.points {
 			total: f32
 			for i in 0 ..< 4 {
-				total += v[13 + i]
-				if int(v[9 + i]) >= nb {
+				total += pt.weights[i]
+				if int(pt.bones[i]) >= nb {
 					broken += 1
 				}
 			}
 			if abs(total - 1) > 0.01 {
 				broken += 1
-				what = fmt.tprintf("%v: a corner's weights add up to %.2f", k, total)
+				what = fmt.tprintf("%v: a point's weights add up to %.2f", k, total)
 			}
 		}
 	}
@@ -477,10 +485,11 @@ rules_packed_animals :: proc() {
 		}
 		// The lowest point of the bent mesh: the bottom of a hoof.
 		lowest: f32 = 1e9
-		for v in game.QUAD_MODELS[qk].mesh {
+		for pt in game.QUAD_MODELS[qk].points {
+			v := pt.pos
 			y: f32
 			for i in 0 ..< 4 {
-				y += v[13 + i] * (skin[int(v[9 + i])] * [4]f32{v[0], v[1], v[2], 1}).y
+				y += pt.weights[i] * (skin[int(pt.bones[i])] * [4]f32{v[0], v[1], v[2], 1}).y
 			}
 			lowest = min(lowest, y)
 		}
@@ -648,6 +657,117 @@ rules_packed_animals :: proc() {
 	check_quad_contacts()
 }
 
+// Drawing a packed animal: each point is bent once, and an animal once a
+// drawing (the world is drawn twice a frame, its shadows and then itself);
+// each triangle's flat normal comes from its bent points; an animal out of
+// the picture, and its shadow out of it too, is not bent at all.
+rules_animal_bending :: proc() {
+	section("bending the animals")
+	g := &game.g
+	fresh()
+	g.enemy_count = 0
+	game.add_enemy(.Goat, {30, 30})
+	e := &g.enemies[0]
+	pose := game.enemy_pose(e^)
+	before := game.quad_bendings
+	game.draw_count += 1
+	game.quad_bend(0, pose, e^)
+	game.quad_bend(0, pose, e^)
+	once := game.quad_bendings - before
+	game.draw_count += 1
+	game.quad_bend(0, pose, e^)
+	check("an animal is bent at most once a drawing, and again the next", once == 1 && game.quad_bendings - before == 2, fmt.tprintf("bent %d times in one drawing", once))
+
+	// The flat normals, for the light: each corner's is its triangle's
+	// normal at rest bent with that corner's own bones, as before points were
+	// shared, to the last bit, so the animals look exactly as they did (Gio
+	// chose that over normals worked out from the bent points, which put a
+	// few facets a shade lighter or darker). Worked out here afresh from the
+	// points at rest, over the animals standing, walking, galloping, dizzy
+	// and dead.
+	corners, differ: int
+	found_at := ""
+	for kind in ([3]game.Enemy_Kind{.Goat, .Billy, .Fox}) {
+		qk, packed := game.quad_model_for(kind)
+		if !packed {
+			continue
+		}
+		m := &game.QUAD_MODELS[qk]
+		for state in ([4]game.Enemy_State{.Chase, .Chase, .Dizzy, .Dead}) {
+			for k in 0 ..< 12 {
+				g.enemy_count = 0
+				game.add_enemy(kind, {30, 30})
+				a := &g.enemies[0]
+				a.state = state
+				a.vel = {0, k % 2 == 0 ? 0.8 : 3}
+				a.pace = a.vel.y
+				a.gait = f32(k) / 12
+				game.draw_count += 1
+				b := game.quad_bend(0, game.enemy_pose(a^), a^)
+				if b == nil {
+					continue
+				}
+				game.quad_corner_flats(b)
+				for t := 0; t + 2 < len(m.corners); t += 3 {
+					p := m.points
+					c0, c1, c2 := p[m.corners[t]].pos, p[m.corners[t + 1]].pos, p[m.corners[t + 2]].pos
+					rest := linalg.normalize0(linalg.cross(c1 - c0, c2 - c0))
+					for j in 0 ..< 3 {
+						pt := p[m.corners[t + j]]
+						old: game.Vec3
+						for i in 0 ..< 4 {
+							if pt.weights[i] > 0 {
+								old += pt.weights[i] * (b.skin[int(pt.bones[i])] * [4]f32{rest.x, rest.y, rest.z, 0}).xyz
+							}
+						}
+						old = linalg.normalize0(old)
+						corners += 1
+						if transmute([3]u32)old != transmute([3]u32)game.quad_flat[t + j] {
+							differ += 1
+							found_at = fmt.tprintf("%v %v, a triangle of %s", kind, state, m.groups[group_of(m, t)].name)
+						}
+					}
+				}
+			}
+		}
+	}
+	check("each corner's light is its triangle's normal at rest bent with its own bones, to the last bit, as before (pictures identical)", corners > 0 && differ == 0,
+		differ > 0 ? fmt.tprintf("%d of %d corners differ, such as %s", differ, corners, found_at) : fmt.tprintf("%d corners", corners))
+
+	// The picture: what the camera looks at is in it; a ball far to one
+	// side, or behind the camera, is not; an animal just out of the picture
+	// on the side away from the sun is still drawn if its shadow falls in.
+	view := game.View{eye = {0, 9.3, 10.6}, target = {0, 0.8, 0}, fov_y = 38, aspect = 16.0 / 9}
+	seen := game.in_view(view, {0, 0.8, 0}, 0.1)
+	side := game.in_view(view, {60, 1, 0}, 2)
+	behind := game.in_view(view, {0, 9.3, 20}, 2)
+	check("an animal out of the picture is not drawn, one in it is", seen && !side && !behind)
+	game.world_view = view
+	g.enemy_count = 0
+	game.add_enemy(.Goat, {0, 0})
+	e = &g.enemies[0]
+	qk, _ := game.quad_model_for(.Goat)
+	// Out to the left (the sun's side), along the ground, until it is out of
+	// the picture itself: its shadow, falling to the right, is still in.
+	x: f32 = 0
+	half, reach := game.quad_extent(qk)
+	r := game.ENEMY_RADIUS[.Goat]
+	for game.in_view(view, {x, half * r, 0}, reach * r) {
+		x -= 0.25
+	}
+	e.pos = {x, 0}
+	check("an animal out of the picture whose shadow falls in it is drawn", game.animal_in_view(e^, qk))
+}
+
+group_of :: proc(m: ^game.Quad_Model, corner: int) -> int {
+	for grp, i in m.groups {
+		if corner >= grp.first && corner < grp.first + grp.count {
+			return i
+		}
+	}
+	return 0
+}
+
 check_quad_contacts :: proc() {
 	// Sample the skinned pose through the same movement update the renderer
 	// uses. A step counter alone cannot catch feet overridden during skinning.
@@ -763,12 +883,13 @@ check_quad_contacts :: proc() {
 			pose := game.held_pose(e^)
 			game.quad_skin(pose, e^, &skin)
 			lows := [5]f32{100, 100, 100, 100, 100}
-			for v in model.mesh {
+			for pt in model.points {
+				v := pt.pos
 				y: f32
 				for j in 0 ..< 4 {
-					y += v[13 + j] * (skin[int(v[9 + j])] * [4]f32{v[0], v[1], v[2], 1}).y
+					y += pt.weights[j] * (skin[int(pt.bones[j])] * [4]f32{v[0], v[1], v[2], 1}).y
 				}
-				region := regions[int(v[9])]
+				region := regions[int(pt.bones[0])]
 				lows[region] = min(lows[region], y)
 			}
 			below = min(below, min(lows[0], lows[1], lows[2], lows[3], lows[4]))

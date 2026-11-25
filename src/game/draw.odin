@@ -37,6 +37,54 @@ on_screen :: proc(pos: Vec2, margin: f32 = 0) -> bool {
 	return dx < 21 * z + margin && dz > -19 * z - margin && dz < 10 * z + margin
 }
 
+// Where the world is seen from in the drawing under way: set by begin_world,
+// as the camera is (moved to the pixel grid, and wide enough for the margin
+// round the picture).
+View :: struct {
+	eye, target: Vec3,
+	fov_y:       f32, // top to bottom, in degrees
+	aspect:      f32, // width over height
+}
+world_view: View
+// How many times the world has been drawn (draw_frame counts them).
+draw_count: int
+
+// Whether any of a ball (its centre, its radius) is in the picture.
+in_view :: proc(v: View, centre: Vec3, radius: f32) -> bool {
+	forward := linalg.normalize0(v.target - v.eye)
+	right := linalg.normalize0(linalg.cross(forward, Vec3{0, 1, 0}))
+	up := linalg.cross(right, forward)
+	d := centre - v.eye
+	along := linalg.dot(d, forward)
+	slope_y := math.tan(v.fov_y * math.RAD_PER_DEG / 2)
+	slope_x := slope_y * v.aspect
+	// How far outside the side of the picture (a plane through the eye) the
+	// centre is, on the side it is nearer.
+	outside :: proc(across, along, slope: f32) -> f32 {
+		return (abs(across) - along * slope) / math.sqrt(1 + slope * slope)
+	}
+	return along > -radius && outside(linalg.dot(d, right), along, slope_x) < radius && outside(linalg.dot(d, up), along, slope_y) < radius
+}
+
+// Whether any of a packed animal, or of its shadow, may be in the picture:
+// a ball round it as far as it can reach in any pose, and that ball's
+// shadow (longer, along the sunlight).
+animal_in_view :: proc(e: Enemy, qk: Quad_Kind) -> bool {
+	if e.state == .Held {
+		return true // in his hands, and he is always in view
+	}
+	half, reach := quad_extent(qk)
+	r := ENEMY_RADIUS[e.kind]
+	centre := Vec3{e.pos.x, max(e.y, 0) + half * r, e.pos.y}
+	radius := reach * r
+	if in_view(world_view, centre, radius) {
+		return true
+	}
+	sun := linalg.normalize(SUN)
+	return in_view(world_view, centre - sun * (centre.y / sun.y), radius / sun.y)
+}
+
+
 // Rounded joints for arms, legs and tails. The long axis joins
 // the two endpoints in model space, including when the parent is tilted.
 limb :: proc(m: Mat4, a, b: Vec3, radius: f32, color: Color) {
@@ -549,10 +597,36 @@ impact_part_low :: proc(m: Mat4, center, radii: Vec3) -> f32 {
 
 // Animal models share the same metre-independent frame (+Z is the muzzle).
 // A diagonal pair of feet advances together in the trot.
-draw_enemy :: proc(e: Enemy) {
-	if e.state == .Gone || !on_screen(e.pos, 2) {
+// The animal at this place in g.enemies.
+draw_enemy :: proc(e: Enemy, index: int) {
+	if e.state == .Gone {
 		return
 	}
+	if qk, packed := quad_model_for(e.kind); packed ? !animal_in_view(e, qk) : !on_screen(e.pos, 2) {
+		return
+	}
+	pose := enemy_pose(e)
+	if head, drawn := draw_quad_enemy(pose, e, index); drawn {
+		draw_enemy_marks(e, head)
+		return
+	}
+	switch e.kind {
+	case .Turkey:
+		draw_turkey(pose, e)
+	case .Goat, .Billy:
+		draw_goat(pose, e)
+	case .Fox:
+		when FOX_PROCEDURAL {
+			draw_fox(pose, e)
+		} else {
+			draw_workshop_fox(pose, e)
+		}
+	}
+	draw_enemy_marks(e, (pose.front * [4]f32{0, 2.3, 0.6, 1}).xyz)
+}
+
+// How an animal stands, lies or hangs as it is now, for drawing it.
+enemy_pose :: proc(e: Enemy) -> Animal_Pose {
 	r := ENEMY_RADIUS[e.kind]
 	pose := Animal_Pose{dizzy = e.state == .Dizzy || e.limp > 0 || e.ko}
 	if e.impact.kind != .None {
@@ -601,23 +675,7 @@ draw_enemy :: proc(e: Enemy) {
 			}
 		}
 	}
-	if head, drawn := draw_quad_enemy(pose, e); drawn {
-		draw_enemy_marks(e, head)
-		return
-	}
-	switch e.kind {
-	case .Turkey:
-		draw_turkey(pose, e)
-	case .Goat, .Billy:
-		draw_goat(pose, e)
-	case .Fox:
-		when FOX_PROCEDURAL {
-			draw_fox(pose, e)
-		} else {
-			draw_workshop_fox(pose, e)
-		}
-	}
-	draw_enemy_marks(e, (pose.front * [4]f32{0, 2.3, 0.6, 1}).xyz)
+	return pose
 }
 
 // Stars over a dizzy animal's head, and a bar of its health when it is hurt.

@@ -362,6 +362,7 @@ end_frame :: proc() {
 // everything drawn is a shadow.
 begin_world :: proc(eye, target: Vec3, fov_y: f32, time: f32) {
 	snapped_eye, snapped_target, wide_fov := begin_pixel_view(eye, target, fov_y)
+	world_view = {snapped_eye, snapped_target, wide_fov, f32(pixel_view.width) / f32(pixel_view.height)}
 	camera = rl.Camera3D {
 		position   = snapped_eye,
 		target     = snapped_target,
@@ -504,8 +505,8 @@ draw_shape :: proc(shape: Shape, transform: Mat4, color: Color) {
 
 // Packed four-legged animals (see quadruped.odin): for each, one mesh of the
 // whole animal (for its shadow and its outline) and one for each of its
-// materials, each bent anew (on the CPU, into quad_pos and its normals)
-// every time it is drawn. Made once at the start.
+// materials, refilled corner by corner (from quad_pos and its normals: see
+// quad_bend) each time it is drawn. Made once at the start.
 @(private = "file")
 quad_whole: [Quad_Kind]rl.Mesh
 @(private = "file")
@@ -515,7 +516,7 @@ quad_hull: [QUAD_MAX_VERTS][3]f32
 
 init_quad_meshes :: proc() {
 	for model, k in QUAD_MODELS {
-		quad_whole[k] = quad_new_mesh(len(model.mesh))
+		quad_whole[k] = quad_new_mesh(len(model.corners))
 		for grp, i in model.groups {
 			quad_parts[k][i] = quad_new_mesh(grp.count)
 		}

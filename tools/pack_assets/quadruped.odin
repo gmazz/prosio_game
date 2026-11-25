@@ -6,10 +6,13 @@ package pack_assets
 // `length` long from tail to muzzle, the middle of that length 0.2 behind
 // the origin):
 //
-//   mesh.bin    every triangle's three corners, 17 floats each: position,
-//               flat normal, smooth normal (for the outline), four bone
-//               numbers and their four weights; grouped by material, the
-//               groups in order of their names
+//   points.bin  each distinct point of the mesh at rest (Quad_Point): its
+//               place, its smooth normal (for the outline), four bone
+//               numbers and their four weights
+//   corners.bin every triangle as three points (u16 each), grouped by
+//               material, the groups in order of their names
+//   flats.bin   every triangle's flat normal at rest (3 floats), in the
+//               same order
 //   rest.bin    each bone's rest frame, inverted (16 floats, column by column)
 //   frames.bin  each animation sampled QUAD_FPS times a second: each bone's
 //               frame (12 floats, column by column)
@@ -75,6 +78,12 @@ Quad_Socket :: struct {
 	pos, normal: Vec3,
 	bone:        int,
 }
+// A point of the mesh at rest, as the game reads it (quadruped.odin).
+Quad_Point :: struct {
+	pos, smooth: Vec3,
+	bones:       [4]u8,
+	weights:     [4]f32,
+}
 Quad_Packed :: struct {
 	spec:    Quad_Spec,
 	source:  string,
@@ -83,7 +92,9 @@ Quad_Packed :: struct {
 	groups:  [dynamic]Quad_Group,
 	clips:   [dynamic]Quad_Clip,
 	sockets: [dynamic]Quad_Socket,
-	mesh:    [dynamic][17]f32,
+	points:  [dynamic]Quad_Point,
+	corners: [dynamic]u16,
+	flats:   [dynamic]Vec3,
 	rest:    [][16]f32,
 	frames:  [dynamic][12]f32,
 	scale:   f32,
@@ -193,31 +204,54 @@ pack_quadruped :: proc(spec: Quad_Spec, glb: string) -> (q: Quad_Packed) {
 		}
 	}
 	slice.sort(names[:])
+	// Each distinct point once (the same place, outline normal, bones and
+	// weights: points the GLB splits for its own reasons are one here), and
+	// each triangle as three of them, with its flat normal at rest. The game
+	// bends each point once, and each corner's flat normal with that
+	// corner's bones (as when every corner was stored on its own).
+	point_of := make(map[[14]u32]u16)
 	for name in names {
-		g := Quad_Group{name, len(q.mesh), 0}
+		g := Quad_Group{name, len(q.corners), 0}
 		for t := 0; t + 2 < len(corners); t += 3 {
 			if corners[t].group != name {
 				continue
 			}
+			// The triangle's flat normal at rest, for the light: the game
+			// bends it with each corner's own bones.
 			c: [3]Vec3
 			for k in 0 ..< 3 {
 				c[k] = transform_point(to_game, points[corners[t + k].point])
 			}
-			flat := linalg.normalize0(linalg.cross(c[1] - c[0], c[2] - c[0]))
+			append(&q.flats, linalg.normalize0(linalg.cross(c[1] - c[0], c[2] - c[0])))
 			for k in 0 ..< 3 {
 				i := corners[t + k].point
-				row: [17]f32
-				row[0], row[1], row[2] = c[k].x, c[k].y, c[k].z
-				row[3], row[4], row[5] = flat.x, flat.y, flat.z
-				row[6], row[7], row[8] = smooth[i].x, smooth[i].y, smooth[i].z
-				for m in 0 ..< 8 {
-					row[9 + m] = weights[i][m]
+				p := Quad_Point{pos = transform_point(to_game, points[i]), smooth = smooth[i]}
+				for b in 0 ..< 4 {
+					p.bones[b] = u8(weights[i][b])
+					p.weights[b] = weights[i][4 + b]
 				}
-				append(&q.mesh, row)
+				key := transmute([14]u32)[14]f32 {
+					p.pos.x, p.pos.y, p.pos.z, p.smooth.x, p.smooth.y, p.smooth.z,
+					weights[i][0], weights[i][1], weights[i][2], weights[i][3],
+					p.weights[0], p.weights[1], p.weights[2], p.weights[3],
+				}
+				n, seen := point_of[key]
+				if !seen {
+					if len(q.points) > int(max(u16)) {
+						fail(a, "%s has more than %d points", glb, int(max(u16)) + 1)
+					}
+					n = u16(len(q.points))
+					point_of[key] = n
+					append(&q.points, p)
+				}
+				append(&q.corners, n)
 			}
 			g.count += 3
 		}
 		append(&q.groups, g)
+	}
+	if nb > 256 {
+		fail(a, "%s has %d bones; a point names its bones in a byte", glb, nb)
 	}
 
 	q.rest = make([][16]f32, nb)
@@ -371,16 +405,18 @@ quad_tables :: proc(quads: []Quad_Packed) -> string {
 	w(&b, "// Made by tools/pack_assets from assets/<name>/<name>.glb: do not edit.")
 	w(&b, "")
 	kinds: [dynamic]string
-	most_bones, most_verts, most_groups := 0, 0, 0
+	most_bones, most_verts, most_points, most_groups := 0, 0, 0, 0
 	for q in quads {
 		append(&kinds, title(q.spec.name))
 		most_bones = max(most_bones, len(q.bones))
-		most_verts = max(most_verts, len(q.mesh))
+		most_verts = max(most_verts, len(q.corners))
+		most_points = max(most_points, len(q.points))
 		most_groups = max(most_groups, len(q.groups))
 	}
 	w(&b, "Quad_Kind :: enum {{%s}}", strings.join(kinds[:], ", "))
 	w(&b, "QUAD_MAX_BONES :: %d", most_bones)
 	w(&b, "QUAD_MAX_VERTS :: %d", most_verts)
+	w(&b, "QUAD_MAX_POINTS :: %d", most_points)
 	w(&b, "QUAD_MAX_GROUPS :: %d", most_groups)
 	w(&b, "")
 	for q in quads {
@@ -389,11 +425,15 @@ quad_tables :: proc(quads: []Quad_Packed) -> string {
 		}
 		u, n := strings.to_upper(q.spec.name), q.spec.name
 		w(&b, "when %s {{", q.spec.flag)
-		w(&b, "\tQUAD_%s_MESH := #load(\"../../assets/%s/mesh.bin\", []Quad_Vertex)", u, n)
+		w(&b, "\tQUAD_%s_POINTS := #load(\"../../assets/%s/points.bin\", []Quad_Point)", u, n)
+		w(&b, "\tQUAD_%s_CORNERS := #load(\"../../assets/%s/corners.bin\", []u16)", u, n)
+		w(&b, "\tQUAD_%s_FLATS := #load(\"../../assets/%s/flats.bin\", [][3]f32)", u, n)
 		w(&b, "\tQUAD_%s_REST := #load(\"../../assets/%s/rest.bin\", [][16]f32)", u, n)
 		w(&b, "\tQUAD_%s_FRAMES := #load(\"../../assets/%s/frames.bin\", [][12]f32)", u, n)
 		w(&b, "} else {")
-		w(&b, "\tQUAD_%s_MESH: []Quad_Vertex", u)
+		w(&b, "\tQUAD_%s_POINTS: []Quad_Point", u)
+		w(&b, "\tQUAD_%s_CORNERS: []u16", u)
+		w(&b, "\tQUAD_%s_FLATS: [][3]f32", u)
 		w(&b, "\tQUAD_%s_REST: [][16]f32", u)
 		w(&b, "\tQUAD_%s_FRAMES: [][12]f32", u)
 		w(&b, "}")
@@ -428,11 +468,15 @@ quad_tables :: proc(quads: []Quad_Packed) -> string {
 		w(&b, "\t\tsockets = []Quad_Socket{{%s}},", strings.join(list[:], ", "))
 		if q.spec.flag != "" {
 			u := strings.to_upper(n)
-			w(&b, "\t\tmesh = QUAD_%s_MESH,", u)
+			w(&b, "\t\tpoints = QUAD_%s_POINTS,", u)
+			w(&b, "\t\tcorners = QUAD_%s_CORNERS,", u)
+			w(&b, "\t\tflats = QUAD_%s_FLATS,", u)
 			w(&b, "\t\trest = QUAD_%s_REST,", u)
 			w(&b, "\t\tframes = QUAD_%s_FRAMES,", u)
 		} else {
-			w(&b, "\t\tmesh = #load(\"../../assets/%s/mesh.bin\", []Quad_Vertex),", n)
+			w(&b, "\t\tpoints = #load(\"../../assets/%s/points.bin\", []Quad_Point),", n)
+			w(&b, "\t\tcorners = #load(\"../../assets/%s/corners.bin\", []u16),", n)
+			w(&b, "\t\tflats = #load(\"../../assets/%s/flats.bin\", [][3]f32),", n)
 			w(&b, "\t\trest = #load(\"../../assets/%s/rest.bin\", [][16]f32),", n)
 			w(&b, "\t\tframes = #load(\"../../assets/%s/frames.bin\", [][12]f32),", n)
 		}
@@ -452,6 +496,15 @@ quad_info :: proc(q: Quad_Packed) -> string {
 	clear(&list)
 	for p in q.parents {append(&list, fmt.tprint(p))}
 	fmt.sbprintf(&b, " \"parents\": [%s],\n", strings.join(list[:], ", "))
+	uses: [4]int
+	for p in q.points {
+		n := 0
+		for w in p.weights {
+			if w > 0 {n += 1}
+		}
+		uses[n - 1] += 1
+	}
+	fmt.sbprintf(&b, " \"points\": %d,\n \"corners\": %d,\n \"points_by_bones\": [%d, %d, %d, %d],\n", len(q.points), len(q.corners), uses[0], uses[1], uses[2], uses[3])
 	clear(&list)
 	for g in q.groups {append(&list, fmt.tprintf("  {{\"name\": %q, \"first\": %d, \"count\": %d}}", g.name, g.first, g.count))}
 	fmt.sbprintf(&b, " \"groups\": [\n%s\n ],\n", strings.join(list[:], ",\n"))

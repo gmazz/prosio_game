@@ -49,9 +49,9 @@ quad_leg_rig :: proc(k: Quad_Kind) -> ^[4]Quad_Leg {
 	// Find each sole's lowest rest vertex relative to its sole joint.
 	for &leg in quad_legs[k] {
 		lowest: f32 = 1e9
-		for v in m.mesh {
-			if int(v[9]) == leg.sole || int(v[9]) == leg.ankle {
-				lowest = min(lowest, v[1])
+		for pt in m.points {
+			if int(pt.bones[0]) == leg.sole || int(pt.bones[0]) == leg.ankle {
+				lowest = min(lowest, pt.pos.y)
 			}
 		}
 		rest := linalg.inverse(transmute(Mat4)m.rest[leg.sole])

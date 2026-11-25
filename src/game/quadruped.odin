@@ -22,7 +22,12 @@ QUAD_ANIMALS :: #config(QUAD_ANIMALS, true) // false draws the goats as before, 
 PACK_FOX :: #config(PACK_FOX, true) // the fox from the pack; false draws the asset pilot's fox instead (-define:PACK_FOX=false)
 QUAD_FLOOR_EPSILON :: f32(0.0001)
 
-Quad_Vertex :: [17]f32 // position, flat normal, smooth normal, four bones, four weights
+// A point of the mesh at rest. Each triangle names three (Quad_Model.corners).
+Quad_Point :: struct {
+	pos, smooth: Vec3, // the smooth normal is for the outline
+	bones:       [4]u8,
+	weights:     [4]f32, // strongest first; a bone of no weight is not used
+}
 Quad_Group :: struct {
 	name:        string,
 	first, count: int,
@@ -47,16 +52,35 @@ Quad_Model :: struct {
 	groups:  []Quad_Group,
 	clips:   []Quad_Clip,
 	sockets: []Quad_Socket,
-	mesh:    []Quad_Vertex,
+	points:  []Quad_Point,
+	corners: []u16, // each triangle as three points, grouped as `groups` say
+	flats:   [][3]f32, // each triangle's flat normal at rest
 	rest:    [][16]f32, // each bone's rest frame, inverted
 	frames:  [][12]f32, // each sampled frame, each bone: a 3 by 4 frame, column by column
 }
 
-// The bent mesh, in the world, for the platform to draw: positions, flat
-// normals (for the light) and smooth normals (for the outline).
+// The bent mesh, in the world, corner by corner, for the platform to draw:
+// positions, flat normals (for the light) and smooth normals (for the
+// outline).
 quad_pos: [QUAD_MAX_VERTS][3]f32
 quad_flat: [QUAD_MAX_VERTS][3]f32
 quad_smooth: [QUAD_MAX_VERTS][3]f32
+
+// An animal bent for one drawing of the world. The world is drawn twice a
+// frame (the shadows, then the world itself): an animal is bent the first
+// time and taken as it is the second. Each point is bent once, however many
+// triangles share it.
+Quad_Bent :: struct {
+	drawing: int, // the drawing it was bent for (draw_count)
+	kind:    Quad_Kind,
+	found:   bool, // its kind has a packed model
+	skin:    [QUAD_MAX_BONES]Mat4,
+	pos:     [QUAD_MAX_POINTS]Vec3, // in the world, before it is kept above the ground
+	smooth:  [QUAD_MAX_POINTS]Vec3,
+}
+quad_bent: [MAX_ENEMIES]Quad_Bent
+// How many times an animal has been bent, for the rules.
+quad_bendings: int
 
 // Which model draws an animal of this kind, if any.
 quad_model_for :: proc(kind: Enemy_Kind) -> (Quad_Kind, bool) {
@@ -456,14 +480,34 @@ quad_build_skin :: proc(m: ^Quad_Model, bones: ^[QUAD_MAX_BONES]Mat4, skin: ^[QU
 	}
 }
 
+// How high the middle of a packed animal is, and how far from there any of
+// it may reach in a pose, in the model's units (its reach at rest, with
+// room: QUAD_VIEW_ROOM). Measured the first time it is asked for.
+quad_extent :: proc(qk: Quad_Kind) -> (half, reach: f32) {
+	if quad_extents[qk].y == 0 {
+		top: f32
+		for pt in QUAD_MODELS[qk].points {
+			top = max(top, pt.pos.y)
+		}
+		far: f32
+		for pt in QUAD_MODELS[qk].points {
+			far = max(far, linalg.length(pt.pos - {0, top / 2, 0}))
+		}
+		quad_extents[qk] = {top / 2, far * QUAD_VIEW_ROOM}
+	}
+	return quad_extents[qk].x, quad_extents[qk].y
+}
+quad_extents: [Quad_Kind][2]f32
+
 quad_mesh_low :: proc(m: ^Quad_Model, skin: ^[QUAD_MAX_BONES]Mat4) -> f32 {
 	low: f32 = 1e9
-	for v in m.mesh {
+	for pt in m.points {
+		v := pt.pos
 		y: f32
 		for k in 0..<4 {
-			w := v[13+k]
+			w := pt.weights[k]
 			if w <= 0 {continue}
-			s := &skin[int(v[9+k])]
+			s := &skin[int(pt.bones[k])]
 			y += w*(s[1,0]*v[0] + s[1,1]*v[1] + s[1,2]*v[2] + s[1,3])
 		}
 		low = min(low,y)
@@ -511,31 +555,84 @@ quad_socket_at :: proc(qk: Quad_Kind, skin: ^[QUAD_MAX_BONES]Mat4, name: string)
 	return (skin[sock.bone] * [4]f32{sock.pos.x, sock.pos.y, sock.pos.z, 1}).xyz
 }
 
-// Draws an animal from its packed model. False if its kind has none.
-draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> (head_top: Vec3, ok: bool) {
-	skin: [QUAD_MAX_BONES]Mat4
-	qk, found := quad_skin(pose, e, &skin)
-	if !found {
-		return {}, false
+// An animal (the one at this place in g.enemies) bent as it is now, for this
+// drawing: bent the first time it is asked for, the same after that. Nil if
+// its kind has no packed model.
+quad_bend :: proc(index: int, pose: Animal_Pose, e: Enemy) -> ^Quad_Bent {
+	b := &quad_bent[index]
+	if b.drawing == draw_count && draw_count > 0 {
+		return b.found ? b : nil
 	}
-	m := &QUAD_MODELS[qk]
-	grounded := e.state != .Swimming && !in_pond(e.pos)
-	for v, i in m.mesh {
-		p, n, sn: Vec3
+	b.drawing = draw_count
+	b.kind, b.found = quad_skin(pose, e, &b.skin)
+	if !b.found {
+		return nil
+	}
+	quad_bendings += 1
+	for pt, i in QUAD_MODELS[b.kind].points {
+		p, sn: Vec3
 		for k in 0 ..< 4 {
-			w := v[13 + k]
+			w := pt.weights[k]
 			if w <= 0 {
 				continue
 			}
-			s := &skin[int(v[9 + k])]
-			p += w * (s^ * [4]f32{v[0], v[1], v[2], 1}).xyz
-			n += w * (s^ * [4]f32{v[3], v[4], v[5], 0}).xyz
-			sn += w * (s^ * [4]f32{v[6], v[7], v[8], 0}).xyz
+			s := &b.skin[int(pt.bones[k])]
+			p += w * (s^ * [4]f32{pt.pos.x, pt.pos.y, pt.pos.z, 1}).xyz
+			sn += w * (s^ * [4]f32{pt.smooth.x, pt.smooth.y, pt.smooth.z, 0}).xyz
 		}
-		if grounded {p.y = max(0,p.y)}
+		b.pos[i] = p
+		b.smooth[i] = linalg.normalize0(sn)
+	}
+	return b
+}
+
+// Each corner's flat normal (for the light), into quad_flat: its triangle's
+// normal at rest, bent with that corner's own bones, as when every corner
+// was packed on its own. (Worked out from the bent points instead, the
+// normals would be truly flat and cheaper, but a few facets would come out
+// a shade lighter or darker: Gio chose pictures identical to before.)
+quad_corner_flats :: proc(b: ^Quad_Bent) {
+	m := &QUAD_MODELS[b.kind]
+	for t := 0; t + 2 < len(m.corners); t += 3 {
+		f := m.flats[t / 3]
+		for j in 0 ..< 3 {
+			pt := &m.points[m.corners[t + j]]
+			n: Vec3
+			for k in 0 ..< 4 {
+				w := pt.weights[k]
+				if w <= 0 {
+					continue
+				}
+				s := &b.skin[int(pt.bones[k])]
+				n += w * (s^ * [4]f32{f.x, f.y, f.z, 0}).xyz
+			}
+			quad_flat[t + j] = linalg.normalize0(n)
+		}
+	}
+}
+
+// Draws an animal (the one at this place in g.enemies) from its packed
+// model. False if its kind has none.
+draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy, index: int) -> (head_top: Vec3, ok: bool) {
+	b := quad_bend(index, pose, e)
+	if b == nil {
+		return {}, false
+	}
+	qk := b.kind
+	m := &QUAD_MODELS[qk]
+	skin := &b.skin
+	grounded := e.state != .Swimming && !in_pond(e.pos)
+	for c, i in m.corners {
+		p := b.pos[c]
+		if grounded {p.y = max(0, p.y)}
 		quad_pos[i] = p
-		quad_flat[i] = linalg.normalize0(n)
-		quad_smooth[i] = linalg.normalize0(sn)
+	}
+	if !drawing_shadows() {
+		// (A shadow needs only where the corners are.)
+		quad_corner_flats(b)
+		for c, i in m.corners {
+			quad_smooth[i] = b.smooth[c]
+		}
 	}
 	colors: [QUAD_MAX_GROUPS]Color
 	shown: [QUAD_MAX_GROUPS]bool
@@ -543,7 +640,7 @@ draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> (head_top: Vec3, ok: boo
 		colors[i], shown[i] = quad_color(e.kind, grp.name)
 		if (pose.dizzy || pose.dead) && quad_eye_material(grp.name) {shown[i] = false}
 	}
-	draw_quad_mesh(qk, len(m.mesh), colors[:len(m.groups)], shown[:len(m.groups)])
+	draw_quad_mesh(qk, len(m.corners), colors[:len(m.groups)], shown[:len(m.groups)])
 
 	// The sculpted eyes follow the head; only the closed-eye marks are drawn separately.
 	head := quad_bone(m, "Head")
@@ -575,7 +672,7 @@ draw_quad_enemy :: proc(pose: Animal_Pose, e: Enemy) -> (head_top: Vec3, ok: boo
 			}
 		}
 	}
-	head_top = quad_socket_at(qk, &skin, "eye_L") + {0, ENEMY_RADIUS[e.kind] * 0.5, 0}
+	head_top = quad_socket_at(qk, skin, "eye_L") + {0, ENEMY_RADIUS[e.kind] * 0.5, 0}
 	return head_top, true
 }
 

@@ -1,7 +1,7 @@
 package workbench
 
-// The built-in editor: a panel over the right half of the window (F2 shows
-// and hides it), several files open at once as tabs, on Odin's own
+// The built-in editor: a panel over the right half of the window (Shift+2
+// shows and hides it, as keys.txt sets it), several files open at once as tabs, on Odin's own
 // core:text/edit (the cursor, selection, undo and redo, cut, copy and paste)
 // and core:odin/tokenizer (colouring). Saving a file (Cmd+S) is what sets off
 // a rebuild, as with any editor.
@@ -599,7 +599,8 @@ draw_editor :: proc() {
 	} else if t != nil {
 		line := line_of(t, t.state.selection[0])
 		col := column_of(t, line, t.state.selection[0]) + 1
-		draw_mono(fmt.tprintf("%s  %d:%d%s   F2 hides · Esc gives the keys back · Cmd+P open · Cmd+F find · Cmd+S save", t.path, line + 1, col, t.dirty ? "  (unsaved)" : ""), x0 + 10, bottom + 8, DIM)
+		hint := editor.focused ? fmt.tprintf("Esc, then %s hides the editor", key_text(.Editor)) : fmt.tprintf("%s hides the editor · click in it to type", key_text(.Editor))
+		draw_mono(fmt.tprintf("%s  %d:%d%s   %s · Cmd+P open · Cmd+F find · Cmd+S save", t.path, line + 1, col, t.dirty ? "  (unsaved)" : "", hint), x0 + 10, bottom + 8, DIM)
 	}
 }
 

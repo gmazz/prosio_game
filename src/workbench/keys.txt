@@ -1,0 +1,14 @@
+# The workbench's own keys. Each line: what it does, then a key, with Shift,
+# Ctrl, Alt or Cmd before it (Shift+1, Cmd+K, F1). An action may have more
+# than one line. Read when the workbench starts, on every reload, and when
+# this file is saved.
+#
+# They act only while the game has the keys. Wherever you are typing (the
+# menu, the editor, a field of the inspector) they type themselves: Esc gives
+# the keys back first.
+
+menu    Shift+1   # ! the command menu
+editor  Shift+2   # @ shows and hides the editor
+replay  Shift+3   # # replays the set-up
+pause   Shift+4   # $ pauses and goes on
+step    Shift+5   # % one frame on, while paused

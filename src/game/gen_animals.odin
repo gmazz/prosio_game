@@ -115,6 +115,8 @@ FRIGHT :: Vec2{6, 12}
 
 // small closed or crossed eye marks in this rig's units
 QUAD_EYE_SIZE :: f32(0.047)
+// an animal out of the picture is not bent or drawn: how much further than at rest any of it may reach in a pose (lying down, held, kicking), as a share of its reach at rest
+QUAD_VIEW_ROOM :: f32(1.6)
 // how far a held animal's free legs kick out as it struggles, as a share of its radius
 QUAD_GRAB_KICK :: f32(0.4)
 // how far (radians) a held animal's front half twists and rolls as it struggles

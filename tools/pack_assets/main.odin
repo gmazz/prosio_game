@@ -53,7 +53,9 @@ main :: proc() {
 		dir := join(root, "assets", spec.name)
 		quads[i] = pack_quadruped(spec, join(dir, strings.concatenate({spec.name, ".glb"})))
 		q := &quads[i]
-		write(join(dir, "mesh.bin"), bytes_of(q.mesh[:]))
+		write(join(dir, "points.bin"), bytes_of(q.points[:]))
+		write(join(dir, "corners.bin"), bytes_of(q.corners[:]))
+		write(join(dir, "flats.bin"), bytes_of(q.flats[:]))
 		write(join(dir, "rest.bin"), bytes_of(q.rest))
 		write(join(dir, "frames.bin"), bytes_of(q.frames[:]))
 		write(join(dir, "info.json"), transmute([]byte)quad_info(q^))

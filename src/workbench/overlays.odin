@@ -8,6 +8,7 @@ import cmd "commands"
 import game "../game"
 import "core:fmt"
 import "core:math"
+import "core:slice"
 import "core:strings"
 import rl "vendor:raylib"
 
@@ -22,9 +23,6 @@ Overlay :: enum {
 }
 
 overlays: bit_set[Overlay]
-
-// Time spent in a frame, for the Timing overlay.
-update_ms, draw_ms: f32
 
 OVERLAY_TEXT :: 15
 
@@ -48,15 +46,58 @@ circle :: proc(c: game.Vec2, r: f32, color: rl.Color, h: f32 = 0.05) {
 	rl.DrawCircle3D(ground(c, h), r, {1, 0, 0}, 90, color)
 }
 
-// Text over a place in the world.
-label_at :: proc(pos: rl.Vector3, text: string, color: rl.Color, cam: rl.Camera3D) {
-	s := rl.GetWorldToScreen(pos, cam)
-	w := f32(len(text)) * editor.cell * OVERLAY_TEXT / EDITOR_FONT_SIZE
-	rl.DrawRectangleRec({s.x - w / 2 - 3, s.y - 2, w + 6, OVERLAY_TEXT + 4}, {10, 12, 16, 190})
-	col := 0
-	for r in text {
-		rl.DrawTextCodepoint(editor.font, r, {s.x - w / 2 + f32(col) * editor.cell * OVERLAY_TEXT / EDITOR_FONT_SIZE, s.y}, OVERLAY_TEXT, color)
-		col += 1
+// Text over a place in the world. The labels of a frame are gathered and
+// then placed together (place_labels), so that none covers another: the more
+// important first (an animal's before the parts of his body), each moved up or
+// down until it is clear, with a line back to its place if it moved.
+Label :: struct {
+	at:    rl.Vector2, // where on the screen it belongs
+	text:  string,
+	color: rl.Color,
+	rank:  int, // placed in this order: 0 animals, 1 his body and food, 2 regions
+}
+labels: [dynamic]Label
+
+label_at :: proc(pos: rl.Vector3, text: string, color: rl.Color, cam: rl.Camera3D, rank := 1) {
+	if labels == nil {
+		labels.allocator = context.temp_allocator
+	}
+	append(&labels, Label{rl.GetWorldToScreen(pos, cam), text, color, rank})
+}
+
+place_labels :: proc() {
+	defer labels = nil // (its memory is the frame's own)
+	slice.stable_sort_by(labels[:], proc(a, b: Label) -> bool {return a.rank < b.rank})
+	char := editor.cell * OVERLAY_TEXT / EDITOR_FONT_SIZE
+	h: f32 = OVERLAY_TEXT + 4
+	placed := make([dynamic]rl.Rectangle, context.temp_allocator)
+	clear :: proc(r: rl.Rectangle, placed: []rl.Rectangle) -> bool {
+		for p in placed {
+			if rl.CheckCollisionRecs(r, p) {return false}
+		}
+		return true
+	}
+	for l in labels {
+		w := f32(len(l.text)) * char + 6
+		home := rl.Rectangle{l.at.x - w / 2, l.at.y - 2, w, h}
+		r := home
+		// Tries its own place, then a row up, a row down, two up...
+		for step in 1 ..= 16 {
+			if clear(r, placed[:]) {break}
+			rows := f32((step + 1) / 2) * (step % 2 == 1 ? -1 : 1)
+			r.y = home.y + rows * (h + 2)
+		}
+		append(&placed, r)
+		if r.y != home.y {
+			edge := r.y < home.y ? r.y + h : r.y
+			rl.DrawLineV(l.at, {l.at.x, edge}, {l.color.r, l.color.g, l.color.b, 150})
+		}
+		rl.DrawRectangleRec(r, {10, 12, 16, 190})
+		col := 0
+		for c in l.text {
+			rl.DrawTextCodepoint(editor.font, c, {r.x + 3 + f32(col) * char, r.y + 2}, OVERLAY_TEXT, l.color)
+			col += 1
+		}
 	}
 }
 
@@ -140,12 +181,12 @@ draw_overlays :: proc() {
 	if .Animals in overlays {
 		for e in g.enemies[:g.enemy_count] {
 			if e.state == .Gone || !near(e.pos, p.pos) {continue}
-			label_at({e.pos.x, e.y + 1.6, e.pos.y}, fmt.tprintf("%v %v %.1fs hp %.0f", e.kind, e.state, e.timer, e.health), {200, 235, 255, 255}, cam)
+			label_at({e.pos.x, e.y + 1.6, e.pos.y}, fmt.tprintf("%v %v %.1fs hp %.0f", e.kind, e.state, e.timer, e.health), {200, 235, 255, 255}, cam, 0)
 		}
 	}
 	if .Regions in overlays {
 		for region, kind in game.REGIONS {
-			label_at(ground(region.centre, 0.5), fmt.tprintf("%v", kind), {255, 170, 230, 255}, cam)
+			label_at(ground(region.centre, 0.5), fmt.tprintf("%v", kind), {255, 170, 230, 255}, cam, 2)
 		}
 	}
 	if .Growth in overlays {
@@ -164,13 +205,19 @@ draw_overlays :: proc() {
 			}
 		}
 	}
+	place_labels()
 	if .Timing in overlays {
-		avg_work: f32
-		for ms in work_ms {avg_work += ms / FRAME_SAMPLES}
-		text := fmt.tprintf("update %.2f ms   draw %.2f ms   whole frame's work %.2f ms   (skinning is inside drawing)", update_ms, draw_ms, avg_work)
-		w := f32(len(text)) * editor.cell
+		// Averages over the same frames, so the parts add up to the work.
+		t := frame_timing()
+		lines := [2]string {
+			fmt.tprintf("game update %.2f + game drawing %.2f (animals bent in it) + workbench %.2f = work %.2f ms", t.update, t.draw, t.bench, t.work),
+			fmt.tprintf("a frame %.1f ms with the wait for the screen; averages over %d frames", t.frame, FRAME_SAMPLES),
+		}
+		w := f32(max(len(lines[0]), len(lines[1]))) * editor.cell
 		x := f32(rl.GetScreenWidth()) / (editor.visible ? 4 : 2) - w / 2
-		rl.DrawRectangleRec({x - 6, 92, w + 12, editor.line_h + 6}, {10, 12, 16, 210})
-		draw_mono(text, x, 95, {250, 210, 90, 255})
+		rl.DrawRectangleRec({x - 6, 92, w + 12, 2 * editor.line_h + 6}, {10, 12, 16, 210})
+		for line, i in lines {
+			draw_mono(line, x, 95 + f32(i) * editor.line_h, {250, 210, 90, 255})
+		}
 	}
 }

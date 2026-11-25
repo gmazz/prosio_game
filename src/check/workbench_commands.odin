@@ -118,3 +118,20 @@ rules_workbench_index :: proc() {
 	check("the workbench's index says, for every kind of thing in the game, what moves, draws and tunes it, and every entry leads to a procedure or file that is there",
 		len(bad) == 0, len(bad) > 0 ? fmt.tprintf("%d wrong, such as %s", len(bad), bad[0]) : fmt.tprintf("%d kinds", kinds))
 }
+
+// The workbench's own keys (src/workbench/keys.txt): every line of it reads,
+// and as it stands it gives Shift+1 to Shift+5 (! @ # $ %: a compact keyboard
+// has no F keys) to the menu, the editor, replaying, pausing and stepping.
+// The game is given no keys on the frame one of them acts (menu.odin).
+rules_workbench_keys :: proc() {
+	text, err := os.read_entire_file("src/workbench/keys.txt", context.temp_allocator)
+	keys, trouble := cmd.parse_keys(string(text))
+	given := ""
+	for action in cmd.Bench_Action {
+		given = fmt.tprintf("%s%s%v %s", given, given == "" ? "" : ", ", action, cmd.key_text(keys.keys[action][0]))
+	}
+	check("src/workbench/keys.txt reads, and gives Shift+1 to Shift+5 to the workbench's menu, editor, replay, pause and step",
+		err == nil && trouble == "" && given == "Menu Shift+1, Editor Shift+2, Replay Shift+3, Pause Shift+4, Step Shift+5", trouble != "" ? trouble : given)
+	_, bad := cmd.parse_keys("menu Shift+F13\nlook F1")
+	check("a key keys.txt cannot read is said, not taken", bad != "", bad)
+}

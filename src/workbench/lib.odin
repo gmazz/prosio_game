@@ -47,10 +47,17 @@ frame_ms: [FRAME_SAMPLES]f32
 frame_next: int
 frame_tick: time.Tick
 // The work in a frame: from its start until its drawing is handed over (before
-// waiting for the screen, which vsync holds to 60 a second).
+// waiting for the screen, which vsync holds to 60 a second), and of that the
+// game's update and the game's drawing (up to where the workbench's own
+// panels begin), frame by frame in the same slots as frame_ms. Only the
+// frames the workbench runs count: a picture drawn for `shot` does not.
 work_ms: [FRAME_SAMPLES]f32
+update_ms: [FRAME_SAMPLES]f32
+draw_ms: [FRAME_SAMPLES]f32
+frame_slot: int // this frame's slot
+timing: bool // in one of the frames the workbench runs
 work_start: time.Tick
-draw_start: time.Tick // (the game's drawing is timed up to where the workbench's own begins)
+draw_start: time.Tick
 
 @(export, link_name = "wb_open_window")
 wb_open_window :: proc() {
@@ -66,6 +73,7 @@ wb_load_graphics :: proc() {
 	game.load_graphics()
 	game.set_ground_layout()
 	editor_load_font()
+	load_keys()
 	game.workbench_after_update = after_update
 	game.workbench_after_draw = after_draw
 	frame_tick = time.tick_now()
@@ -108,10 +116,13 @@ wb_frame :: proc() -> bool {
 		game.g.frame += 1
 		game.update_frame(total / f32(runs))
 	}
-	update_ms = f32(time.duration_milliseconds(time.tick_since(update_start)))
+	update := f32(time.duration_milliseconds(time.tick_since(update_start)))
 	cmd.apply_view(dt)
 	after_update()
+	update_ms[frame_slot] = update
+	timing = true
 	draw_shifted(nil)
+	timing = false
 	return game.running()
 }
 
@@ -287,7 +298,8 @@ wb_command :: proc(line: string) -> string {
 			work += ms / FRAME_SAMPLES
 			work_most = max(work_most, ms)
 		}
-		return fmt.tprintf("frame time: %.2f ms on average, %.2f at most; work in a frame %.2f ms on average, %.2f at most; over the last %d frames, %d animals", avg, most, work, work_most, FRAME_SAMPLES, game.g.enemy_count)
+		t := frame_timing()
+		return fmt.tprintf("frame time: %.2f ms on average, %.2f at most; work in a frame %.2f ms on average, %.2f at most (the game's update %.2f, its drawing %.2f, the workbench %.2f); over the last %d frames, %d animals", avg, most, work, work_most, t.update, t.draw, t.bench, FRAME_SAMPLES, game.g.enemy_count)
 	}
 	return run_line(line)
 }
@@ -298,16 +310,37 @@ wb_shutdown :: proc() {
 	game.close_window()
 }
 
+// The averages over the last FRAME_SAMPLES frames: the whole frame (waiting
+// for the screen included), its work, and of the work the game's update, the
+// game's drawing and the rest (the workbench's own, before its panels).
+Frame_Timing :: struct {
+	frame, work, update, draw, bench: f32,
+}
+
+frame_timing :: proc() -> (t: Frame_Timing) {
+	for i in 0 ..< FRAME_SAMPLES {
+		t.frame += frame_ms[i] / FRAME_SAMPLES
+		t.work += work_ms[i] / FRAME_SAMPLES
+		t.update += update_ms[i] / FRAME_SAMPLES
+		t.draw += draw_ms[i] / FRAME_SAMPLES
+	}
+	t.bench = max(t.work - t.update - t.draw, 0)
+	return
+}
+
 after_update :: proc() {
 	now := time.tick_now()
 	frame_ms[frame_next] = f32(time.duration_milliseconds(time.tick_diff(frame_tick, now)))
+	frame_slot = frame_next
 	frame_next = (frame_next + 1) % FRAME_SAMPLES
 	frame_tick = now
 }
 
 after_draw :: proc() {
-	draw_ms = f32(time.duration_milliseconds(time.tick_since(draw_start)))
-	work_ms[frame_next] = f32(time.duration_milliseconds(time.tick_since(work_start)))
+	if timing {
+		draw_ms[frame_slot] = f32(time.duration_milliseconds(time.tick_since(draw_start)))
+		work_ms[frame_slot] = f32(time.duration_milliseconds(time.tick_since(work_start)))
+	}
 	draw_overlays()
 	draw_status()
 	draw_inspector()

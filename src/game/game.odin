@@ -456,6 +456,7 @@ update_frame :: proc(dt: f32) {
 
 // Draws the game as it stands. With a path, the picture is also saved there.
 draw_frame :: proc(shot: cstring = nil) {
+	draw_count += 1
 	shake := Vec3{math.sin(g.time * 71), math.sin(g.time * 53), 0} * g.shake * 0.25
 	target := Vec3{g.camera.x, 0.8, g.camera.y} + shake
 	offset := CAMERA_OFFSET
@@ -545,8 +546,8 @@ draw_things :: proc() {
 	for f, i in g.foods[:g.food_count] {
 		draw_food(f, i)
 	}
-	for e in g.enemies[:g.enemy_count] {
-		draw_enemy(e)
+	for e, i in g.enemies[:g.enemy_count] {
+		draw_enemy(e, i)
 	}
 	draw_pests()
 	draw_bees()
