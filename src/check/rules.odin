@@ -3456,6 +3456,7 @@ rules_real_food :: proc() {
 
 	// Every value in the tuning files says what it is.
 	rules_about()
+	rules_assets()
 }
 
 DOUGH_250 :: "250g flour, 150ml water"
@@ -3626,4 +3627,51 @@ check_interval :: proc(w: ^Mix_Walk, text: string, best: f32, setting: game.Sett
 	if abs((best * 2 - low) / (high - low) - place) > 0.001 {
 		w.interval = fmt.tprintf("%s, %v: the place of the best changes with the amount", text, setting)
 	}
+}
+
+// Models reach the game one way: Blender, outside this repository, exports a
+// GLB into assets/; tools/pack_assets (Odin) packs it into what the game
+// #loads. Nothing here opens a .blend or runs Python (the Blender scripts
+// that made the GLBs are in the workshop folder, outside the repository).
+rules_assets :: proc() {
+	python: [dynamic]string
+	walk :: proc(dir: string, found: ^[dynamic]string) {
+		entries, err := os.read_all_directory_by_path(dir, context.temp_allocator)
+		if err != nil {
+			return
+		}
+		for e in entries {
+			path := dir == "." ? e.name : fmt.tprintf("%s/%s", dir, e.name)
+			if e.type == .Directory {
+				if path != "build" && path != ".git" {
+					walk(path, found)
+				}
+			} else if strings.has_suffix(e.name, ".py") || strings.has_suffix(e.name, ".pyc") {
+				append(found, path)
+			}
+		}
+	}
+	walk(".", &python)
+	launcher := os.exists("img2model")
+	check("no Python in the repository: no .py file anywhere outside build/ (so none tracked, none in tools/), and no image-to-3D launcher (img2model/)",
+		len(python) == 0 && !launcher,
+		len(python) > 0 ? fmt.tprintf("%d found, such as %s", len(python), python[0]) : (launcher ? "img2model/ is here" : "none"))
+
+	missing: [dynamic]string
+	packed := 0
+	for dir in ([]string{"goat", "billy", "packfox", "prosio_base", "fox"}) {
+		glb := dir == "prosio_base" ? "assets/prosio_base/prosio_base.glb" : fmt.tprintf("assets/%s/%s.glb", dir, dir)
+		if !os.exists(glb) {append(&missing, glb)}
+		packed += 1
+	}
+	if !os.exists("assets/prosio_base/bind.json") {append(&missing, "assets/prosio_base/bind.json")}
+	for kind in game.Tree_Model_Kind {
+		name := game.TREE_MODELS[kind].name
+		glb := fmt.tprintf("assets/trees/%s.glb", name)
+		if !os.exists(glb) {append(&missing, glb)}
+		packed += 1
+	}
+	check("every model the game loads is packed from a GLB kept beside it (the animals, Prosio's skin and its bind frames, the pilot fox, every tree, rock and plant)",
+		len(missing) == 0,
+		len(missing) > 0 ? fmt.tprintf("%d missing, such as %s", len(missing), missing[0]) : fmt.tprintf("%d models", packed))
 }

@@ -4,7 +4,9 @@ Prosio is a small game about a pig, for seven-year-olds, written in Odin with ra
 
 ## Coordinating asset work
 
-For work on generated assets, rigs, outfit fitting, or their rendering and import, read the [asset integration plan and handoff](docs/asset-integration.md) first. Record your intended slice and affected files under **Current work** before editing. Refresh that entry if the scope changes. At handoff, record what landed, how you verified it, what remains unverified, and the next step. Check existing entries and the working tree for overlapping edits. Keep the Blender generator in its own repository.
+For work on generated assets, rigs, outfit fitting, or their rendering and import, read the [asset integration plan and handoff](docs/asset-integration.md) first. Record your intended slice and affected files under **Current work** before editing. Refresh that entry if the scope changes. At handoff, record what landed, how you verified it, what remains unverified, and the next step. Check existing entries and the working tree for overlapping edits.
+
+Every model reaches the game as a GLB in `assets/`, packed by `tools/pack_assets` (Odin) into the files the game `#load`s; the build scripts and `tools/check.sh` repack on every build, so after exporting a new GLB from Blender just build. Blender files and any Python that works on them live outside this repository, in the workshop folder (`/Users/gio/Projects/prosio_workshop/`); never add a `.py` file here (a rule fails). README.md, "Models: from Blender to the game", says what a GLB must hold.
 
 ## Building and running
 

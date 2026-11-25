@@ -89,7 +89,7 @@ BASH_BOUNCE :: f32(0.35)
 // ---- rocks ----
 // How rocks are drawn: which models, and how tall one may be against its radius.
 
-// A rock of radius r with its middle at m, drawn from one of the rock models (see tools/pack_trees.sh): which one goes by the rock's number in the world (index), so it keeps its shape when he lifts and throws it, and a mossy rock keeps its moss. No taller than ROCK_TALL times its radius.
+// A rock of radius r with its middle at m, drawn from one of the rock models (packed from assets/trees/<name>.glb by tools/pack_assets): which one goes by the rock's number in the world (index), so it keeps its shape when he lifts and throws it, and a mossy rock keeps its moss. No taller than ROCK_TALL times its radius.
 ROCK_PLAIN := [?]Tree_Model_Kind{.Rock2, .Rock3, .Rock4, .Rock5}
 // the models a mossy rock is drawn from
 ROCK_MOSSY := [?]Tree_Model_Kind{.Rockmoss1, .Rockmoss2, .Rockmoss3, .Rockmoss4}

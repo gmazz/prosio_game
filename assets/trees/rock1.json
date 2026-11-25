@@ -1,22 +1,14 @@
 {
  "name": "rock1",
- "source": "Rock_1.blend",
+ "source": "rock1.glb",
  "bark": 210,
  "leaves": 0,
- "height": 0.8777499794960022,
+ "height": 0.87775,
  "crown_low": 0,
- "crown_high": 0.8777499794960022,
+ "crown_high": 0.87775,
  "crown_r": 0,
- "spots": [],
- "bark_color": [
-  135,
-  139,
-  150
- ],
- "leaf_color": [
-  0,
-  0,
-  0
- ],
- "radius": 0.29609341847945725
+ "radius": 0.29609343,
+ "bark_color": [135, 139, 150, 255],
+ "leaf_color": [0, 0, 0, 0],
+ "spots": []
 }

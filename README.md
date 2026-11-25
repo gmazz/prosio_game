@@ -22,7 +22,7 @@ This is a proof of concept: one meadow, no goal yet beyond keeping Prosio fed an
 - [Building](#building)
 - [How the code is organised](#how-the-code-is-organised)
 - [Asset workshop, integration plan and agent handoff](docs/asset-integration.md)
-- [Local image-to-3D workflow](img2model/README.md)
+- [Models: from Blender to the game](#models-from-blender-to-the-game)
 - [Testing without playing](#testing-without-playing)
 - [Tuning](#tuning)
 - [Text](#text)
@@ -658,7 +658,17 @@ The script has only been run on an Apple-silicon Mac. Odin's raylib bindings als
 
 **Bare pig** and the test meadow show the continuous skin rebuilt from the original procedural character. The sculpt has a visible neck, three digits per hand, folded ears, a recessed snout and stronger pectorals at the 70 kg reference weight. Odin moves the skin-tone brow ridges with expressions and folds the ears as Prosio rises and falls. The glossy black eyes have two catchlights each. Arm and leg segments have fixed lengths through actions and body changes. Fat and muscle change limb girth, and the facial shape key fills out the cheeks, jowls and chin. Clothing presets use their procedural body and fitting. The backpack geometry has been removed across outfits.
 
-Open `img2model/output/prosio-base.blend` to edit the skin, paint, weights or separate face details. The file opens in a widened arm bind pose for editing the shoulders and armpits. The `.glb` contains the same rig and geometry for interchange. The Blender workshop in `img2model/output/prosio-workshop/` runs independently from an exported Odin snapshot. Its README covers rebuilding the base and packing skin edits into `assets/prosio_base/`. The game build uses the packed buffers, so Blender is only needed to author or repack them.
+The skin is `assets/prosio_base/prosio_base.glb`, packed with `assets/prosio_base/bind.json` (the frames of his parts at the pose the skin was made in, written by the game itself) into the files the game loads (see [Models: from Blender to the game](#models-from-blender-to-the-game)). Its editable source, `prosio-base.blend`, and the Blender scripts that build and refit it are in the workshop folder outside this repository (`img2model/output/` there). The file opens in a widened arm bind pose for editing the shoulders and armpits. Export a new `prosio_base.glb` from it after editing; the build packs it.
+
+To remake `bind.json` after an intentional change to the original Odin proportions:
+
+```bash
+odin build src/check -define:PROSIO_BASE=false -define:PROSIO_BASE_EXPORT=true -out:build/check/prosio-base-export -vet
+```
+
+```bash
+build/check/prosio-base-export export-prosio-base > assets/prosio_base/bind.json
+```
 
 To compare with the original body in the meadow, build it with `odin build src/main_desktop -define:PROSIO_LAB=true -define:PROSIO_BASE=false -out:build/desktop/prosio-procedural -o:speed -vet`.
 
@@ -681,7 +691,7 @@ To preview the six-second tipsy stagger, run this from the repo root and walk ar
 ./build/desktop/prosio-character --outfit 70000000000 --tipsy
 ```
 
-The other outfits use the procedural character while their clothing is fitted. Edit the eyes, lids and body shape keys in `img2model/output/prosio-anderson.blend` and use `prosio-anderson.glb` for interchange. To rebuild the game's mesh buffers from Blender, run `blender -b --python tools/pack_prosio.py -- img2model/output/prosio-anderson.blend assets/prosio`.
+The other outfits use the procedural character while their clothing is fitted. This preview is to be removed; until then its packed files in `assets/prosio/` stay as they are, and the Blender file and the packing script that made them are in the workshop folder outside this repository.
 
 The preview adapts the pig from Joel Anderson's [Angel Devil](https://sketchfab.com/3d-models/angel-devil-26aec177328d4d5bb4c644e827c523f3) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Prosio uses a relaxed stance, a repainted face and body, a tailored skeleton and new body and facial shape keys.
 
@@ -716,12 +726,28 @@ Two things in the web build are worth knowing if you change it:
 - `-sDECLARE_ASM_MODULE_EXPORTS=0` stops Emscripten renaming the functions that Odin's runtime needs from the page.
 - The web build never asks raylib whether the window should close, because that call stalls a browser page.
 
+### Models: from Blender to the game
+
+Every model the game draws reaches it the same way, and no Python or Blender runs in this repository:
+
+```
+Blender (outside this repository) --export--> assets/<name>/<name>.glb
+  --tools/pack_assets (Odin)--> assets/<name>/*.bin, info.json, src/game/*_assets.odin
+  --#load--> the game
+```
+
+- **The GLB is the hand-over.** +Y up, metres, named bones and parts, named materials, baked animations, vertex colours and shape keys. Sockets (where the eyes, the mouth, the hooves are) are empty nodes named `socket_<name>`, parented to their bone.
+- **The packer works out everything else**, in `tools/pack_assets/` (`gltf.odin` reads the file, then one file a family: `quadruped.odin`, `skin.odin`, `fox.odin`, `trees.odin`): flat and smooth (outline) normals, the four strongest weights made to add up to one, inverse rest frames, animations sampled 20 times a second, how far a cycle carries an animal, material groups, sockets, which faces of a tree are bark and which leaves and their colours, and the tables the game is built with. It stops with a message if a GLB lacks what the game needs: a point weighted to no bone, a part missing or renamed, more than 65,536 points where they are numbered in 16 bits, a missing animation, socket or bone.
+- **It runs on every build** (`tools/pack_assets.sh`, from the build scripts and `tools/check.sh`, after `gen_data`); packing everything takes well under a second, and a file is written only when what it holds changes. The game reads only the packed files, never a GLB, and allocates nothing for them.
+
+To change a model, open its source in Blender in the workshop folder (outside this repository: `/Users/gio/Projects/prosio_workshop/`, whose README says how each GLB was made), export the GLB over the one in `assets/`, and build. A rule fails if a Python file is found in the repository, or if a model the game loads has no GLB beside it.
+
 ### Animals from the animal pack
 
-The goat, the billy goat and the fox are not built from shapes like the other animals: they come from an animated animal pack (low-poly Blender files that share one four-legged skeleton and its animations, in the style of Quaternius's pack; its licence still needs confirming). `tools/pack_quadrupeds.sh` runs Blender (at `$BLENDER`, on the path, or `/Applications/Blender.app`) on the pack's files, by default in `~/Desktop/3D_assets/animated_animals_blender`:
+The goat, the billy goat and the fox are not built from shapes like the other animals: they come from an animated animal pack (low-poly Blender files that share one four-legged skeleton and its animations, in the style of Quaternius's pack; its licence still needs confirming), by default in `~/Desktop/3D_assets/animated_animals_blender`. A Blender script in the workshop folder reshaped them once and exported `assets/goat/goat.glb`, `assets/billy/billy.glb` and `assets/packfox/packfox.glb`, which `tools/pack_assets` packs:
 
-- **It reshapes each animal into the game's cuter build**, bone by bone: a bigger head, a shorter and thicker neck, a rounder body, shorter legs (the legs' foot targets move up with them, so the animations still work). The goat and the billy goat are both made from the deer; the goat gets short horns and a small beard, the billy goat great curled horns and a big beard. The numbers are `RECIPES` in `tools/pack_quadruped.py`.
-- **It writes `assets/<name>/`**: every triangle with its bones and weights, each bone's rest frame, the pack's animations sampled 20 times a second (idle, walk, gallop, eating, a flinch, death, a headbutt, a jump), how far one cycle of the walk and of the gallop carries the animal over the ground (measured from a hind hoof while it is down), and where the eyes, the mouth, the udder, the hips, the hooves and the tail are. Then it writes the Odin tables, `src/game/quadruped_assets.odin`.
+- **It reshapes each animal into the game's cuter build**, bone by bone: a bigger head, a shorter and thicker neck, a rounder body, shorter legs (the legs' foot targets move up with them, so the animations still work). The goat and the billy goat are both made from the deer; the goat gets short horns and a small beard, the billy goat great curled horns and a big beard. The numbers are in the workshop's reshaping script; the result is in the GLBs.
+- **The packer writes `assets/<name>/`**: every triangle with its bones and weights, each bone's rest frame, the pack's animations sampled 20 times a second (idle, walk, gallop, eating, a flinch, death, a headbutt, a jump), how far one cycle of the walk and of the gallop carries the animal over the ground (measured from a hind hoof while it is down), and where the eyes, the mouth, the udder, the hips, the hooves and the tail are. Then it writes the Odin tables, `src/game/quadruped_assets.odin`. Which animations each animal must have, its length and which bones move with the front half of the body are `QUADS` and `QUAD_FRONT` in `tools/pack_assets/`.
 
 The Blender actions give the animals their base posture, breathing, walk and gallop rhythm, paddling and the pose on their side. `quadruped_motion.odin` adds the same movement templates to the goat, billy goat and fox:
 
@@ -736,14 +762,14 @@ Two build switches: `-define:QUAD_ANIMALS=false` draws the goats from shapes as 
 
 ### Trees from models
 
-The trees, the rocks and the grass are drawn from low-poly models in two of Quaternius' nature packs, kept in `~/Desktop/3D_assets` (`nature_1`, the Ultimate Nature Pack; `nature_2`, the Stylized Tree Pack). `tools/pack_trees.sh` packs them with Blender into `assets/trees/` and `src/game/tree_assets.odin`. Each model is in two parts: a tree's bark and leaves, a rock's stone and moss; grass and ferns are all leaves. The game colours the parts itself (a birch, a common tree or a pine keeps the colour of its bark as modelled; the Stylized Tree Pack's bark is a picture that is not in its files, so those trees get the game's own brown).
+The trees, the rocks and the grass are drawn from low-poly models in two of Quaternius' nature packs, kept in `~/Desktop/3D_assets` (`nature_1`, the Ultimate Nature Pack; `nature_2`, the Stylized Tree Pack). Each was exported once from Blender to `assets/trees/<name>.glb` (modifiers applied, each material's colour carried over), and `tools/pack_assets` packs them into `assets/trees/` and `src/game/tree_assets.odin`: which materials are bark and which leaves (`TREE_BARK`, `TREE_LEAVES`), and the colours, are worked out there. Each model is in two parts: a tree's bark and leaves, a rock's stone and moss; grass and ferns are all leaves. The game colours the parts itself (a birch, a common tree or a pine keeps the colour of its bark as modelled; the Stylized Tree Pack's bark is a picture that is not in its files, so those trees get the game's own brown).
 
 Each tree in the meadow takes one of its kind's models (`TREE_PICK`), by its number: a broadleaf one of eight (four full round-crowned trees, two common trees, two birches), an apple tree one of two round trees, a blossom tree one of two, a pine one of five (three Christmas-tree pines, two tall ones). It is made its own:
 - scaled to its kind's height (broadleaf 5.4 m, blossom 5.2, pine 5.8, apple 4.6: low enough that the crowns come into view over him) times its own size (0.85 to 1.25), and to its kind's crown width;
 - a little wider or narrower (up to 12% either way), leaning a little (up to 3.4 degrees), and turned;
 - its leaves a little lighter or darker (up to 10%) than its kind's: green, a paler green for apple trees, pink for blossom.
 
-Its crown, as the meadow's rules see it (what it hides from the camera, where it turns see-through round him), is measured from the model as drawn, so the rules about trees in front of paths and food still hold. Forest trees are also kept from standing where their crowns would hide a clearing, so the clearings, their apple trees and their bushes stay in view; that leaves the forest about 250 trees, at least 3.4 m apart, their crowns meeting overhead. An apple tree's apples hang at spots on the upper slope of its crown, picked when it is packed. The leaves sway in the wind, a shaken tree trembles, and the outline is a copy of the model that the shader pushes out along its smooth normals and draws inside out, so nothing is worked out again on the CPU each frame. When the models are packed, every face is turned to face outwards (some came inside out, which would have drawn their outline in front of them as a black patch). `-define:PACKED_TREES=false` draws the trees from shapes as before.
+Its crown, as the meadow's rules see it (what it hides from the camera, where it turns see-through round him), is measured from the model as drawn, so the rules about trees in front of paths and food still hold. Forest trees are also kept from standing where their crowns would hide a clearing, so the clearings, their apple trees and their bushes stay in view; that leaves the forest about 250 trees, at least 3.4 m apart, their crowns meeting overhead. An apple tree's apples hang at spots on the upper slope of its crown, picked when it is packed. The leaves sway in the wind, a shaken tree trembles, and the outline is a copy of the model that the shader pushes out along its smooth normals and draws inside out, so nothing is worked out again on the CPU each frame. When the models are packed, a closed piece that is inside out is turned outwards (inside out, its outline would be drawn in front of it as a black patch); an open sheet, a leaf or a patch of moss, is left as modelled. None of today's models has one. `-define:PACKED_TREES=false` draws the trees from shapes as before.
 
 **Rocks** are drawn from four plain and four mossy rock models, scaled to the rock's size (no taller than 1.5 times its radius) and turned; which one goes by the rock's number, so it keeps its shape and its moss when he lifts and throws it. Most rocks in the forest are mossy, and a few out in the open. **Grass** grows in clumps (a short clump, now and then a tall one, swaying in the wind and a shade lighter or darker each), and the forest floor is mostly **ferns** (three kinds), with low **bushes** he walks through; the bee meadow is all flowers. There are 5,000 of them, none on the paths. They cast no shadows and have no outline. Between the forest trees lie 36 **mossy stumps and fallen logs** (off the paths, out of the clearings), which stand in his way like a piece of fence: he jumps them if he is light enough. (The pack's logs have mushrooms on them; those are left out, so as not to look like food that is not there.)
 
@@ -785,10 +811,10 @@ src/
                      what they are doing, bending the mesh, their colours
     quadruped_motion.odin  gait pacing, turning, contact and held poses
     quadruped_drag.odin  grounded corpse posture and fixed-length grips
-    quadruped_assets.odin  their tables, written by tools/pack_quadrupeds.sh
+    quadruped_assets.odin  their tables, written by tools/pack_assets
     trees.odin       trees from low-poly models: each tree's model, size,
                      width, lean and shade, and its apples
-    tree_assets.odin their tables, written by tools/pack_trees.sh
+    tree_assets.odin their tables, written by tools/pack_assets
     diet.odin        what he is made of, in kilograms, and his weight as the
                      sum of it; what each food is made of; eating, burning,
                      and what too much or too little of each store does; the
@@ -818,13 +844,14 @@ src/
 build_desktop.sh
 build_web.sh
 tools/               check.sh (the check suite, autoplay and mix), tour.sh (screenshots)
-                     and play.sh (a program plays a step at a time);
-                     pack_quadrupeds.sh, pack_quadruped.py and quadruped_odin.py
-                     (animals from the animal pack, with Blender); pack_trees.sh
-                     and pack_trees.py (trees from tree models, with Blender)
-assets/              goat/, billy/ and packfox/: animals packed from the animal
-                     pack (see Animals from the animal pack); trees/: the tree
-                     models (see Trees from models)
+                     and play.sh (a program plays a step at a time)
+tools/pack_assets/   packs the models in assets/ from their GLBs at build time
+                     (see Models: from Blender to the game)
+assets/              each model's GLB and what is packed from it: goat/, billy/
+                     and packfox/, animals from the animal pack (see Animals from
+                     the animal pack); prosio_base/, Prosio's skin; fox/, the
+                     asset pilot's fox; trees/, the tree, rock and plant models
+                     (see Trees from models)
 AGENTS.md            where an agent that tests or plays the game begins
 .claude/agents/      the playtester agent
 lib/                 raylib compiled for the web
@@ -846,7 +873,7 @@ A few choices shape the rest:
 
 There are three tools that test the game by themselves, a way for a program to play it a step at a time, and an agent that uses them all.
 
-**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (220 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
+**The check suite** plays out the rules the game must keep and prints PASS or FAIL for each (230 of them: weight is always the sum of his parts, `F` always lets go, too much food never ends the game, no tree stands in front of a path or a building, a fox steals and gives back, a pig with no fat left is still there next time, leaving while he lies there does not undo a game over, and so on). It runs the game's own code without a window, far faster than real time. Every rule came from a decision about the design or from a bug that was found; when something new is decided or fixed, add a rule to `src/check/rules.odin`.
 
 ```bash
 tools/check.sh
@@ -970,7 +997,7 @@ A few things stay in the code, because they are not numbers to tune but part of 
 - The sun's direction (`SUN` in `platform.odin`): it must match `scene.frag`.
 - The pixel-art pictures of things and needs (`ICONS` in `kitchen.odin`, `NEED_ICONS` in `diet.odin`).
 - The save file's layout (`SAVE_VERSION` and the old versions in `body.odin`) and the key codes (`controls.odin`).
-- How the animal pack's animals are reshaped (`RECIPES` in `tools/pack_quadruped.py`, then `tools/pack_quadrupeds.sh`) and which tree models are packed (`tools/pack_trees.sh`).
+- How the models are packed (`tools/pack_assets/`): which animals, trees and plants, each animal's length and animations, which materials are bark and which leaves. How the animals were reshaped is in their GLBs (made once in Blender, outside this repository).
 - The shapes things are drawn from (the many sizes inside the drawing code).
 
 ## Text

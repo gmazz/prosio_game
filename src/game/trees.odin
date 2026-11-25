@@ -2,7 +2,8 @@ package game
 
 import "core:math"
 
-// Trees made from low-poly tree models (see tools/pack_trees.sh): from
+// Trees made from low-poly tree models (packed from assets/trees/<name>.glb
+// by tools/pack_assets): from
 // Quaternius' nature packs, several broadleaves and birches, round trees for
 // the apple and blossom trees, and pines. Each tree in the meadow takes one
 // of its kind's models (TREE_PICK), by its number, and is made its own: scaled to its kind's height times its own

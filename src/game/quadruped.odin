@@ -3,8 +3,8 @@ package game
 import "core:math"
 import "core:math/linalg"
 
-// Four-legged animals made from the animated animal pack (see
-// tools/pack_quadruped.py): a mesh that bends on a skeleton, and the pack's
+// Four-legged animals made from the animated animal pack (packed from
+// assets/<name>/<name>.glb by tools/pack_assets): a mesh that bends on a skeleton, and the pack's
 // animations, reshaped and recoloured for the game. The goat and the billy
 // goat are drawn this way, and the fox (unless PACK_FOX is off, when the fox
 // of the asset pilot is drawn instead).

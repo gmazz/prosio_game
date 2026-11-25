@@ -12,6 +12,7 @@ if [ ! -f "$LIB" ]; then
 	exit 1
 fi
 sh tools/gen_data.sh # data/*.json into src/game/gen_*.odin
+sh tools/pack_assets.sh # assets/<name>/<name>.glb into what the game loads
 OUT=build/web
 if [ "${1:-}" = "--lab" ]; then
 	OUT=build/web-lab

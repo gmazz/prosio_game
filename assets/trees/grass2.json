@@ -1,22 +1,14 @@
 {
  "name": "grass2",
- "source": "Grass.blend",
+ "source": "grass2.glb",
  "bark": 0,
  "leaves": 576,
- "height": 1.0127829480916262,
- "crown_low": 0.0,
- "crown_high": 1.0127829313278198,
- "crown_r": 0.21407894847418785,
- "spots": [],
- "bark_color": [
-  0,
-  0,
-  0
- ],
- "leaf_color": [
-  83,
-  109,
-  69
- ],
- "radius": 0.21407894366909958
+ "height": 1.0127829,
+ "crown_low": 0,
+ "crown_high": 1.0127829,
+ "crown_r": 0.21407895,
+ "radius": 0.21407895,
+ "bark_color": [0, 0, 0, 0],
+ "leaf_color": [83, 109, 69, 255],
+ "spots": []
 }

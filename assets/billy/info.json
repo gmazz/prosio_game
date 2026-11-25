@@ -1,306 +1,40 @@
 {
  "name": "billy",
- "source": "Deer.blend",
- "bones": [
-  "Body",
-  "Back",
-  "Torso",
-  "Torso2",
-  "Torso3",
-  "Neck1",
-  "Neck2",
-  "Neck3",
-  "Head",
-  "Ear1.L",
-  "Ear2.L",
-  "Ear3.L",
-  "Ear4.L",
-  "Ear1.R",
-  "Ear2.R",
-  "Ear3.R",
-  "Ear4.R",
-  "FrontShoulder.L",
-  "FrontUpperLeg.L",
-  "FrontLowerLeg.L",
-  "FrontShoulder.R",
-  "FrontUpperLeg.R",
-  "FrontLowerLeg.R",
-  "BackShoulder.L",
-  "BackLeg.L",
-  "BackUpperLeg.L",
-  "BackLowerLeg.L",
-  "BackShoulder.R",
-  "BackLeg.R",
-  "BackUpperLeg.R",
-  "BackLowerLeg.R",
-  "Tail1",
-  "Tail2",
-  "Tail3",
-  "PoleTargetBack.L",
-  "PoleTarget.L",
-  "PoleTargetBack.R",
-  "PoleTarget.R",
-  "IKBackLeg.L",
-  "FFB.L",
-  "IKFrontLeg.L",
-  "FF.L",
-  "IKBackLeg.R",
-  "FFB.R",
-  "IKFrontLeg.R",
-  "FF.R"
- ],
- "parents": [
-  -1,
-  0,
-  1,
-  2,
-  3,
-  4,
-  5,
-  6,
-  7,
-  8,
-  9,
-  10,
-  11,
-  8,
-  13,
-  14,
-  15,
-  3,
-  17,
-  18,
-  3,
-  20,
-  21,
-  1,
-  23,
-  24,
-  25,
-  1,
-  27,
-  28,
-  29,
-  1,
-  31,
-  32,
-  0,
-  0,
-  0,
-  0,
-  -1,
-  38,
-  -1,
-  40,
-  -1,
-  42,
-  -1,
-  44
- ],
+ "source": "billy.glb",
+ "scale": 0.56631505,
+ "bones": ["Body", "Back", "BackShoulder.L", "BackLeg.L", "BackUpperLeg.L", "BackLowerLeg.L", "BackShoulder.R", "BackLeg.R", "BackUpperLeg.R", "BackLowerLeg.R", "Tail1", "Tail2", "Tail3", "Torso", "Torso2", "FrontShoulder.L", "FrontUpperLeg.L", "FrontLowerLeg.L", "FrontShoulder.R", "FrontUpperLeg.R", "FrontLowerLeg.R", "Torso3", "Neck1", "Neck2", "Neck3", "Head", "Ear1.L", "Ear2.L", "Ear3.L", "Ear4.L", "Ear1.R", "Ear2.R", "Ear3.R", "Ear4.R", "PoleTarget.L", "PoleTarget.R", "PoleTargetBack.L", "PoleTargetBack.R", "IKBackLeg.L", "FFB.L", "IKBackLeg.R", "FFB.R", "IKFrontLeg.L", "FF.L", "IKFrontLeg.R", "FF.R"],
+ "parents": [-1, 0, 1, 2, 3, 4, 1, 6, 7, 8, 1, 10, 11, 1, 13, 14, 15, 16, 14, 18, 19, 14, 21, 22, 23, 24, 25, 26, 27, 28, 25, 30, 31, 32, 0, 0, 0, 0, -1, 38, -1, 40, -1, 42, -1, 44],
  "groups": [
-  {
-   "name": "Beard",
-   "first": 0,
-   "count": 138
-  },
-  {
-   "name": "Eye_Black",
-   "first": 138,
-   "count": 132
-  },
-  {
-   "name": "Eye_Lighter",
-   "first": 270,
-   "count": 240
-  },
-  {
-   "name": "Eye_White",
-   "first": 510,
-   "count": 12
-  },
-  {
-   "name": "Hooves",
-   "first": 522,
-   "count": 534
-  },
-  {
-   "name": "Horn",
-   "first": 1056,
-   "count": 708
-  },
-  {
-   "name": "Main",
-   "first": 1764,
-   "count": 3930
-  },
-  {
-   "name": "Main_Dark",
-   "first": 5694,
-   "count": 228
-  },
-  {
-   "name": "Main_Light",
-   "first": 5922,
-   "count": 1218
-  }
+  {"name": "Beard", "first": 0, "count": 138},
+  {"name": "Eye_Black", "first": 138, "count": 132},
+  {"name": "Eye_Lighter", "first": 270, "count": 240},
+  {"name": "Eye_White", "first": 510, "count": 12},
+  {"name": "Hooves", "first": 522, "count": 534},
+  {"name": "Horn", "first": 1056, "count": 708},
+  {"name": "Main", "first": 1764, "count": 3930},
+  {"name": "Main_Dark", "first": 5694, "count": 228},
+  {"name": "Main_Light", "first": 5922, "count": 1218}
  ],
  "clips": [
-  {
-   "name": "Idle",
-   "first": 0,
-   "count": 67,
-   "fps": 20,
-   "loop": true,
-   "stride": 0.0
-  },
-  {
-   "name": "Walk",
-   "first": 67,
-   "count": 23,
-   "fps": 20,
-   "loop": true,
-   "stride": 2.1603890744651237
-  },
-  {
-   "name": "Gallop",
-   "first": 90,
-   "count": 11,
-   "fps": 20,
-   "loop": true,
-   "stride": 3.537859730422497
-  },
-  {
-   "name": "Eating",
-   "first": 101,
-   "count": 120,
-   "fps": 20,
-   "loop": true,
-   "stride": 0.0
-  },
-  {
-   "name": "Idle_HitReact_Left",
-   "first": 221,
-   "count": 10,
-   "fps": 20,
-   "loop": false,
-   "stride": 0.0
-  },
-  {
-   "name": "Death",
-   "first": 231,
-   "count": 18,
-   "fps": 20,
-   "loop": false,
-   "stride": 0.0
-  },
-  {
-   "name": "Attack_Headbutt",
-   "first": 249,
-   "count": 17,
-   "fps": 20,
-   "loop": false,
-   "stride": 0.0
-  },
-  {
-   "name": "Gallop_Jump",
-   "first": 266,
-   "count": 29,
-   "fps": 20,
-   "loop": false,
-   "stride": 0.0
-  }
+  {"name": "Idle", "first": 0, "count": 67, "fps": 20, "loop": true, "stride": 0},
+  {"name": "Walk", "first": 67, "count": 23, "fps": 20, "loop": true, "stride": 2.1600482},
+  {"name": "Gallop", "first": 90, "count": 11, "fps": 20, "loop": true, "stride": 3.537912},
+  {"name": "Eating", "first": 101, "count": 120, "fps": 20, "loop": true, "stride": 0},
+  {"name": "Idle_HitReact_Left", "first": 221, "count": 10, "fps": 20, "loop": false, "stride": 0},
+  {"name": "Death", "first": 231, "count": 18, "fps": 20, "loop": false, "stride": 0},
+  {"name": "Attack_Headbutt", "first": 249, "count": 17, "fps": 20, "loop": false, "stride": 0},
+  {"name": "Gallop_Jump", "first": 266, "count": 29, "fps": 20, "loop": false, "stride": 0}
  ],
  "sockets": {
-  "eye_L": {
-   "pos": [
-    0.16446789000959447,
-    1.8294127651800711,
-    0.9060393463199338
-   ],
-   "normal": [
-    0.9432230927050114,
-    0.008483007100039686,
-    0.18650637463724706
-   ],
-   "bone": "Head"
-  },
-  "eye_R": {
-   "pos": [
-    -0.2504710661402593,
-    1.7939315345138311,
-    0.8705956389506658
-   ],
-   "normal": [
-    -0.9486096641048789,
-    -0.15407339301600587,
-    0.024125581912812777
-   ],
-   "bone": "Head"
-  },
-  "udder": {
-   "pos": [
-    0,
-    0.6730930805206299,
-    -0.5782533049583435
-   ],
-   "bone": "Torso"
-  },
-  "hoof_L": {
-   "pos": [
-    0.2471434473991394,
-    0.1972256302833557,
-    -0.8821976780891418
-   ],
-   "bone": "FFB.L"
-  },
-  "hip_L": {
-   "pos": [
-    0.24714329838752747,
-    1.1777100563049316,
-    -0.7282533049583435
-   ],
-   "bone": "BackLeg.L"
-  },
-  "hoof_R": {
-   "pos": [
-    -0.2471431940793991,
-    0.19722548127174377,
-    -0.8821977972984314
-   ],
-   "bone": "FFB.R"
-  },
-  "hip_R": {
-   "pos": [
-    -0.24714326858520508,
-    1.1777100563049316,
-    -0.7282533049583435
-   ],
-   "bone": "BackLeg.R"
-  },
-  "mouth": {
-   "pos": [
-    0,
-    1.5062764644622804,
-    1.448191475868225
-   ],
-   "bone": "Head"
-  },
-  "tail_tip": {
-   "pos": [
-    0.01354105956852436,
-    1.1460551023483276,
-    -1.0801763534545898
-   ],
-   "bone": "Tail3"
-  },
-  "tail_root": {
-   "pos": [
-    -8.973559673108866e-10,
-    1.2073644399642944,
-    -0.8727638125419617
-   ],
-   "bone": "Tail1"
-  }
- },
- "scale": 0.5663150277858228
+  "eye_L": {"pos": [0.16446789, 1.8294121, 0.9060394], "normal": [0.9809679, 0.008822561, 0.1939698], "bone": "Head"},
+  "eye_R": {"pos": [-0.250471, 1.7939314, 0.87059575], "normal": [-0.9867544, -0.16026872, 0.025095727], "bone": "Head"},
+  "hip_L": {"pos": [0.24714331, 1.1777099, -0.72825307], "normal": [1.3302866e-08, -1.3480894e-07, 1], "bone": "BackLeg.L"},
+  "hip_R": {"pos": [-0.24714321, 1.17771, -0.72825307], "normal": [-1.6869704e-08, -1.79396e-07, 1], "bone": "BackLeg.R"},
+  "hoof_L": {"pos": [0.24714342, 0.19722562, -0.88219744], "normal": [-4.9780624e-08, 8.940697e-08, 1], "bone": "FFB.L"},
+  "hoof_R": {"pos": [-0.24714318, 0.1972254, -0.8821975], "normal": [4.9780624e-08, 8.940697e-08, 1], "bone": "FFB.R"},
+  "mouth": {"pos": [2.8799997e-08, 1.5062762, 1.4481915], "normal": [3.0446474e-09, -2.9883816e-07, 1], "bone": "Head"},
+  "tail_root": {"pos": [-8.9759983e-10, 1.2073643, -0.87276363], "normal": [-5.1159066e-13, 2.0815054e-07, 1], "bone": "Tail1"},
+  "tail_tip": {"pos": [0.013541079, 1.146055, -1.0801762], "normal": [-8.632809e-09, 3.2724344e-07, 1], "bone": "Tail3"},
+  "udder": {"pos": [-3.862954e-13, 0.673093, -0.57825315], "normal": [-1.4919944e-07, -2.0943119e-07, 1], "bone": "Torso"}
+ }
 }

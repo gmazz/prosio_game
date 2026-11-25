@@ -1,13 +1,13 @@
 package game
 
-// Made by tools/pack_trees.sh from the tree models: do not edit.
+// Made by tools/pack_assets from assets/trees/<name>.glb: do not edit.
 
 Tree_Model_Kind :: enum {Broad1, Broad2, Broad3, Broad4, Common1, Common2, Birch1, Birch2, Round1, Round2, Round3, Pine1, Pine2, Pine3, Pine4, Pine5, Rock1, Rock2, Rock3, Rock4, Rock5, Rockmoss1, Rockmoss2, Rockmoss3, Rockmoss4, Grass1, Grass2, Grass3, Fern1, Fern2, Fern3, Stump1, Stump2, Log1, Bush1, Bush2}
 TREE_MAX_VERTS :: 8856
 
 TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 	.Broad1 = {
-		name = "broad1", // from Tree_2.blend
+		name = "broad1", // from broad1.glb
 		bark = 2208,
 		leaves = 2016,
 		height = 5.4342,
@@ -21,7 +21,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/broad1.bin", [][9]f32),
 	},
 	.Broad2 = {
-		name = "broad2", // from Tree_3.blend
+		name = "broad2", // from broad2.glb
 		bark = 4176,
 		leaves = 2088,
 		height = 5.723,
@@ -35,7 +35,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/broad2.bin", [][9]f32),
 	},
 	.Broad3 = {
-		name = "broad3", // from Tree_5.blend
+		name = "broad3", // from broad3.glb
 		bark = 2616,
 		leaves = 2952,
 		height = 6.3595,
@@ -49,7 +49,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/broad3.bin", [][9]f32),
 	},
 	.Broad4 = {
-		name = "broad4", // from Tree_9.blend
+		name = "broad4", // from broad4.glb
 		bark = 2028,
 		leaves = 1800,
 		height = 5.4925,
@@ -63,7 +63,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/broad4.bin", [][9]f32),
 	},
 	.Common1 = {
-		name = "common1", // from CommonTree_1.blend
+		name = "common1", // from common1.glb
 		bark = 7080,
 		leaves = 1584,
 		height = 2.4806,
@@ -77,7 +77,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/common1.bin", [][9]f32),
 	},
 	.Common2 = {
-		name = "common2", // from CommonTree_2.blend
+		name = "common2", // from common2.glb
 		bark = 7080,
 		leaves = 1776,
 		height = 3.1228,
@@ -91,7 +91,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/common2.bin", [][9]f32),
 	},
 	.Birch1 = {
-		name = "birch1", // from BirchTree_3.blend
+		name = "birch1", // from birch1.glb
 		bark = 4038,
 		leaves = 1152,
 		height = 4.0932,
@@ -105,7 +105,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/birch1.bin", [][9]f32),
 	},
 	.Birch2 = {
-		name = "birch2", // from BirchTree_5.blend
+		name = "birch2", // from birch2.glb
 		bark = 3666,
 		leaves = 1536,
 		height = 5.0092,
@@ -119,7 +119,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/birch2.bin", [][9]f32),
 	},
 	.Round1 = {
-		name = "round1", // from Tree_4.blend
+		name = "round1", // from round1.glb
 		bark = 3000,
 		leaves = 2016,
 		height = 5.3348,
@@ -129,11 +129,11 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		bark_color = {0, 0, 0, 0}, // (none: the game's own)
 		leaf_color = {231, 231, 231, 255},
 		radius = 3.5481,
-		spots = []Vec3{{3.3688, 4.2833, -0.4375}, {-2.9284, 3.7034, 0.0797}, {0.5244, 4.3203, 3.1685}, {-0.0664, 4.0748, -1.9977}, {-1.8814, 4.7823, 2.3497}, {1.3799, 3.8513, 0.9166}, {-1.6004, 5.3692, -0.3775}, {1.5646, 5.1382, -1.1178}},
+		spots = []Vec3{{3.3688, 4.2832, -0.4375}, {-2.9284, 3.7034, 0.0797}, {0.5244, 4.3203, 3.1685}, {-0.0664, 4.0748, -1.9977}, {-1.8814, 4.7823, 2.3497}, {1.3799, 3.8513, 0.9166}, {-1.6004, 5.3692, -0.3775}, {1.5646, 5.1382, -1.1178}},
 		mesh = #load("../../assets/trees/round1.bin", [][9]f32),
 	},
 	.Round2 = {
-		name = "round2", // from Tree_10.blend
+		name = "round2", // from round2.glb
 		bark = 2268,
 		leaves = 1368,
 		height = 4.3481,
@@ -147,7 +147,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/round2.bin", [][9]f32),
 	},
 	.Round3 = {
-		name = "round3", // from Tree_7.blend
+		name = "round3", // from round3.glb
 		bark = 1548,
 		leaves = 2448,
 		height = 5.8616,
@@ -161,7 +161,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/round3.bin", [][9]f32),
 	},
 	.Pine1 = {
-		name = "pine1", // from PineTree_2.blend
+		name = "pine1", // from pine1.glb
 		bark = 204,
 		leaves = 4872,
 		height = 3.5647,
@@ -175,7 +175,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/pine1.bin", [][9]f32),
 	},
 	.Pine2 = {
-		name = "pine2", // from PineTree_3.blend
+		name = "pine2", // from pine2.glb
 		bark = 240,
 		leaves = 6936,
 		height = 3.3044,
@@ -189,7 +189,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/pine2.bin", [][9]f32),
 	},
 	.Pine3 = {
-		name = "pine3", // from PineTree_4.blend
+		name = "pine3", // from pine3.glb
 		bark = 240,
 		leaves = 4872,
 		height = 3.3425,
@@ -199,11 +199,11 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		bark_color = {109, 75, 69, 255}, // (none: the game's own)
 		leaf_color = {83, 109, 69, 255},
 		radius = 1.0168,
-		spots = []Vec3{{-0.367, 2.1922, -0.9736}, {0.5379, 1.7366, -0.1363}, {-0.5438, 2.1023, 0.1497}, {0.2913, 2.8982, -0.4147}, {-0.5193, 2.7126, -0.3947}, {-0.7651, 1.6977, -0.5023}, {0.3574, 2.3354, -0.7955}, {0.0771, 1.7955, -0.9111}},
+		spots = []Vec3{{-0.367, 2.1922, -0.9736}, {0.5379, 1.7366, -0.1363}, {-0.5438, 2.1023, 0.1497}, {0.2913, 2.8982, -0.4147}, {-0.5193, 2.7126, -0.3947}, {-0.7651, 1.6977, -0.5023}, {0.3574, 2.3354, -0.7955}, {0.0771, 1.7955, -0.911}},
 		mesh = #load("../../assets/trees/pine3.bin", [][9]f32),
 	},
 	.Pine4 = {
-		name = "pine4", // from Pine_2.blend
+		name = "pine4", // from pine4.glb
 		bark = 564,
 		leaves = 1260,
 		height = 7.9642,
@@ -217,7 +217,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/pine4.bin", [][9]f32),
 	},
 	.Pine5 = {
-		name = "pine5", // from Pine_5.blend
+		name = "pine5", // from pine5.glb
 		bark = 444,
 		leaves = 1548,
 		height = 10.3075,
@@ -231,7 +231,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/pine5.bin", [][9]f32),
 	},
 	.Rock1 = {
-		name = "rock1", // from Rock_1.blend
+		name = "rock1", // from rock1.glb
 		bark = 210,
 		leaves = 0,
 		height = 0.8777,
@@ -245,7 +245,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rock1.bin", [][9]f32),
 	},
 	.Rock2 = {
-		name = "rock2", // from Rock_3.blend
+		name = "rock2", // from rock2.glb
 		bark = 216,
 		leaves = 0,
 		height = 0.676,
@@ -259,7 +259,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rock2.bin", [][9]f32),
 	},
 	.Rock3 = {
-		name = "rock3", // from Rock_5.blend
+		name = "rock3", // from rock3.glb
 		bark = 270,
 		leaves = 0,
 		height = 0.6528,
@@ -273,7 +273,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rock3.bin", [][9]f32),
 	},
 	.Rock4 = {
-		name = "rock4", // from Rock_6.blend
+		name = "rock4", // from rock4.glb
 		bark = 348,
 		leaves = 0,
 		height = 0.7078,
@@ -287,7 +287,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rock4.bin", [][9]f32),
 	},
 	.Rock5 = {
-		name = "rock5", // from Rock_7.blend
+		name = "rock5", // from rock5.glb
 		bark = 282,
 		leaves = 0,
 		height = 0.8494,
@@ -301,7 +301,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rock5.bin", [][9]f32),
 	},
 	.Rockmoss1 = {
-		name = "rockmoss1", // from Rock_Moss_2.blend
+		name = "rockmoss1", // from rockmoss1.glb
 		bark = 198,
 		leaves = 36,
 		height = 0.6918,
@@ -315,7 +315,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rockmoss1.bin", [][9]f32),
 	},
 	.Rockmoss2 = {
-		name = "rockmoss2", // from Rock_Moss_3.blend
+		name = "rockmoss2", // from rockmoss2.glb
 		bark = 180,
 		leaves = 24,
 		height = 0.5567,
@@ -329,7 +329,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rockmoss2.bin", [][9]f32),
 	},
 	.Rockmoss3 = {
-		name = "rockmoss3", // from Rock_Moss_5.blend
+		name = "rockmoss3", // from rockmoss3.glb
 		bark = 222,
 		leaves = 42,
 		height = 0.5767,
@@ -343,7 +343,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rockmoss3.bin", [][9]f32),
 	},
 	.Rockmoss4 = {
-		name = "rockmoss4", // from Rock_Moss_6.blend
+		name = "rockmoss4", // from rockmoss4.glb
 		bark = 234,
 		leaves = 114,
 		height = 0.7078,
@@ -357,7 +357,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/rockmoss4.bin", [][9]f32),
 	},
 	.Grass1 = {
-		name = "grass1", // from Grass_Short.blend
+		name = "grass1", // from grass1.glb
 		bark = 0,
 		leaves = 576,
 		height = 0.4046,
@@ -371,7 +371,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/grass1.bin", [][9]f32),
 	},
 	.Grass2 = {
-		name = "grass2", // from Grass.blend
+		name = "grass2", // from grass2.glb
 		bark = 0,
 		leaves = 576,
 		height = 1.0128,
@@ -385,7 +385,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/grass2.bin", [][9]f32),
 	},
 	.Grass3 = {
-		name = "grass3", // from Grass_2.blend
+		name = "grass3", // from grass3.glb
 		bark = 0,
 		leaves = 576,
 		height = 1.2013,
@@ -399,7 +399,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/grass3.bin", [][9]f32),
 	},
 	.Fern1 = {
-		name = "fern1", // from Plant_1.blend
+		name = "fern1", // from fern1.glb
 		bark = 0,
 		leaves = 888,
 		height = 0.5073,
@@ -413,7 +413,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/fern1.bin", [][9]f32),
 	},
 	.Fern2 = {
-		name = "fern2", // from Plant_3.blend
+		name = "fern2", // from fern2.glb
 		bark = 0,
 		leaves = 1800,
 		height = 0.9437,
@@ -427,7 +427,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/fern2.bin", [][9]f32),
 	},
 	.Fern3 = {
-		name = "fern3", // from Plant_4.blend
+		name = "fern3", // from fern3.glb
 		bark = 0,
 		leaves = 1536,
 		height = 0.8109,
@@ -441,7 +441,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/fern3.bin", [][9]f32),
 	},
 	.Stump1 = {
-		name = "stump1", // from TreeStump_Moss.blend
+		name = "stump1", // from stump1.glb
 		bark = 561,
 		leaves = 135,
 		height = 0.6216,
@@ -455,7 +455,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/stump1.bin", [][9]f32),
 	},
 	.Stump2 = {
-		name = "stump2", // from TreeStump.blend
+		name = "stump2", // from stump2.glb
 		bark = 624,
 		leaves = 72,
 		height = 0.6216,
@@ -469,7 +469,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/stump2.bin", [][9]f32),
 	},
 	.Log1 = {
-		name = "log1", // from WoodLog_Moss.blend
+		name = "log1", // from log1.glb
 		bark = 660,
 		leaves = 282,
 		height = 0.6883,
@@ -483,7 +483,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/log1.bin", [][9]f32),
 	},
 	.Bush1 = {
-		name = "bush1", // from Bush_1.blend
+		name = "bush1", // from bush1.glb
 		bark = 0,
 		leaves = 1092,
 		height = 1.2417,
@@ -497,7 +497,7 @@ TREE_MODELS := [Tree_Model_Kind]Tree_Model {
 		mesh = #load("../../assets/trees/bush1.bin", [][9]f32),
 	},
 	.Bush2 = {
-		name = "bush2", // from Bush_2.blend
+		name = "bush2", // from bush2.glb
 		bark = 0,
 		leaves = 804,
 		height = 1.1106,
