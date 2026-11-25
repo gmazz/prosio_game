@@ -11,5 +11,5 @@ cd "$(dirname "$0")/.."
 mkdir -p build/check
 sh tools/gen_data.sh # data/*.json into src/game/gen_*.odin
 sh tools/pack_assets.sh # assets/<name>/<name>.glb into what the game loads
-odin build src/check -out:build/check/prosio-check -vet
+odin build src/check -out:build/check/prosio-check -vet -define:PROSIO_BASE_DATA=true # the skin's data, for its rules (the game itself leaves it out)
 exec build/check/prosio-check "$@"

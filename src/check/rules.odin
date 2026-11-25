@@ -44,8 +44,10 @@ run_rules :: proc() -> int {
 	rules_kitchen()
 	rules_animals()
 	rules_fox_rig()
-	rules_prosio_character()
-	when game.PROSIO_BASE { rules_prosio_base() }
+	rules_prosio_reactions()
+	rules_prosio_bind()
+	rules_prosio_look()
+	when game.PROSIO_BASE_DATA { rules_prosio_base() }
 	rules_test_meadow()
 	rules_fighting()
 	rules_impacts()

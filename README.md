@@ -101,7 +101,7 @@ The first row puts on a whole outfit at once; every other row changes one piece,
 | Aviator | leather flying cap with goggles, sunglasses, moustache, white scarf, white shirt, belted trench coat, cords, brown boots |
 | Space pirate | long shaggy hair, eyepatch, scar, a black top with a skull and crossed bones, a black cape lined with red, black leather trousers, tall black boots |
 | Chef | chef's hat, moustache, kerchief, white chef's jacket, apron, grey checked trousers, sneakers |
-| Bare pig | smooth base skin, bare head and no tail |
+| Bare pig | nothing on but his tuft of hair: no pack, no tail (in the Test Meadow, the skin made in Blender instead: see [Prosio's skin](#prosios-skin-test-meadow-only)) |
 
 | Part | Row | Choices |
 |---|---|---|
@@ -654,46 +654,20 @@ The forest trails are the exception: trees may stand in front of them. The fores
 
 The script has only been run on an Apple-silicon Mac. Odin's raylib bindings also cover Linux and Windows, but those builds have not been tried, and each has to be built on its own system.
 
-### Prosio's editable base mesh
+### Prosio's skin (Test Meadow only)
 
-**Bare pig** and the test meadow show the continuous skin rebuilt from the original procedural character. The sculpt has a visible neck, three digits per hand, folded ears, a recessed snout and stronger pectorals at the 70 kg reference weight. Odin moves the skin-tone brow ridges with expressions and folds the ears as Prosio rises and falls. The glossy black eyes have two catchlights each. Arm and leg segments have fixed lengths through actions and body changes. Fat and muscle change limb girth, and the facial shape key fills out the cheeks, jowls and chin. Clothing presets use their procedural body and fitting. The backpack geometry has been removed across outfits.
+Prosio is drawn from one pose: `prosio_pose.odin` works out, from his state and drawing nothing, where each of his 36 parts is (pelvis, belly, chest, each thigh, knee, shin, toe, shoulder, upper arm, biceps, elbow, forearm and hand, the neck, head, snout, ears, brows and pecs), and what his clothes need. Two bodies are drawn from it:
 
-The skin is `assets/prosio_base/prosio_base.glb`, packed with `assets/prosio_base/bind.json` (the frames of his parts at the pose the skin was made in, written by the game itself) into the files the game loads (see [Models: from Blender to the game](#models-from-blender-to-the-game)). Its editable source, `prosio-base.blend`, and the Blender scripts that build and refit it are in the workshop folder outside this repository (`img2model/output/` there). The file opens in a widened arm bind pose for editing the shoulders and armpits. Export a new `prosio_base.glb` from it after editing; the build packs it.
+- **The body of shapes** (`draw_prosio_shapes` in `draw.odin`), which the game shows in every outfit, the bare pig included, with his clothes on it and, in every outfit but the bare pig, his canvas pack.
+- **The skin made in Blender** (`prosio_base.odin`): one continuous mesh with a neck, three digits per hand, folded ears, a recessed snout and pectorals at the 70 kg reference weight, bent on the same 36 parts, with glossy black eyes (two catchlights each) and a mouth drawn on it. Odin moves its brows with his expression and folds its ears as he rises and falls; fat and muscle change its girth, and its `Facial Fat` shape fills out the cheeks, jowls and chin. Its art is not ready to show, so it is off in the game: it is drawn on the bare pig only in the Test Meadow (`./build_desktop.sh --lab`), or in a build with `-define:PROSIO_BASE=true`. Its checks run in `tools/check.sh` all the same.
 
-To remake `bind.json` after an intentional change to the original Odin proportions:
-
-```bash
-odin build src/check -define:PROSIO_BASE=false -define:PROSIO_BASE_EXPORT=true -out:build/check/prosio-base-export -vet
-```
+The skin is `assets/prosio_base/prosio_base.glb`, packed into the files the game loads (see [Models: from Blender to the game](#models-from-blender-to-the-game)). It was made at the bind pose, his parts as `assets/prosio_base/bind.json` has them (70 kg, standing, arms held out a little). A rule fails if that file is no longer what the pose gives at the bind pose; if his parts were moved on purpose, remake it and fit the skin to it again in Blender:
 
 ```bash
-build/check/prosio-base-export export-prosio-base > assets/prosio_base/bind.json
+build/check/prosio-check export-prosio-base > assets/prosio_base/bind.json
 ```
 
-To compare with the original body in the meadow, build it with `odin build src/main_desktop -define:PROSIO_LAB=true -define:PROSIO_BASE=false -out:build/desktop/prosio-procedural -o:speed -vet`.
-
-### Alternate modeled Prosio preview
-
-Build the opt-in character variant from the repo root, then select **Bare pig** in the outfit menu.
-
-```bash
-sh tools/gen_data.sh
-mkdir -p build/desktop
-odin build src/main_desktop -define:PROSIO_CHARACTER=true -out:build/desktop/prosio-character -o:speed -vet
-./build/desktop/prosio-character
-```
-
-The painted model uses separate Blender shape keys for body fat, muscle and meal fullness. Fat rounds out the cheeks, arms and legs. Training fills out the upper arms, thighs or chest according to the skills trained. Swallowing expands the belly temporarily based on the size of the meal. Wind and hiccups trigger brief body and facial reactions during play, and Prosio pants when winded.
-
-To preview the six-second tipsy stagger, run this from the repo root and walk around. The preview runs without a save.
-
-```bash
-./build/desktop/prosio-character --outfit 70000000000 --tipsy
-```
-
-The other outfits use the procedural character while their clothing is fitted. This preview is to be removed; until then its packed files in `assets/prosio/` stay as they are, and the Blender file and the packing script that made them are in the workshop folder outside this repository.
-
-The preview adapts the pig from Joel Anderson's [Angel Devil](https://sketchfab.com/3d-models/angel-devil-26aec177328d4d5bb4c644e827c523f3) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Prosio uses a relaxed stance, a repainted face and body, a tailored skeleton and new body and facial shape keys.
+Its editable source, `prosio-base.blend`, and the Blender scripts that build and refit it are in the workshop folder outside this repository (`img2model/output/` there). Where the parts sit and how big they are, his face, and how the skin is outlined are tuned in `data/tuning/prosio_look.json`; those numbers change how he looks and nothing in how the game plays.
 
 ### Test meadow
 
@@ -794,6 +768,11 @@ src/
     world.odin       the regions, fields and paths, food, laying out the
                      meadow, and collide_static, which keeps anything round
                      out of everything solid
+    prosio_pose.odin his pose: where each of his 36 parts is, worked out from
+                     his state with nothing drawn (both bodies follow it)
+    prosio_base.odin his skin made in Blender, bent on the pose (Test Meadow
+                     only, for now)
+    reactions.odin   wind, hiccups, tipsiness and the full belly after a meal
     prosio.odin      Prosio: the limits of his fat, movement, jump, sprint,
                      stamina
     body.odin        his muscles and skills, which follow what he does; waking
@@ -827,7 +806,8 @@ src/
     critters.odin    fish, rabbits, crows and bees
     grab.odin        grabbing, dragging, bashing, throwing, the floppy held
                      animal, rocks in flight
-    draw.odin        everything drawn in the world
+    draw.odin        everything drawn in the world (Prosio: his body of shapes
+                     and his clothes, from his pose)
     ui.odin          bars, prompts, speech bubbles, menus
     controls.odin    which keys and controller buttons do what, the
                      button names in texts, and the Controls panel
@@ -978,7 +958,8 @@ The game never reads these files: `tools/gen_data` (run by the build scripts and
 
 | File | What is in it (its sections) |
 |---|---|
-| `prosio.json` | Prosio himself: his fat and its zones (`fat`); his size, stamina and the time a bump, a stoop and a jump take (`moving`); what gets worse with fat, lean against fat: walking speed, sprint boost and drain, bump speed and cost, jump cost, stamina coming back (`lean_to_fat`); what everything burns, and what a load does (`burning`); bruises (`bruises`); his muscles, how traits fade and waste (`muscle`); what each thing he does trains (`training`); what each trait is worth (`skills`); what waking up costs (`waking_up`); his shape (`shape`) |
+| `prosio.json` | Prosio himself: his fat and its zones (`fat`); his size, stamina and the time a bump, a stoop and a jump take (`moving`); what gets worse with fat, lean against fat: walking speed, sprint boost and drain, bump speed and cost, jump cost, stamina coming back (`lean_to_fat`); what everything burns, and what a load does (`burning`); bruises (`bruises`); his muscles, how traits fade and waste (`muscle`); what each thing he does trains (`training`); what each trait is worth (`skills`); what waking up costs (`waking_up`); his shape (`shape`); how long his body reacts to a meal, wind, hiccups and tipsiness, and how far it leans and spreads its arms (`reactions`) |
+| `prosio_look.json` | How he looks, apart from how the game plays: blinking, smiling and his brows (`face`); where the 36 parts of his pose sit and how big they are, the eyes and mouth drawn on his skin, and how the skin is outlined (`base_sculpt`) |
 | `diet.json` | His needs: how big each store is (`stores`); where each level starts, where lacking, full and too much begin, how fast levels fall, thirst, drinking and licked salt (`levels`); what full and lacking do (`full_and_lacking`); what too much does (`too_much`) |
 | `food.json` | The sack and its size, calories to a kilogram (`sack`); each thing's weight, room and calories (`things`); what each food is made of, real calories to the gram, and every food a mixing bowl takes, with its water, sugar, acid, marks and microorganisms (`made_of`); the rules of mixing, shaping, heating, boiling, standing in a crock and microorganisms (`mixing`); how fast food goes off, and a body (`going_off`); the oven, fire, churn, bench, mill and campfire: time, cooking bonus, skill, size, and every recipe and plan (`making`) |
 | `animals.json` | Turkeys, goats, the billy goat and foxes: weight, size, speed, grip, meat, coming back, how far they follow (`all_animals`); eggs, milk, goats he hit, foxes (`eggs_milk_and_the_fox`); swimming, drowning, sinking (`swimming`); health and blows (`health_and_blows`); bold and wary animals, a frightened flock (`boldness_and_alarm`); the animal-pack goats' and fox's walk, gallop, turning and head (`pack_animals_moving`); their body following a turn, giving way, struggling (`pack_animals_body`); a body dragged along the ground (`dragging`); what a blow does: push, stumble, fall, launch, tumble, get up (`impacts`, `impact_pose`) |

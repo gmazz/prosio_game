@@ -22,11 +22,10 @@ import "core:strconv"
 main :: proc() {
 	game.keyboard_enabled = false
 	args := os.args[1:]
-	when game.PROSIO_BASE_EXPORT {
-		if len(args) > 0 && args[0] == "export-prosio-base" {
-			export_prosio_base()
-			return
-		}
+	if len(args) > 0 && args[0] == "export-prosio-base" {
+		// assets/prosio_base/bind.json: his parts at the pose the skin was made at.
+		export_prosio_base()
+		return
 	}
 	if len(args) > 0 && args[0] == "autoplay" {
 		minutes := 30

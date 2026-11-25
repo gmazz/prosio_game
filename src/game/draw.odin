@@ -921,11 +921,8 @@ draw_smile :: proc(m: Mat4, size: f32) {
 	}
 }
 
-draw_prosio :: proc(export_pose: ^Prosio_Base_Pose = nil, bind := false) {
+draw_prosio :: proc() {
 	p := &g.prosio
-	character := prosio_character_visible()
-	base_mesh := prosio_base_visible()
-	pose := Prosio_Base_Pose{collect = base_mesh || export_pose != nil}
 	// A warm pulse marks shove immunity while keeping his pose readable.
 	flashing := p.safe_t > 0 && p.fail == .None
 	if flashing {
@@ -934,385 +931,15 @@ draw_prosio :: proc(export_pose: ^Prosio_Base_Pose = nil, bind := false) {
 	defer if flashing {
 		set_hit_flash(0)
 	}
-	t := fatness()
-	reaction := prosio_reaction(p, g.time)
-	// A tough hide is a darker, rougher one.
-	skin := blend(COLOR_SKIN, HIDE_TAN, p.trait[.Hide] * 0.7)
-	skin_dark := blend(COLOR_SKIN_DARK, shade(HIDE_TAN, 0.85), p.trait[.Hide] * 0.7)
-	if too_much(.Vitamins) && p.fail == .None {
-		// Too many vitamins: he glows orange.
-		glow := 0.6 + 0.15 * math.sin(g.time * 5)
-		skin = blend(skin, {255, 150, 40, 255}, glow)
-		skin_dark = blend(skin_dark, {230, 110, 30, 255}, glow)
-	}
-	r := prosio_radius(p.kg) / PROSIO_SIZE // (drawn in his own measurements, then scaled)
-	wob := p.wobble
-
-	speed := length2(p.vel)
-	walking := speed > 0.5 && p.fail == .None && !p.airborne
-	// Picking something up: he stoops and reaches down for it (reach_down
-	// goes 0 to 1), then brings it up over his shoulder into the sack on his
-	// back (stow goes 0 to 1).
-	picking := p.pick_t > 0 && p.fail == .None
-	u := picking ? 1 - p.pick_t / max(p.pick_total, 0.01) : 0
-	reach_down := smooth(min(u * 2.2, 1))
-	stow := smooth(clamp(u * 2.2 - 1.2, 0, 1))
-	stoop := reach_down * (1 - stow)
-	bob: f32 = walking ? abs(math.sin(p.walk_phase)) * 0.07 : 0
-	swing: f32 = walking ? math.sin(p.walk_phase) * (p.sprinting ? 1.0 : 0.7) : 0
-
-	// The collision radius follows the belly. The jacket stays snug as he grows.
-	// Eating goes to the belly: it swells forwards and sideways, while his
-	// bottom stays about the same size.
-	belly_out := 0.03 + 0.17 * t // how far the belly sticks out in front
-	belly := (r - belly_out * 0.6) * lerp(0.8, 0.93, t)
-	belly_out += p.meal_fill * PROSIO_MEAL_DRAW.x
-	belly += p.meal_fill * PROSIO_MEAL_DRAW.y
-	chest := prosio_chest(p.kg)
-	hips := 0.3 + 0.1 * t
-	head := f32(0.46) // a big round head: he is drawn cute, kawaii style
-
-	base := translate({p.pos.x, p.height, p.pos.y}) * rot_y(p.facing) * scale({PROSIO_SIZE, PROSIO_SIZE, PROSIO_SIZE})
-	m := base * translate({0, bob, 0})
-	eyes_closed := math.mod(g.time, PROSIO_MESH_BLINK.x) < PROSIO_MESH_BLINK.y
-	brow_tilt: f32 = 0 // positive is worried, negative is fierce
-	if starving() || p.fat > FAT_MAX - FAT_DANGER || p.winded {
-		brow_tilt = 0.4
-	}
-	switch {
-	case p.fail == .Fainted || p.fail == .Diet || p.fail == .Beaten:
-		// Topples over onto his side.
-		a := smooth(p.fail_t / 0.5)
-		m = base * translate({a * 1.0, a * chest, 0}) * rot_z(a * 1.5)
-		eyes_closed = true
-	case p.fail == .Heart_Attack:
-		// Flops onto his back, belly up.
-		a := smooth(p.fail_t / 0.5)
-		m = base * translate({0, a * belly * 0.8, a * 1.0}) * rot_x(-a * 1.5)
-		eyes_closed = true
-	case picking:
-		m = m * translate({0, -0.1 * stoop, 0}) * rot_x(0.55 * stoop)
-	case p.ache_t > 0:
-		// Doubled up with a tummy ache or a cramp.
-		m = m * rot_x(0.45) * rot_z(math.sin(g.time * 22) * 0.05)
-		eyes_closed = true
-		brow_tilt = 0.5
-	case p.dash_t > 0:
-		m = m * rot_x(0.2)
-		brow_tilt = -0.5
-	case p.carry == .Enemy:
-		// Leaning back against a heavy animal, or into a swing.
-		lean := -0.45 * p.strain
-		if p.swinging {
-			k := min(p.swing_t / p.swing_total, 1)
-			lean = p.swing_throw ? -0.25 + 0.5 * k : 0.35 * math.sin(k * math.PI * 0.9)
-		}
-		m = m * rot_x(lean)
-		brow_tilt = p.strain > 0.5 ? 0.35 : -0.4
-	case p.dazed_t > 0:
-		m = m * rot_z(math.sin(g.time * 9) * 0.2)
-		eyes_closed = true
-	}
-	if p.carry == .Nothing && p.fail == .None {
-		pitch := reaction.gas * PROSIO_REACTION_WIND.x - reaction.hiccup * PROSIO_REACTION_SWAY.z
-		roll := reaction.sway * PROSIO_REACTION_SWAY.y + reaction.gas * PROSIO_REACTION_WIND.y
-		m = m * rot_x(pitch) * rot_z(roll)
-	}
-	// Squash the torso. The limbs use the same body orientation and an
-	// unscaled rig, with the shoulders attached to the squashing chest.
-	root := m
-	st := clamp(p.stretch, -0.3, 0.3)
-	squash := Vec3{1 - st * 0.5, 1 + st, 1 - st * 0.5}
-	m = root * scale(squash)
-
-	// Legs: a thick thigh tapering to a round knee, then a slimmer shin
-	// tapering to a cloven hoof. The knee bends a little as he walks, and in
-	// the air he tucks his legs up.
-	leg_x := 0.13 + 0.13 * t
-	leg_r := (0.1 + 0.06 * t) * tone(.Legs, 0.85, 1.45) // thin when wasted, sturdy when built
-	if !character {
-		for side in ([2]f32{-1, 1}) {
-			leg_swing := p.airborne ? -0.5 + side * 0.3 : side * swing
-			hip := root * translate({side * leg_x, HIP * LEG_SCALE, 0}) * rot_x(leg_swing)
-			bend := 0.03 + (p.airborne ? 0.12 : 0.07 * max(-side * swing, 0))
-			start := Vec3{0, 0.06, 0}
-			upper := Vec3{0, -0.23 * LEG_SCALE - start.y, 0.03}
-			lower := Vec3{0, -0.18 * LEG_SCALE, -0.03}
-			knee := start + linalg.normalize0(Vec3{0, upper.y, bend}) * linalg.length(upper)
-			ankle := knee + linalg.normalize0(Vec3{0, lower.y, -bend}) * linalg.length(lower)
-			prosio_base_taper(&pose, prosio_side_part(.Thigh_L, side), hip, start, knee, leg_r * 1.5, skin)
-			prosio_base_ball(&pose, prosio_side_part(.Knee_L, side), hip, knee, {leg_r * 0.95, PROSIO_BASE_KNEE_AXIAL, leg_r * 0.95}, skin)
-			prosio_base_taper(&pose, prosio_side_part(.Shin_L, side), hip, knee, ankle, leg_r * 0.98, skin)
-			if pose.collect {
-				sole := ankle + Vec3{0, -0.01 * LEG_SCALE, 0.05}
-				for toe in ([2]f32{-1, 1}) {
-					part: Prosio_Base_Part = toe * side > 0 ? .Toe_Outer_L : .Toe_Inner_L
-					prosio_base_ball(&pose, prosio_side_part(part, side), hip, sole + {toe * leg_r * 0.42, 0, 0},
-						{leg_r * 0.64, 0.075, leg_r * 1.2}, COLOR_HOOF)
-				}
-			} else {
-				draw_leg_outfit(hip, leg_r, knee, ankle)
-			}
-		}
-	}
-	// Everything above the hips: sat on the shorter legs, a little compacted.
-	m = m * translate({0, HIP * LEG_SCALE, 0}) * scale({1, TORSO_SCALE, 1}) * translate({0, -HIP, 0})
-
-	// His own body first, whole, with nothing on: two round buttocks, the
-	// belly, and a chest that rises from the top of the belly to his
-	// shoulders. Clothes then go on over it in layers (see outfit.odin), each
-	// a little bigger than what it covers.
-	if !character {
-		prosio_base_ball(&pose, .Pelvis, m, {0, 0.6, 0.05}, {hips * 0.95 - LAYER, 0.2 - LAYER, hips * 0.8 - LAYER}, skin)
-		for side in ([2]f32{-1, 1}) {
-			prosio_base_ball(&pose, prosio_side_part(.Haunch_L, side), m, {side * hips * 0.42, 0.57, -hips * 0.25},
-				{hips * 0.58 - LAYER, 0.21 - LAYER, hips * 0.62 - LAYER}, skin)
-		}
-		draw_hips_outfit(m, hips)
-	}
-	belly_y := 0.26 + 0.2 * t + p.meal_fill * PROSIO_MEAL_DRAW.z
-	belly_mid := 0.86 + 0.04 * t // the belly hangs over the shorts, but not down to the knees
-	if !character {
-		prosio_base_ball(&pose, .Belly, m, {0, belly_mid, belly_out},
-			{belly * (1 + wob), belly_y * (1 - wob), belly * (1 + wob)}, skin)
-		covered := SHIRT_LOOK[outfit.shirt].long || closed_coat() || outfit.over == .Apron
-		if t > 0.25 && !covered {
-			ball(m, {0, belly_mid - 0.08, belly_out + belly * (1 + wob)}, {0.045, 0.045, 0.03}, skin_dark)
-		}
-	}
-	// His chest follows the upper arc of his belly, and so does a shirt.
-	jacket := m * translate({0, belly_mid + belly_y * (1 - wob) * 0.51, belly_out})
-	jacket_w := max(chest, belly * (1 + wob) * 0.86 + 0.014)
-	jacket_h := max(0.33, 1.46 - (belly_mid + belly_y * (1 - wob) * 0.51))
-	if !character {
-		prosio_base_piece(&pose, .Chest, .Hemisphere, jacket * scale({jacket_w - LAYER, jacket_h - LAYER * 0.5, jacket_w - LAYER}), skin)
-		draw_torso_outfit(m, jacket, jacket_w, jacket_h, chest, belly * (1 + wob), belly_y * (1 - wob), belly_mid, belly_out, hips, swing, skin)
-	}
-	if pose.collect {
-		pec := PROSIO_BASE_PEC_ANCHOR
-		radii := PROSIO_BASE_PEC_RADII
-		motion := PROSIO_BASE_PEC_MOTION
-		soften := smooth(clamp((p.kg - PROSIO_BASE_PEC_MASS.x) / PROSIO_BASE_PEC_MASS.y, 0, 1))
-		trained := max(0, p.trait[.Arms])
-		for side in ([2]f32{-1, 1}) {
-			prosio_base_ball(&pose, prosio_side_part(.Pec_L, side), jacket,
-				{side * jacket_w * pec.x, jacket_h * pec.y, jacket_w * pec.z},
-				{jacket_w * radii.x, radii.y * (1 - motion.x * soften),
-					radii.z * (1 - motion.y * soften + motion.z * trained)}, skin)
-		}
-	}
-
-	// Aim outside the current belly cross-section in torso space, then solve
-	// the arm using fixed segment lengths in the rigid body frame.
-	arm_r := lerp(0.1, 0.135, t) * tone(.Arms, 0.78, 1.5) // noodles when wasted, bulging when built
-	belly_width := belly * (1 + wob)
-	belly_height := belly_y * (1 - wob)
-	reach: [2]Prosio_Reach
-	for side, si in ([2]f32{-1, 1}) {
-		shoulder := Vec3{side * (chest * 0.86), 1.30, 0.035}
-		rest_x := side * (chest + arm_r * 0.85)
-		elbow := Vec3{rest_x, 1.09, 0.04 - side * swing * 0.18}
-		hand := Vec3{rest_x, 0.86 + 0.075 * abs(swing), 0.16 - side * swing * 0.35}
-		holds := p.carry == .Enemy && (side == HOLD_SIDE || two_handed(g.enemies[p.carry_index].kind))
-		item_frame := m
-		switch {
-		case holds:
-			// A hoof on the leg or the tail, wherever it is (or both hooves,
-			// one on each hind leg of a goat): the hold point is turned into
-			// his own frame and kept within arm's reach.
-			local := direction_to_prosio(p.hand - {p.pos.x, p.height, p.pos.y}) / PROSIO_SIZE
-			if two_handed(g.enemies[p.carry_index].kind) {
-				local.x += side * 0.09
-			}
-			local.y = (local.y - HIP * LEG_SCALE) / TORSO_SCALE + HIP // into the compacted body's measurements
-			from_shoulder := local - shoulder
-			reach := linalg.length(from_shoulder)
-			if reach > 0.75 {
-				local = shoulder + from_shoulder * (0.75 / reach)
-			}
-			hand = local
-			elbow = (shoulder + hand) * 0.5 + {side * 0.1, -0.04, 0}
-		case p.carry == .Enemy && (p.swinging || p.strain > 0.4):
-			// The free arm flung out for balance.
-			elbow = {side * (chest + 0.22), 1.25, 0.05}
-			hand = {side * (chest + 0.36), 1.45, 0.12}
-		case p.carry == .Rock:
-			lift := smooth(1 - p.lift_t / max(p.lift_total, 0.001))
-			reach := (r + carry_radius()) * (1 - lift)
-			hand = {side * lerp(carry_radius() * 0.66, 0.37, lift), lerp(0.54, 2.29, lift), lerp(reach, 0.10, lift)}
-			elbow = {side * max(chest + 0.21, 0.53), lerp(0.99, 1.78, lift), 0.19 + 0.25 * (1 - lift)}
-		case picking && side == HOLD_SIDE:
-			// Down to the ground in front of him, then up and back over his
-			// shoulder.
-			ground := Vec3{side * (chest * 0.7), 0.2, belly_out + belly + 0.25}
-			sack := Vec3{side * (chest * 0.6), 1.62, -0.12}
-			low := hand + (ground - hand) * reach_down
-			hand = low + (sack - low) * stow
-			elbow = shoulder + (hand - shoulder) * 0.5 + {side * 0.16, 0.06, 0}
-		case reaction.hiccup > 0:
-			// A startle on the first beat and loose elbows as the hop settles.
-			elbow.z += reaction.hiccup * PROSIO_REACTION_ARMS.y
-			hand.y += reaction.hiccup * PROSIO_REACTION_ARMS.z
-		case p.airborne:
-			elbow = {side * (chest + 0.23), 1.36, 0.07}
-			hand = {side * (chest + 0.32), 1.62, 0.18}
-		case p.eat_t > 0:
-			hand = {side * 0.24, 1.55, 0.48}
-			elbow.z = 0.32
-		case p.shake_t > 0 && p.fail == .None:
-			// Both hooves on the trunk in front of him, shaking it to and fro.
-			jiggle := math.sin(g.time * 38) * 0.06 * p.shake_power
-			hand = {side * 0.22, 1.2, belly_out + belly + 0.3 + jiggle}
-			elbow = {side * (chest + 0.12), 1.2, (belly_out + belly) * 0.5 + jiggle * 0.5}
-		case p.dash_t > 0:
-			hand.y, hand.z = 1.02, -0.31
-			elbow.z = -0.23
-		case reaction.gas > 0 || reaction.tipsy > 0:
-			// Loose, asymmetric counterbalance during the stagger.
-			brace := reaction.gas * PROSIO_REACTION_WIND.z
-			spread := max(0, reaction.tipsy + side * reaction.sway) * PROSIO_REACTION_ARMS.x
-			elbow.x += side * (spread + brace)
-			hand.x += side * spread
-			hand.y += spread
-			hand.z -= brace
-		}
-		for point in ([2]^Vec3{&elbow, &hand}) {
-			dy := (point.y - belly_mid) / belly_height
-			dz := (point.z - belly_out) / belly_width
-			section := 1 - dy * dy - dz * dz
-			if section > 0 {
-				clearance := belly_width * math.sqrt(section) + arm_r * 1.17
-				point.x = side * max(abs(point.x), clearance)
-			}
-
-		}
-		if character {
-			reaching := p.carry != .Nothing || p.airborne || picking && side == HOLD_SIDE ||
-				p.eat_t > 0 || p.shake_t > 0 || p.dash_t > 0 || reaction.gas > 0 || reaction.tipsy > 0
-			elbow.y = (elbow.y - HIP) * TORSO_SCALE + HIP * LEG_SCALE
-			grip := hand
-			grip.y = (grip.y - HIP) * TORSO_SCALE + HIP * LEG_SCALE
-			if p.carry == .Enemy {
-				both := two_handed(g.enemies[p.carry_index].kind)
-				if side == HOLD_SIDE || both {
-					contact := p.hand
-					if both {
-						contact += hold_apart(side)
-					}
-					grip = prosio_point_in(linalg.inverse(root), contact)
-				}
-			}
-			reach[si] = {reaching, elbow, grip}
-		} else {
-			// Chubby arms: a plump upper arm with a round biceps, narrowing to
-			// the elbow, then a forearm narrowing to the hoof; a round shoulder
-			// joins it to his chest. Then the sleeve, if what he wears has one.
-			if bind {
-				elbow.x += side * arm_r * 1.45
-				hand.x += side * arm_r * 2.25
-			}
-			for point in ([3]^Vec3{&shoulder, &elbow, &hand}) {
-				point.y = (point.y - HIP) * TORSO_SCALE + HIP * LEG_SCALE
-				point^ *= squash
-			}
-			if holds {
-				contact := p.hand
-				if two_handed(g.enemies[p.carry_index].kind) {
-					contact += hold_apart(side)
-				}
-				hand = prosio_point_in(linalg.inverse(root), contact)
-			}
-			elbow, hand = prosio_base_arm(shoulder, elbow, hand, side)
-			item_frame = root
-			axial := PROSIO_BASE_ARM_AXIAL
-			prosio_base_taper(&pose, prosio_side_part(.Upper_Arm_L, side), root, shoulder, elbow, arm_r * 1.75, skin)
-			prosio_base_ball(&pose, prosio_side_part(.Biceps_L, side), root, shoulder + (elbow - shoulder) * 0.45,
-				{arm_r * 1.45, axial.y, arm_r * 1.45}, skin)
-			prosio_base_ball(&pose, prosio_side_part(.Elbow_L, side), root, elbow, {arm_r * 1.05, axial.z, arm_r * 1.05}, skin)
-			prosio_base_taper(&pose, prosio_side_part(.Forearm_L, side), root, elbow, hand, arm_r * 1.12, skin)
-			prosio_base_ball(&pose, prosio_side_part(.Shoulder_L, side), root, shoulder, {arm_r * 1.7, axial.x, arm_r * 1.7}, skin)
-			draw_sleeve(root, shoulder, elbow, hand, arm_r)
-			if pose.collect {
-				dim := PROSIO_BASE_HAND_RADII
-				prosio_base_ball(&pose, prosio_side_part(.Hand_L, side), root, hand, {arm_r * dim.x, dim.y * TORSO_SCALE, arm_r * dim.z}, skin)
-			} else {
-				ball(root, hand, {arm_r * 1.1, 0.1 * TORSO_SCALE, arm_r * 1.15}, COLOR_HOOF)
-			}
-		}
-		if picking && !p.drinking && side == HOLD_SIDE && u > 0.45 {
-			// What he picked up, in his hoof.
-			ball(item_frame, hand + {0, 0.1, 0.04}, {0.11, 0.11, 0.11}, ITEM_COLOR[p.pick_item])
-		}
-	}
-
-	if character {
-		draw_prosio_character(root, swing, t, wob, stoop, reach, eyes_closed, reaction)
-	}
-	if !character {
-		// Head: cheeks get rounder too.
-		munch: f32 = p.eat_t > 0 ? math.sin(p.eat_t * 40) * 0.05 : 0
-		cheeks := head * (1 + 0.2 * t)
-		if pose.collect {
-			prosio_base_face(&pose, root, munch, stoop, brow_tilt, walking, eyes_closed, reaction, skin, skin_dark)
-		} else {
-			h := root * translate({0, HEAD_HEIGHT + munch, 0.04}) * rot_x(-0.16)
-			if picking {
-				h = h * rot_x(0.3 * stoop) // looking at what he picks up
-			}
-			ball(h, {}, {cheeks, head * 0.95, head}, skin)
-			draw_hair(h, cheeks, head, swing)
-			draw_hat(h, h * rot_z(-0.075), cheeks, head, swing)
-			for side in ([2]f32{-1, 1}) {
-				// Floppy ears: they hang down beside his cheeks, flap a little as he
-				// walks, and fly up when he falls.
-				droop := EAR_DROOP + (walking ? 0.14 * math.sin(p.walk_phase * 2 + side) : 0.03 * math.sin(g.time * 2 + side))
-				if p.airborne {
-					droop = clamp(1.5 + p.vy * 0.09, 0.6, EAR_DROOP)
-				}
-				root := Vec3{side * cheeks * 0.86, 0.24, -0.02}
-				ear := h * translate(root) * rot_x(0.15) * rot_z(-side * droop)
-				ball(ear, {0, 0.19, 0}, {0.14, 0.22, 0.055}, skin)
-				ball(ear, {0, 0.2, 0.03}, {0.09, 0.15, 0.035}, skin_dark)
-				// Big glossy eyes, set wide and low.
-				if eyes_closed {
-					box(h, {side * 0.19, 0.03, 0.42}, {0.13, 0.028, 0.03}, COLOR_BLACK)
-				} else {
-					eye := h * translate({side * 0.19, 0.035, 0.385}) * rot_y(side * 0.3)
-					ball(eye, {}, {0.085, 0.115, 0.06}, COLOR_BLACK)
-					ball(eye, {-0.026, 0.045, 0.045}, {0.034, 0.04, 0.02}, COLOR_WHITE)
-					ball(eye, {0.028, -0.042, 0.05}, {0.016, 0.016, 0.01}, COLOR_WHITE)
-				}
-				// Little eyebrows show how he feels.
-				brow := h * translate({side * 0.19, 0.21, 0.37}) * rot_z(side * brow_tilt)
-				box(brow, {}, {0.09, 0.022, 0.03}, COLOR_HOOF)
-				// Rosy cheeks.
-				cheek := h * translate({side * cheeks * 0.62, -0.1, 0.31}) * rot_y(side * 0.6)
-				ball(cheek, {}, {0.105, 0.06, 0.034}, ANIMAL_BLUSH)
-				ball(h, {side * 0.06, -0.085, 0.53}, {0.024, 0.033, 0.018}, COLOR_NOSTRIL)
-			}
-			ball(h, {0, -0.1, 0.415}, {0.165, 0.112, 0.13}, skin_dark)
-			draw_face_outfit(h, cheeks)
-			switch {
-			case p.eat_t > 0 || p.airborne:
-				ball(h, {0, -0.235, 0.35}, {0.06, 0.05, 0.03}, COLOR_NOSTRIL) // open mouth
-			case p.strain > 0.5 || p.heave_t > 0 || eyes_closed && p.fail != .None:
-			case outfit.face == .None:
-				draw_smile(h * translate({0, -0.235, 0.37}), 0.05) // a small contented smile
-			}
-			if p.strain > 0.5 || p.heave_t > 0 {
-				ball(h, {0, -0.22, 0.34}, {0.09, 0.025, 0.03}, COLOR_WHITE) // gritted teeth
-			}
-		}
-	}
-	if export_pose != nil {
-		export_pose^ = pose
-		return
-	}
+	pose := prosio_pose()
 	when PROSIO_BASE {
-		if base_mesh {
-			prosio_base_skin(&pose)
-			draw_prosio_base_mesh(skin)
+		if prosio_base_visible() {
+			draw_prosio_skin(&pose)
+		} else {
+			draw_prosio_shapes(&pose)
 		}
+	} else {
+		draw_prosio_shapes(&pose)
 	}
 	head_top := Vec3{p.pos.x, p.height + (2.2 + prosio_base_head_lift()) * PROSIO_SIZE, p.pos.y}
 	if p.dazed_t > 0 {
@@ -1335,6 +962,103 @@ draw_prosio :: proc(export_pose: ^Prosio_Base_Pose = nil, bind := false) {
 		ball(hm, {-0.13, 0.08, 0}, {0.17, 0.17, 0.12}, COLOR_HEART)
 		ball(hm, {0.13, 0.08, 0}, {0.17, 0.17, 0.12}, COLOR_HEART)
 		draw_shape(.Cone, hm * translate({0, 0.08, 0}) * rot_z(math.PI) * scale({0.29, 0.36, 0.12}), COLOR_HEART)
+	}
+}
+
+// The body he has always had, made of shapes, and his clothes on it, as the
+// pose has it.
+draw_prosio_shapes :: proc(pose: ^Prosio_Pose) {
+	piece :: proc(pose: ^Prosio_Pose, part: Prosio_Part) {
+		it := pose.pieces[part]
+		draw_shape(it.shape, it.frame, it.color)
+	}
+	skin, skin_dark := pose.skin, pose.skin_dark
+	// Legs: a thick thigh tapering to a round knee, then a slimmer shin
+	// tapering to a cloven hoof; and what he wears on them.
+	for side, si in ([2]f32{-1, 1}) {
+		piece(pose, prosio_side_part(.Thigh_L, side))
+		piece(pose, prosio_side_part(.Knee_L, side))
+		piece(pose, prosio_side_part(.Shin_L, side))
+		leg := pose.legs[si]
+		draw_leg_outfit(leg.hip, pose.leg_r, leg.knee, leg.ankle)
+	}
+	// His own body first, whole, with nothing on: two round buttocks, the
+	// belly, and a chest that rises from the top of the belly to his
+	// shoulders. Clothes then go on over it in layers (see outfit.odin), each
+	// a little bigger than what it covers.
+	m := pose.torso
+	piece(pose, .Pelvis)
+	piece(pose, .Haunch_L)
+	piece(pose, .Haunch_R)
+	draw_hips_outfit(m, pose.hips)
+	piece(pose, .Belly)
+	covered := SHIRT_LOOK[outfit.shirt].long || closed_coat() || outfit.over == .Apron
+	if pose.t > 0.25 && !covered {
+		ball(m, {0, pose.belly_mid - 0.08, pose.belly_out + pose.belly_w}, {0.045, 0.045, 0.03}, skin_dark)
+	}
+	piece(pose, .Chest)
+	draw_torso_outfit(m, pose.jacket, pose.jacket_w, pose.jacket_h, pose.chest, pose.belly_w, pose.belly_h, pose.belly_mid, pose.belly_out, pose.hips, pose.swing, skin)
+	if prosio_wears_pack() {
+		// Small canvas pack with a flap and brass clasp, visible from behind; it
+		// sits outside whatever he wears. (Not on the bare pig: it comes back
+		// there with the clothes made for the skin.)
+		pack := m * translate({0, 1.15, -max(pose.chest * 0.78, pose.belly_r * 0.64) - clothes_thickness() - (outfit.over == .Cape ? f32(0.1) : 0)})
+		ball(pack, {}, {0.235, 0.255, 0.135}, COLOR_SHORTS)
+		ball(pack, {0, 0.077, -0.069}, {0.232, 0.123, 0.093}, {89, 133, 126, 255})
+		box(pack, {0, 0.031, -0.165}, {0.047, 0.065, 0.016}, COLOR_SHIRT)
+	}
+	// Chubby arms, a round shoulder joining each to his chest; the sleeve, if
+	// what he wears has one; the hoof; and what he picked up, in it.
+	root := pose.root
+	for side, si in ([2]f32{-1, 1}) {
+		piece(pose, prosio_side_part(.Upper_Arm_L, side))
+		piece(pose, prosio_side_part(.Biceps_L, side))
+		piece(pose, prosio_side_part(.Elbow_L, side))
+		piece(pose, prosio_side_part(.Forearm_L, side))
+		piece(pose, prosio_side_part(.Shoulder_L, side))
+		arm := pose.arms[si]
+		draw_sleeve(root, arm.shoulder, arm.elbow, arm.hand, pose.arm_r)
+		ball(root, arm.hand, {pose.arm_r * 1.1, 0.1 * TORSO_SCALE, pose.arm_r * 1.15}, COLOR_HOOF)
+		if pose.item_shown && pose.item_side == si {
+			ball(root, arm.hand + {0, 0.1, 0.04}, {0.11, 0.11, 0.11}, pose.item_color)
+		}
+	}
+	// The head: big and round, cheeks getting rounder as he does.
+	h, cheeks, head := pose.head, pose.cheeks, pose.head_r
+	ball(h, {}, {cheeks, head * 0.95, head}, skin)
+	draw_hair(h, cheeks, head, pose.swing)
+	draw_hat(h, h * rot_z(-0.075), cheeks, head, pose.swing)
+	for side, si in ([2]f32{-1, 1}) {
+		// Floppy ears.
+		ear := h * translate({side * cheeks * 0.86, 0.24, -0.02}) * rot_x(0.15) * rot_z(-side * pose.ear_droop[si])
+		ball(ear, {0, 0.19, 0}, {0.14, 0.22, 0.055}, skin)
+		ball(ear, {0, 0.2, 0.03}, {0.09, 0.15, 0.035}, skin_dark)
+		// Big glossy eyes, set wide and low.
+		if pose.eyes_closed {
+			box(h, {side * 0.19, 0.03, 0.42}, {0.13, 0.028, 0.03}, COLOR_BLACK)
+		} else {
+			eye := h * translate({side * 0.19, 0.035, 0.385}) * rot_y(side * 0.3)
+			ball(eye, {}, {0.085, 0.115, 0.06}, COLOR_BLACK)
+			ball(eye, {-0.026, 0.045, 0.045}, {0.034, 0.04, 0.02}, COLOR_WHITE)
+			ball(eye, {0.028, -0.042, 0.05}, {0.016, 0.016, 0.01}, COLOR_WHITE)
+		}
+		// Little eyebrows show how he feels.
+		brow := h * translate({side * 0.19, 0.21, 0.37}) * rot_z(side * pose.brow_tilt)
+		box(brow, {}, {0.09, 0.022, 0.03}, COLOR_HOOF)
+		// Rosy cheeks.
+		cheek := h * translate({side * cheeks * 0.62, -0.1, 0.31}) * rot_y(side * 0.6)
+		ball(cheek, {}, {0.105, 0.06, 0.034}, ANIMAL_BLUSH)
+		ball(h, {side * 0.06, -0.085, 0.53}, {0.024, 0.033, 0.018}, COLOR_NOSTRIL)
+	}
+	ball(h, {0, -0.1, 0.415}, {0.165, 0.112, 0.13}, skin_dark)
+	draw_face_outfit(h, cheeks)
+	if pose.mouth_open {
+		ball(h, {0, -0.235, 0.35}, {0.06, 0.05, 0.03}, COLOR_NOSTRIL) // open mouth
+	} else if !pose.quiet && outfit.face == .None {
+		draw_smile(h * translate({0, -0.235, 0.37}), 0.05) // a small contented smile
+	}
+	if pose.teeth {
+		ball(h, {0, -0.22, 0.34}, {0.09, 0.025, 0.03}, COLOR_WHITE) // gritted teeth
 	}
 }
 
@@ -1472,4 +1196,10 @@ draw_plant :: proc(d: Decor, m: Mat4) {
 		size := FERN_SIZE * (0.8 + 0.4 * tree_random(d.variant, 7))
 		draw_tree_part(FERNS[d.variant % 3], .Leaves, m * scale({size, size, size}), shade(COLOR_FERN, 0.85 + 0.3 * tree_random(d.variant, 8)))
 	}
+}
+
+// He carries his canvas pack in every outfit but the bare pig (it comes back
+// there with the clothes made for his skin).
+prosio_wears_pack :: proc() -> bool {
+	return outfit != PRESETS[.Bare]
 }
