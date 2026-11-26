@@ -164,7 +164,7 @@ NEED_SILLY :: Color{240, 150, 220, 255}
 // muscle: its part of what he is made of, and a muscle built past ordinary on the BODY page
 MUSCLE_RED :: Color{232, 110, 96, 255}
 // the colour of each part of him, in the bar of what he is made of and on the BODY page
-PART_COLOR := [Part]Color{.Fat = {246, 206, 70, 255}, .Muscle = MUSCLE_RED, .Carbs = {244, 150, 60, 255}, .Protein = {236, 150, 190, 255}, .Fibre = {120, 196, 96, 255}, .Water = {80, 170, 240, 255}, .Frame = {168, 168, 178, 255}}
+PART_COLOR := [Part]Color{.Fat = {246, 206, 70, 255}, .Muscle = MUSCLE_RED, .Carbs = {244, 150, 60, 255}, .Protein = {236, 150, 190, 255}, .Fibre = {120, 196, 96, 255}, .Water = {80, 170, 240, 255}, .Stomach = {172, 116, 74, 255}, .Frame = {168, 168, 178, 255}}
 // Each need's bar, when all is well.
 NEED_BAR := [Need]Color{.Carbs = {240, 160, 60, 255}, .Protein = {232, 120, 150, 255}, .Fibre = {110, 190, 80, 255}, .Water = {90, 160, 240, 255}, .Vitamins = {246, 206, 70, 255}, .Electrolytes = {220, 220, 220, 255}}
 

@@ -53,8 +53,12 @@ SCARECROW_RADIUS :: f32(0.22)
 SCARECROW_REACH :: f32(9)
 // The rod: how far out it reaches for a fish, from where he stands.
 ROD_REACH :: f32(4)
-// The spear. It leaves his hoof as a stone of its weight would, and what it takes from an animal's health when thrown as fast as an arm can (ARM_SPEED) is SPEAR_BLOW; slower, less, by the square of the speed. The animal is not bowled over, it staggers for SPEAR_STAGGER seconds.
-SPEAR_KG :: f32(1.5)
+// The spear. It leaves his hoof as a stone of its weight would, and harms by all the energy it flies with, a sharp blow (BLOW_FACTOR in animals.json): at ARM_SPEED half a turkey's health; slower, less, by the square of the speed. The animal is not bowled over, it staggers for SPEAR_STAGGER seconds.
+when WORKBENCH {
+	SPEAR_KG: f32 = 1.5
+} else {
+	SPEAR_KG :: f32(1.5)
+}
 // how big a thrown spear is when it hits something, in metres
 SPEAR_RADIUS :: f32(0.12)
 // stamina to throw one
@@ -63,8 +67,6 @@ SPEAR_COST :: f32(6)
 SPEAR_LEN :: f32(1.5)
 // seconds an animal hit by a spear staggers
 SPEAR_STAGGER :: f32(0.8)
-// health a spear thrown at ARM_SPEED takes from each kind (out of ENEMY_HEALTH); raise it and fewer spears bring one down
-SPEAR_BLOW := [Enemy_Kind]f32{.Turkey = 55, .Goat = 40, .Billy = 28, .Fox = 60}
 
 // ---- larder ----
 // food keeps this many times as long in a larder

@@ -19,11 +19,12 @@ import "core:os"
 import "core:strings"
 import "core:time"
 
-OUT :: "build/workbench"
-LIB_DIR :: OUT + "/lib"
-LOG :: OUT + "/build.log"
-COMMAND_FILE :: OUT + "/command.txt"
-ANSWER_FILE :: OUT + "/answer.txt"
+// Its folder: build/workbench, or WORKBENCH_OUT (another, for a second
+// workbench beside the first: an agent's, say). One workbench to a folder:
+// a second started on the same one would share its command file, and each
+// would take the other's commands; it says so and stops.
+out_dir := "build/workbench"
+lib_dir, log_file, command_file, answer_file, exports_file: string
 // What is watched, and how often.
 WATCHED :: [?]string{"src/game", "src/workbench", "data", "assets"}
 WATCH_EXTENSIONS :: [?]string{".odin", ".json", ".vert", ".frag", ".glb"}
@@ -89,20 +90,34 @@ libraries: int
 seen: map[string]time.Time
 
 main :: proc() {
+	if dir := os.get_env("WORKBENCH_OUT", context.allocator); dir != "" {
+		out_dir = dir
+	}
+	lib_dir = fmt.aprintf("%s/lib", out_dir)
+	log_file = fmt.aprintf("%s/build.log", out_dir)
+	command_file = fmt.aprintf("%s/command.txt", out_dir)
+	answer_file = fmt.aprintf("%s/answer.txt", out_dir)
+	exports_file = fmt.aprintf("%s/exports.txt", out_dir)
+	os.make_directory_all(out_dir)
+	if other := running_here(); other != "" {
+		fmt.eprintfln("workbench: another workbench is running on %s (process %s): it would take this one's commands. Close it, or start this one with WORKBENCH_OUT=build/workbench_2", out_dir, other)
+		os.exit(1)
+	}
+	_ = os.write_entire_file(fmt.tprintf("%s/pid", out_dir), transmute([]byte)fmt.tprintf("%d", os.get_pid()))
 	for arg in os.args[1:] {
 		if arg == "--skin" {
 			defines["PROSIO_BASE"] = "true"
 		}
 	}
-	os.make_directory_all(LIB_DIR)
-	_ = os.write_entire_file(EXPORTS, "_wb_*\n")
+	os.make_directory_all(lib_dir)
+	_ = os.write_entire_file(exports_file, "_wb_*\n")
 	clear_old_libraries()
 	scan(&seen)
 	path := next_library_path()
 	fmt.println("workbench: building the game...")
 	start := time.now()
 	if !build_now(path) {
-		text, _ := os.read_entire_file(LOG, context.allocator)
+		text, _ := os.read_entire_file(log_file, context.allocator)
 		fmt.eprintln(string(text))
 		fmt.eprintln("workbench: the game does not build; fix it and start again")
 		os.exit(1)
@@ -115,7 +130,7 @@ main :: proc() {
 		// Said on the console and in the answers, for whoever drives the
 		// workbench from a shell (an agent at night reads it there).
 		fmt.eprintln(NO_DISPLAY)
-		append_line(ANSWER_FILE, NO_DISPLAY)
+		append_line(answer_file, NO_DISPLAY)
 		os.exit(1)
 	}
 	api.load_graphics()
@@ -143,6 +158,22 @@ main :: proc() {
 	api.shutdown()
 }
 
+// The process of another workbench running on this folder, if there is one
+// (its pid file, and the process still alive).
+running_here :: proc() -> string {
+	data, err := os.read_entire_file(fmt.tprintf("%s/pid", out_dir), context.temp_allocator)
+	pid := strings.trim_space(string(data))
+	if err != nil || pid == "" || pid == fmt.tprintf("%d", os.get_pid()) {
+		return ""
+	}
+	// (Its output alone: collecting its exit can fail where the process ran.)
+	_, out, _, _ := os.process_exec({command = {"ps", "-p", pid, "-o", "comm="}}, context.temp_allocator)
+	if !strings.contains(string(out), "workbench") {
+		return ""
+	}
+	return pid
+}
+
 // Rebuilds the game in the background, so it keeps running meanwhile.
 start_build :: proc(file: string, saved: time.Time) {
 	build = {running = true, started = time.now(), saved = saved, path = next_library_path(), why = strings.clone(file)}
@@ -153,7 +184,7 @@ start_build :: proc(file: string, saved: time.Time) {
 	cmd := strings.concatenate({
 		strings.has_prefix(file, "data/") ? "build/tools/gen_data . > /dev/null && " : "",
 		strings.has_prefix(file, "assets/") ? "build/tools/pack_assets . > /dev/null && " : "",
-		lib_command(build.path), " > ", LOG, " 2>&1",
+		lib_command(build.path), " > ", log_file, " 2>&1",
 	}, context.temp_allocator)
 	p, err := os.process_start({command = {"sh", "-c", cmd}})
 	if err != nil {
@@ -175,7 +206,7 @@ poll_build :: proc() {
 	build.running = false
 	scan(&seen) // what the build itself wrote (gen_*.odin) does not set off another
 	if state.exit_code != 0 {
-		text, _ := os.read_entire_file(LOG, context.temp_allocator)
+		text, _ := os.read_entire_file(log_file, context.temp_allocator)
 		status.phase = .Failed
 		status.text = string(text)
 		api.set_status(status)
@@ -237,10 +268,9 @@ poll_build :: proc() {
 // weak, and macOS merges weak symbols across everything loaded) would be
 // shared between them: the runtime's eight thread-local slots, for one, which
 // fill up after seven swaps.
-EXPORTS :: OUT + "/exports.txt"
 
 lib_command :: proc(path: string) -> string {
-	link := ODIN_OS == .Darwin ? fmt.tprintf(" -extra-linker-flags:\"-Wl,-exported_symbols_list,%s\"", EXPORTS) : ""
+	link := ODIN_OS == .Darwin ? fmt.tprintf(" -extra-linker-flags:\"-Wl,-exported_symbols_list,%s\"", exports_file) : ""
 	extra := os.get_env("WORKBENCH_FLAGS", context.temp_allocator) // more build flags, for trying (say -o:speed)
 	for name, value in defines {
 		extra = fmt.tprintf("%s -define:%s=%s", extra, name, value)
@@ -249,7 +279,7 @@ lib_command :: proc(path: string) -> string {
 }
 
 build_now :: proc(path: string) -> bool {
-	cmd := fmt.tprintf("sh tools/gen_data.sh && sh tools/pack_assets.sh > /dev/null && %s > %s 2>&1", lib_command(path), LOG)
+	cmd := fmt.tprintf("sh tools/gen_data.sh && sh tools/pack_assets.sh > /dev/null && %s > %s 2>&1", lib_command(path), log_file)
 	state, _, _, err := os.process_exec({command = {"sh", "-c", cmd}}, context.temp_allocator)
 	return err == nil && state.exit_code == 0
 }
@@ -265,11 +295,11 @@ load :: proc(path: string, into: ^Api) -> bool {
 
 next_library_path :: proc() -> string {
 	libraries += 1
-	return fmt.aprintf("%s/game_%d.%s", LIB_DIR, libraries, dynlib.LIBRARY_FILE_EXTENSION)
+	return fmt.aprintf("%s/game_%d.%s", lib_dir, libraries, dynlib.LIBRARY_FILE_EXTENSION)
 }
 
 clear_old_libraries :: proc() {
-	entries, err := os.read_all_directory_by_path(LIB_DIR, context.temp_allocator)
+	entries, err := os.read_all_directory_by_path(lib_dir, context.temp_allocator)
 	if err != nil {
 		return
 	}
@@ -325,16 +355,16 @@ scan :: proc(seen: ^map[string]time.Time) -> (changed: bool, newest: string, sav
 	return
 }
 
-// Commands from outside: each line written to COMMAND_FILE runs once, and its
-// answer is added to ANSWER_FILE. Besides the library's own commands (see
+// Commands from outside: each line written to command_file runs once, and its
+// answer is added to answer_file. Besides the library's own commands (see
 // wb_command), "quit" closes the workbench and "status" says how the last
 // build went.
 run_commands :: proc() {
-	if !os.exists(COMMAND_FILE) {
+	if !os.exists(command_file) {
 		return
 	}
-	text, err := os.read_entire_file(COMMAND_FILE, context.temp_allocator)
-	_ = os.remove(COMMAND_FILE)
+	text, err := os.read_entire_file(command_file, context.temp_allocator)
+	_ = os.remove(command_file)
 	if err != nil {
 		return
 	}
@@ -352,12 +382,12 @@ run_commands :: proc() {
 		case:
 			answer = api.command(line)
 		}
-		append_line(ANSWER_FILE, fmt.tprintf("%s -> %s", line, answer))
+		append_line(answer_file, fmt.tprintf("%s -> %s", line, answer))
 	}
 }
 
 log_event :: proc(msg: string) {
-	append_line(OUT + "/events.txt", fmt.tprintf("%v %s", time.now(), msg))
+	append_line(fmt.tprintf("%s/events.txt", out_dir), fmt.tprintf("%v %s", time.now(), msg))
 }
 
 append_line :: proc(path, line: string) {

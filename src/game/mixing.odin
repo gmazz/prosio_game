@@ -88,6 +88,7 @@ Mark :: enum u8 {
 	Pieces, // stays in pieces in a mix (a filling)
 	Mashes, // in a bowl with flour it is mashed into it, starch and all
 	Shell, // keeps in its shell until it is cracked into a bowl
+	Flour, // a flour: dried and ground (wheat flour; anything dried and milled is one too, see mill)
 }
 
 // What a food is, beyond its calories and shares (MIXABLE).
@@ -121,6 +122,7 @@ Grams :: [Matter]f32
 Mix_Kind :: enum {
 	Crumbs,
 	Dough,
+	Paste, // kneadable with flour, but too little gluten to hold a loaf: flat cakes, dumplings
 	Batter,
 	Slop,
 	Egg_Mix,
@@ -152,6 +154,7 @@ Dish_Kind :: enum {
 	Bread,
 	Pie, // bread with pieces, or a flat dough with things on top
 	Flatbread,
+	Flat_Cake, // a paste (flour without gluten) baked or grilled: dense, it never rises
 	Pasty, // a dough wrapped round a filling, baked
 	Layered_Bake,
 	Rolls,
@@ -233,6 +236,7 @@ Flaw :: enum {
 	Soggy, // leaves heated dry
 	Falls_Apart, // boiled far too long
 	Hard_To_Digest, // eaten raw, and it wants cooking
+	Dense, // a loaf with too little gluten to rise: heavy and crumbly
 }
 
 Texture :: enum {
@@ -251,8 +255,21 @@ Setting :: enum {
 }
 
 Bowl_Part :: struct {
-	food:   Mixable,
-	amount: f32, // in the food's unit
+	food:     Mixable,
+	amount:   f32, // in the food's unit (grams, for a food milled)
+	milled:   bool, // the food dried and milled into a flour (see mill)
+	water:    f32, // milled: the share of it that is water
+	microbes: f32, // milled: its microorganisms, a power of ten a gram
+}
+
+// Why a dried food will not mill into a flour.
+Mill_Refusal :: enum {
+	None,
+	Not_One_Food, // only one food at a time
+	Already, // it is a flour already
+	Too_Wet, // more water than MILL_WATER_MOST: dry it longer
+	Too_Fatty, // more fat than MILL_FAT_MOST: it makes a paste, not a flour
+	Burnt, // charcoal mills into soot
 }
 
 // What is done to the things before and while they are mixed.
@@ -294,8 +311,9 @@ Mix :: struct {
 	veg_g:        f32, // vegetables and fruit (whole, not pressed)
 	leafy_g:      f32, // leafy vegetables
 	hard_g:       f32, // what wants cooking
-	flour:        f32, // starch from flour (not in pieces, not vegetables), share of the weight
-	free_starch:  f32, // starch free in the mix: flour's, and what is mashed in, share of the weight
+	flour:        f32, // starch from flours (wheat flour, or anything dried and milled), share of the weight
+	gluten:       f32, // gluten, share of the weight (wheat's protein: GLUTEN)
+	free_starch:  f32, // starch free in the mix, to thicken it: flours', and what is mashed in, share of the weight
 	free_liquid:  f32, // share of the weight
 	consistency:  Consistency,
 	kind:         Mix_Kind,
@@ -330,6 +348,7 @@ Dish :: struct {
 	flaws:        bit_set[Flaw],
 	water_lost:   f32, // grams driven off
 	water_gained: f32, // grams taken up in the pot
+	water_held:   f32, // grams of water held as a gel by starch, a liquid thickened in the pot
 	alcohol_lost: f32, // grams driven off
 	poured_off:   f32, // grams of liquid that ran away (a soup heated dry)
 	grams:        f32, // what is left: the weight
@@ -366,7 +385,45 @@ unit_grams :: proc(food: Mixable) -> f32 {
 }
 
 part_grams :: proc(part: Bowl_Part) -> f32 {
-	return part.amount * unit_grams(part.food)
+	return part.milled ? part.amount : part.amount * unit_grams(part.food)
+}
+
+// What a part is made of: the food, or, milled, what is left of it once its
+// water is driven off to part.water.
+part_matter :: proc(part: Bowl_Part) -> (m: Grams) {
+	g := part_grams(part)
+	if !part.milled {
+		return food_matter(part.food, g)
+	}
+	fresh := food_matter(part.food, 100)
+	dry := 100 - fresh[.Water]
+	for v, k in fresh {
+		if k != .Water {m[k] = v / dry * g * (1 - part.water)}
+	}
+	m[.Water] = g * part.water
+	return
+}
+
+// The calories in a part (a milled food has those of the fresh food it came
+// from: drying takes only water).
+part_kcal :: proc(part: Bowl_Part) -> f32 {
+	if !part.milled {
+		return food_kcal_per_g(part.food) * part_grams(part)
+	}
+	fresh := food_matter(part.food, 100)
+	return food_kcal_per_g(part.food) * 100 * part_grams(part) * (1 - part.water) / (100 - fresh[.Water])
+}
+
+// The marks of a part: a milled food is a flour, and nothing else (it wants
+// cooking still, if the food did).
+part_marks :: proc(part: Bowl_Part) -> bit_set[Mark] {
+	marks := MIXABLE[part.food].marks
+	return part.milled ? {.Flour} + (marks & {.Wants_Cooking}) : marks
+}
+
+// How much of a part is gluten, in grams.
+part_gluten :: proc(part: Bowl_Part, matter: Grams) -> f32 {
+	return matter[.Protein] * GLUTEN[part.food]
 }
 
 // Whether a food has calories and shares of its own, rather than those of
@@ -473,11 +530,11 @@ bowl_refusal :: proc(parts: []Bowl_Part) -> Bowl_Refusal {
 			return .No_Amount
 		}
 		unit := MIXABLE[part.food].unit
-		if unit == .Egg && part.amount != math.floor(part.amount) {
+		if unit == .Egg && !part.milled && part.amount != math.floor(part.amount) {
 			return .Not_Whole
 		}
 		for other in parts[:i] {
-			if other.food == part.food {
+			if other.food == part.food && other.milled == part.milled {
 				return .Twice
 			}
 		}
@@ -505,23 +562,29 @@ mix_bowl :: proc(parts: []Bowl_Part, prep: Prep) -> (m: Mix, refused: Bowl_Refus
 	}
 	m.n = len(parts)
 	m.prep = prep
-	// Flour first: whether there is any decides what mashes.
-	total, flour: f32
+	// Flour first: whether there is any decides what mashes. Flour is the
+	// starch of a flour, anything dried and ground (wheat flour, or a food
+	// dried and milled), whatever it came from; a spice's, a herb's or an
+	// egg's starch is starch, not flour. Gluten (wheat's) is apart: it is what
+	// makes a dough that rises (gluten_strength).
+	total, flour, gluten: f32
 	for part in parts {
-		g := part_grams(part)
-		total += g
-		marks := MIXABLE[part.food].marks
-		if card(marks & {.Pieces, .Mashes}) == 0 && !is_vegetable(part.food) {
-			flour += food_matter(part.food, g)[.Starch]
+		total += part_grams(part)
+		matter := part_matter(part)
+		if .Flour in part_marks(part) {
+			flour += matter[.Starch]
 		}
+		gluten += part_gluten(part, matter)
 	}
 	with_flour := flour / total >= FLOUR_LEAST
 	free, set, count: f32
 	for part, i in parts {
 		m.parts[i] = part
 		f := MIXABLE[part.food]
+		marks := part_marks(part)
+		vegetable := is_vegetable(part.food) && !part.milled
 		g := part_grams(part)
-		matter := food_matter(part.food, g)
+		matter := part_matter(part)
 		m.foods += {part.food}
 		m.grams += g
 		for v, k in matter {
@@ -529,16 +592,16 @@ mix_bowl :: proc(parts: []Bowl_Part, prep: Prep) -> (m: Mix, refused: Bowl_Refus
 		}
 		how := In_Bowl.Free
 		switch {
-		case prep.pressed && is_vegetable(part.food):
-		case .Mashes in f.marks && with_flour:
+		case prep.pressed && vegetable:
+		case .Mashes in marks && with_flour:
 			how = .Mashed
-		case .Pieces in f.marks || .Mashes in f.marks:
+		case .Pieces in marks || .Mashes in marks:
 			how = .Pieces
 		}
 		held: f32 = 1 // the share of it free in the mix
 		switch how {
 		case .Free:
-			if !is_vegetable(part.food) || prep.pressed {
+			if .Flour in marks {
 				m.free_starch += matter[.Starch]
 			}
 		case .Pieces:
@@ -548,23 +611,23 @@ mix_bowl :: proc(parts: []Bowl_Part, prep: Prep) -> (m: Mix, refused: Bowl_Refus
 			held = MASH_FREE
 			m.free_starch += matter[.Starch]
 		}
-		if is_vegetable(part.food) && !prep.pressed {
+		if vegetable && !prep.pressed {
 			m.veg_g += g
 		}
-		if .Leafy in f.marks {
+		if .Leafy in marks {
 			m.leafy_g += g
 		}
-		if .Wants_Cooking in f.marks {
+		if .Wants_Cooking in marks {
 			m.hard_g += g
 		}
 		free += held * (matter[.Water] + FAT_LIQUID * matter[.Fat])
 		set += held * f.setting * matter[.Protein]
 		m.bitter += f.bitter * g
 		m.heat += f.heat * g
-		microbes := food_microbes(part.food, prep)
+		microbes := part.milled ? part.microbes : food_microbes(part.food, prep)
 		m.spoiled ||= microbes >= SPOILED_MICROBES
 		count += math.pow(10, microbes) * g
-		kcal := food_kcal_per_g(part.food) * g
+		kcal := part_kcal(part)
 		m.kcal += kcal
 		m.shares += food_shares(part.food) * kcal
 	}
@@ -572,6 +635,7 @@ mix_bowl :: proc(parts: []Bowl_Part, prep: Prep) -> (m: Mix, refused: Bowl_Refus
 		m.shares /= m.kcal
 	}
 	m.flour = flour / m.grams
+	m.gluten = gluten / m.grams
 	m.free_liquid = free / m.grams
 	m.free_starch /= m.grams
 	m.setting = set / m.grams
@@ -588,7 +652,7 @@ mix_bowl :: proc(parts: []Bowl_Part, prep: Prep) -> (m: Mix, refused: Bowl_Refus
 	case:
 		m.consistency = .Runny
 	}
-	m.kind = mix_kind(m.consistency, with_flour, m.veg_g / m.grams, m.filling_g / m.grams, m.setting)
+	m.kind = mix_kind(m.consistency, with_flour, m.veg_g / m.grams, m.filling_g / m.grams, m.setting, gluten_strength(m))
 	m.best_minutes = best_mix_minutes(m)
 	m.minutes = prep.minutes
 	// One thing alone needs no mixing.
@@ -610,7 +674,7 @@ mix_bowl :: proc(parts: []Bowl_Part, prep: Prep) -> (m: Mix, refused: Bowl_Refus
 // The kind of mix: a salad if it is mostly vegetables and fruit, without
 // flour; else by its consistency, whether there is flour, pieces, and how
 // much of it sets (the tables in wd1b, section 4, and wd1c, section 3).
-mix_kind :: proc(consistency: Consistency, flour: bool, veg, pieces, setting: f32) -> Mix_Kind {
+mix_kind :: proc(consistency: Consistency, flour: bool, veg, pieces, setting: f32, gluten: f32 = 1) -> Mix_Kind {
 	if veg >= SALAD_LEAST && !flour {
 		return .Salad
 	}
@@ -618,7 +682,8 @@ mix_kind :: proc(consistency: Consistency, flour: bool, veg, pieces, setting: f3
 	switch consistency {
 	case .Crumbly, .Kneadable:
 		if flour {
-			return consistency == .Crumbly ? .Crumbs : .Dough
+			if consistency == .Crumbly {return .Crumbs}
+			return gluten >= GLUTEN_DOUGH ? .Dough : .Paste
 		}
 		return has_pieces ? .Pieces : .Mush
 	case .Pourable:
@@ -635,6 +700,16 @@ mix_kind :: proc(consistency: Consistency, flour: bool, veg, pieces, setting: f3
 	return .Mush
 }
 
+// How much gluten the flour in a mix has, against a bread dough's (wheat
+// flour's own, GLUTEN_FULL grams of gluten to a gram of flour starch): 1 for
+// wheat, 0 for a flour of anything else, and in proportion for a mix of
+// flours. It decides a dough (that rises) from a paste, and how dense a loaf
+// comes out.
+gluten_strength :: proc(m: Mix) -> f32 {
+	if m.flour <= 0 {return 0}
+	return clamp(m.gluten / m.flour / GLUTEN_FULL, 0, 1)
+}
+
 // 1 between right_low and right_high, falling to 0 at zero_low and zero_high.
 ramp :: proc(x, zero_low, right_low, right_high, zero_high: f32) -> f32 {
 	if x < right_low {
@@ -646,12 +721,13 @@ ramp :: proc(x, zero_low, right_low, right_high, zero_high: f32) -> f32 {
 	return 1
 }
 
-// The best mixing time, minutes: long for a stiff flour and water dough,
-// short for a rich batter, shortest for a drink.
+// The best mixing time, minutes: long for a stiff dough with gluten to
+// develop (kneading builds its net), short for a rich batter or a dough
+// without gluten, shortest for a drink.
 best_mix_minutes :: proc(m: Mix) -> f32 {
 	rich := (m.matter[.Fat] + m.matter[.Sugar]) / m.grams
 	stiff := math.pow(max(1 - m.free_liquid, 0), MIX_STIFFNESS)
-	return min(MIX_LEAST + MIX_DEVELOP * m.free_starch * stiff * max(0, 1 - MIX_RICH * rich) + MIX_PER_SET * m.setting, MIX_MOST)
+	return min(MIX_LEAST + MIX_DEVELOP * m.gluten / GLUTEN_FULL * stiff * max(0, 1 - MIX_RICH * rich) + MIX_PER_SET * m.setting, MIX_MOST)
 }
 
 // ---- Shaping. ----
@@ -660,7 +736,7 @@ shape_refusal :: proc(m: Mix, shape: Dough_Shape, filled: bool) -> Shape_Refusal
 	if shape == .Loaf && !filled {
 		return .None
 	}
-	if m.kind != .Dough {
+	if m.kind != .Dough && m.kind != .Paste {
 		return .Not_Dough
 	}
 	switch shape {
@@ -810,7 +886,7 @@ cook :: proc(m: Mix, how: Heating, temperature, minutes: f32, bonus: f32) -> (d:
 			return
 		case .Soup:
 			return cook_soup_dry(m, how, temperature, minutes, bonus)
-		case .Crumbs, .Dough, .Batter, .Slop, .Egg_Mix, .Salad, .Pieces, .Mush:
+		case .Crumbs, .Dough, .Paste, .Batter, .Slop, .Egg_Mix, .Salad, .Pieces, .Mush:
 		}
 	}
 	best := best_temperature(m)
@@ -827,6 +903,9 @@ cook :: proc(m: Mix, how: Heating, temperature, minutes: f32, bonus: f32) -> (d:
 		// Nothing burns in water. Starch takes it up; a liquid boils down.
 		if liquid {
 			d.water_lost = m.matter[.Water] * min(BOIL_OFF * minutes, BOIL_OFF_MOST)
+			// Starch from flour or mash, cooked through, holds water as a gel:
+			// it thickens (potato flour far more than pumpkin's).
+			d.water_held = min(STARCH_THICKENS * m.free_starch * m.grams * min(d.inside, 1), m.matter[.Water] - d.water_lost)
 		} else {
 			d.water_gained = BOIL_ABSORB * m.matter[.Starch] * min(d.inside, 1)
 		}
@@ -843,7 +922,7 @@ cook :: proc(m: Mix, how: Heating, temperature, minutes: f32, bonus: f32) -> (d:
 		switch {
 		case d.outside >= CHAR_AT[how] && d.inside >= 1:
 			d.kind = .Charcoal
-		case (m.kind == .Dough || m.kind == .Slop) && d.dried >= BRICK_DRY:
+		case (m.kind == .Dough || m.kind == .Paste || m.kind == .Slop) && d.dried >= BRICK_DRY:
 			d.kind = .Brick
 		}
 	}
@@ -855,6 +934,8 @@ cook :: proc(m: Mix, how: Heating, temperature, minutes: f32, bonus: f32) -> (d:
 	if d.outside >= BURNT_CRUST {d.flaws += {.Burnt_Crust}}
 	if m.kind == .Egg_Mix && how != .Boil && temperature > best + CURDLE_OVER {d.flaws += {.Curdled}}
 	if how != .Boil && d.dried > DRY_RIGHT {d.flaws += {.Dry}}
+	// A loaf baked from flour with too little gluten does not rise.
+	if how != .Boil && (m.kind == .Dough || m.kind == .Paste) && m.shape == .Loaf && !m.filled && gluten_strength(m) < GLUTEN_LOAF {d.flaws += {.Dense}}
 	if how == .Boil && !liquid && d.inside > BOIL_APART {d.flaws += {.Falls_Apart}}
 	leafy := m.leafy_g / max(m.veg_g, 1e-6)
 	if how != .Boil && m.leafy_g > 0 && (m.kind == .Salad || m.kind == .Pieces) {d.flaws += {.Soggy}}
@@ -900,7 +981,7 @@ soup_pieces :: proc(m: Mix) -> (solid: Mix, ok: bool) {
 	n := 0
 	for i in 0 ..< m.n {
 		part := m.parts[i]
-		if .Pieces in MIXABLE[part.food].marks || .Mashes in MIXABLE[part.food].marks {
+		if !part.milled && (.Pieces in MIXABLE[part.food].marks || .Mashes in MIXABLE[part.food].marks) {
 			pieces[n] = part
 			n += 1
 		}
@@ -928,7 +1009,7 @@ cook_soup_dry :: proc(m: Mix, how: Heating, temperature, minutes, bonus: f32) ->
 dish_effects :: proc(d: ^Dish, m: Mix, leafy: f32) {
 	d.taste = dish_taste(d^, m, leafy)
 	// What is in pieces holds most of its water.
-	water := d.matter[.Water] / d.grams * (1 - (1 - TEXTURE_PIECES) * min(m.filling_g / m.grams, 1))
+	water := (d.matter[.Water] - d.water_held) / d.grams * (1 - (1 - TEXTURE_PIECES) * min(m.filling_g / m.grams, 1))
 	set := m.setting * m.grams / d.grams >= SET_FIRM && (!d.heated || d.inside >= TIME_RIGHT[0])
 	d.texture = .Brittle
 	for texture in Texture {
@@ -939,7 +1020,11 @@ dish_effects :: proc(d: ^Dish, m: Mix, leafy: f32) {
 	}
 	d.consistency = 1
 	for flaw in d.flaws {
-		d.consistency -= flaw == .Soggy ? CONSISTENCY_FLAWS[flaw] * leafy : CONSISTENCY_FLAWS[flaw]
+		#partial switch flaw {
+		case .Soggy: d.consistency -= CONSISTENCY_FLAWS[flaw] * leafy
+		case .Dense: d.consistency -= CONSISTENCY_FLAWS[flaw] * (1 - gluten_strength(m) / GLUTEN_LOAF) // (the less gluten, the denser)
+		case: d.consistency -= CONSISTENCY_FLAWS[flaw]
+		}
 	}
 	d.consistency = clamp(d.consistency, 0, 1)
 	d.keeping = keeping(d.matter, d.grams)
@@ -970,6 +1055,20 @@ dish_kind :: proc(m: Mix, how: Heating) -> Dish_Kind {
 			}
 		case .Boil:
 			return BOILED_SHAPE[m.shape]
+		}
+	case .Paste:
+		// Without gluten it does not rise: flat cakes, baked or grilled
+		// (strips are crackers, a filling a pasty or a bake), dumplings boiled.
+		switch how {
+		case .Bake, .Grill:
+			#partial switch m.shape {
+			case .Strips: return .Crackers
+			case .Wrapped: return .Pasty
+			case .Layered: return .Layered_Bake
+			}
+			return m.filled ? .Pie : .Flat_Cake
+		case .Boil:
+			return m.shape == .Lumps || m.shape == .Strips ? .Small_Dumplings : .Dumplings
 		}
 	case .Batter:
 		switch how {
@@ -1283,4 +1382,92 @@ setting_interval :: proc(best: f32, setting: Setting, skill: f32, key: u32) -> (
 	place := x < first ? SKILL_PLACE[0] + x : 0.5 + SKILL_NOT_MIDDLE + (x - first)
 	low = best - place * width
 	return low, low + width
+}
+
+// ---- Drying and milling. ----
+//
+// Anything dried enough can be milled into a flour of it: what is left once
+// its water is driven off, ground. What the flour is like follows from what
+// the food is made of: potato flour is mostly starch, pumpkin flour a sweet,
+// fibrous powder with little. It is dried in a low oven (DRY_TEMP), cut thin
+// (as a dough in strips), until its water is down to MILL_WATER_MOST of its
+// weight; it mills if it is not too fatty (MILL_FAT_MOST) or burnt.
+
+// A food dried in the oven: cut thin, at this temperature for so long.
+dry_food :: proc(part: Bowl_Part, temperature, minutes: f32) -> (m: Mix, d: Dish, refused: Bowl_Refusal) {
+	parts := [1]Bowl_Part{part}
+	m, refused = mix_bowl(parts[:], {})
+	if refused != .None {
+		return
+	}
+	m.shape = .Strips
+	d = cook(m, .Bake, temperature, minutes, 1)
+	return
+}
+
+// The minutes a mix, cut thin, takes in an oven at this temperature to dry
+// enough to mill.
+drying_minutes :: proc(m: Mix, temperature: f32) -> f32 {
+	water := m.matter[.Water]
+	if water <= 0 {
+		return 0
+	}
+	// The water that may be left: MILL_WATER_MOST of what is left in all
+	// (aimed a little under, so that it is surely dry enough).
+	aim := MILL_WATER_MOST * 0.99
+	left := aim * (m.grams - water) / (1 - aim)
+	need := clamp(1 - left / water, 0, 0.99999)
+	thin := m
+	thin.shape = .Strips
+	warmth := max(temperature - ROOM_TEMP, 0) / (best_temperature(m) - ROOM_TEMP)
+	if warmth <= 0 {
+		return math.F32_MAX
+	}
+	return max(base_minutes(thin, .Bake) * math.ln(1 - need) / math.ln(1 - DRY_AT_BEST) / warmth, 0)
+}
+
+// A dried food milled: a part for a bowl, a flour of it (its amount the
+// grams that came of it). The mix is what was dried, the dish how it came
+// out.
+mill :: proc(m: Mix, d: Dish) -> (part: Bowl_Part, refused: Mill_Refusal) {
+	switch {
+	case m.n != 1:
+		refused = .Not_One_Food
+	case m.parts[0].milled || .Flour in MIXABLE[m.parts[0].food].marks:
+		refused = .Already
+	case d.kind == .Charcoal:
+		refused = .Burnt
+	case d.grams <= 0 || d.matter[.Fat] / d.grams > MILL_FAT_MOST:
+		refused = .Too_Fatty
+	case d.matter[.Water] / d.grams > MILL_WATER_MOST + 1e-4:
+		refused = .Too_Wet
+	}
+	if refused != .None {
+		return
+	}
+	return {food = m.parts[0].food, amount = d.grams, milled = true, water = d.matter[.Water] / d.grams, microbes = d.microbes}, .None
+}
+
+// A flour of a food, made by the rules: a kilogram of it (or, of eggs, as
+// many as come nearest) dried at DRY_TEMP until it mills, and milled. part
+// is this many grams of that flour; from_kg how many grams a kilogram of the
+// food gives.
+flour_of :: proc(food: Mixable, grams: f32) -> (part: Bowl_Part, from_kg: f32, refused: Mill_Refusal) {
+	whole := Bowl_Part{food = food, amount = 1000 / unit_grams(food)}
+	if MIXABLE[food].unit == .Egg {
+		whole.amount = max(math.round(whole.amount), 1)
+	}
+	parts := [1]Bowl_Part{whole}
+	m, why := mix_bowl(parts[:], {})
+	if why != .None {
+		return {}, 0, .Not_One_Food
+	}
+	_, d, _ := dry_food(whole, DRY_TEMP, drying_minutes(m, DRY_TEMP))
+	part, refused = mill(m, d)
+	if refused != .None {
+		return
+	}
+	from_kg = part.amount * 1000 / m.grams
+	part.amount = grams
+	return
 }

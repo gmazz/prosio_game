@@ -144,7 +144,7 @@ prompt_text :: proc() -> cstring {
 			action = TEXT.lift_over_fence
 		case at_fence:
 			action = TEXT.too_heavy_over_fence 
-		case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_KG[g.enemies[p.carry_index].kind] > 0:
+		case p.carry == .Enemy && g.enemies[p.carry_index].ko && MEAT_FROM[g.enemies[p.carry_index].kind]:
 			// A body: it wants chopping up, at the block by the fire.
 			if _, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2); at_fire {
 				action = fill(TEXT.chop_it, {"then", let_go})

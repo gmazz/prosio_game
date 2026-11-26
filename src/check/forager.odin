@@ -32,6 +32,8 @@ Forager_Day :: struct {
 	bites:         int,
 	meals:         int,
 	refused:       int, // times he would have eaten but his stomach was full
+	drinks:        int, // drinks at the pond
+	thirsty_s:     f32, // seconds he was short of water
 	beaten:        int, // game overs
 	kg, fat, muscle, stomach: f32, // at the end of the day
 	standing:      [game.Item]f32, // kcal ripe in the meadow at the end of the day
@@ -47,10 +49,129 @@ Forager :: struct {
 	last_refused: f32, // and of the last time his stomach stopped him
 	thefts:     int, // stats.thefts a frame ago
 	eating:     bool, // this frame's Q was a bite (so the sack going down is not counted as cooking)
+	drinking:   bool, // he was drinking a frame ago
 	want_food:  f32, // gathers until the sack holds this much food
 }
 
 forager: Forager
+
+// With --hunt, the forager first hunts the nearest turkey: stomps it down,
+// drags the body to the fire, chops it (holding E), roasts the meat and eats
+// it, and the report says how long each took and how long the protein
+// lasted. Times are g.time in seconds (-1: not yet).
+Hunt :: struct {
+	on:      bool,
+	done:    bool,
+	index:   int,
+	start, blow, ko, grabbed, chop_start, chop_end, roast_start, roast_end, eaten, protein_low: f32,
+	stomps:  int,
+	protein: [dynamic]f32, // his protein level every minute from the start
+}
+
+hunt := Hunt{index = -1, start = -1, blow = -1, ko = -1, grabbed = -1, chop_start = -1, chop_end = -1, roast_start = -1, roast_end = -1, eaten = -1, protein_low = -1}
+
+// The hunt's next goal, if it has one: true if it set it.
+hunt_goal :: proc() -> bool {
+	g := &game.g
+	p := &g.prosio
+	if !hunt.on || hunt.done || p.carry == .Enemy {
+		return false
+	}
+	if hunt.index < 0 {
+		best, best_d := -1, f32(1e9)
+		for &e, i in g.enemies[:g.enemy_count] {
+			if e.kind != .Turkey || !game.on_ground(&e) || e.ko {
+				continue
+			}
+			if d := length(e.pos - p.pos); d < best_d {
+				best, best_d = i, d
+			}
+		}
+		if best < 0 {
+			return false
+		}
+		hunt.index, hunt.start = best, g.time
+	}
+	e := &g.enemies[hunt.index]
+	if e.state == .Gone {
+		if hunt.ko < 0 {
+			hunt.index = -1 // lost in the fog: another
+			return hunt_goal()
+		}
+		hunt.done = true
+		return false
+	}
+	bot.goal, bot.index, bot.target, bot.goal_t = .Animal, hunt.index, e.pos, 60
+	return true
+}
+
+// Watches the hunt, once a frame.
+hunt_tick :: proc(frame: int) {
+	g := &game.g
+	p := &g.prosio
+	if !hunt.on {
+		return
+	}
+	if frame % 3600 == 0 {
+		append(&hunt.protein, p.need[.Protein])
+	}
+	if hunt.index < 0 {
+		return
+	}
+	e := &g.enemies[hunt.index]
+	t := g.time
+	if e.hit_t > 0.88 && e.hit_t <= 0.9 && !e.ko {
+		hunt.stomps += 1 // (a stomp sets it to 0.9)
+	}
+	if hunt.blow < 0 && e.health < game.ENEMY_HEALTH {
+		hunt.blow = t
+	}
+	if hunt.ko < 0 && e.ko {
+		hunt.ko = t
+	}
+	if hunt.grabbed < 0 && hunt.ko >= 0 && p.carry == .Enemy && p.carry_index == hunt.index {
+		hunt.grabbed = t
+	}
+	if hunt.chop_start < 0 && p.chopping {
+		hunt.chop_start = t
+	}
+	if hunt.chop_end < 0 && hunt.chop_start >= 0 && e.state == .Gone {
+		hunt.chop_end = t
+		hunt.done = true
+	}
+	fire := &g.stations[.Fire]
+	if hunt.roast_start < 0 && fire.baking && fire.dish == .Roast {
+		hunt.roast_start = t
+	}
+	if hunt.roast_start >= 0 && hunt.roast_end < 0 && !fire.baking {
+		hunt.roast_end = t
+	}
+	if hunt.eaten >= 0 && hunt.protein_low < 0 && game.lacks(.Protein) {
+		hunt.protein_low = t
+	}
+}
+
+hunt_report :: proc() {
+	if !hunt.on {
+		return
+	}
+	span :: proc(from, to: f32) -> string {
+		return from >= 0 && to >= 0 ? fmt.tprintf("%.0f s", to - from) : "(did not happen)"
+	}
+	fmt.println("\n== The hunt: a turkey")
+	fmt.printfln("set off at %.0f s; reached it and struck the first blow %s later; brought it down %s after that, with %d stomps", hunt.start, span(hunt.start, hunt.blow), span(hunt.blow, hunt.ko), hunt.stomps)
+	fmt.printfln("took hold of the body %s after; dragged it to the fire and began chopping %s after that; chopping took %s", span(hunt.ko, hunt.grabbed), span(hunt.grabbed, hunt.chop_start), span(hunt.chop_start, hunt.chop_end))
+	fmt.printfln("roasting began %s after the chopping and took %s; the first roast eaten %s after it was ready", span(hunt.chop_end, hunt.roast_start), span(hunt.roast_start, hunt.roast_end), span(hunt.roast_end, hunt.eaten))
+	fmt.printfln("from setting off to the first bite: %s; from the first bite until he lacked protein again: %s", span(hunt.start, hunt.eaten), span(hunt.eaten, hunt.protein_low))
+	fmt.print("his protein level, every minute:")
+	for level, i in hunt.protein {
+		if i % 10 == 0 {
+			fmt.printf("\n  %3d min", i)
+		}
+		fmt.printf(" %3.0f", level)
+	}
+	fmt.println()
+}
 
 // The kcal of the food in his sack.
 sack_food_kcal :: proc() -> (sum: f32) {
@@ -95,6 +216,14 @@ forager_tick :: proc(frame: int) {
 		t.work_s += dt
 	case .Pond:
 		t.water_s += dt
+	}
+	drinking := p.drinking && p.pick_t > 0
+	if drinking && !forager.drinking {
+		t.drinks += 1
+	}
+	forager.drinking = drinking
+	if game.lacks(.Water) {
+		t.thirsty_s += dt
 	}
 	if p.fail != .None && p.fail_t > 0 && p.fail_t < 1.0 / 30 {
 		t.beaten += 1
@@ -189,6 +318,9 @@ forager_eat :: proc(tap: ^bit_set[game.Button]) -> bool {
 	}
 	forager.last_bite = g.time
 	t.bites += 1
+	if best == .Roast && hunt.eaten < 0 {
+		hunt.eaten = g.time
+	}
 	t.eaten_kcal += game.sack_piece_kcal(best)
 	t.eaten_litres += game.stomach_room(best)
 	stats.eaten[best] += 1
@@ -207,6 +339,9 @@ forager_goal :: proc() {
 	bot.last_pos = p.pos
 	if p.need[.Water] < 40 {
 		bot.goal, bot.target, bot.goal_t = .Pond, game.POND, 120
+		return
+	}
+	if hunt_goal() {
 		return
 	}
 	// A dish ready: fetch it.
@@ -292,7 +427,7 @@ ripe_plant :: proc() -> (int, f32) {
 
 forager_report :: proc() {
 	fmt.println("\n== The day's budget: the forager, a day (60 minutes of play) at a time")
-	fmt.println("day  alive  doing  burned | in     work  kcal/min  off   fox (thefts) | eaten  litres meals bites  full | kg    fat   muscle | beaten")
+	fmt.println("day  alive  doing  burned | in     work  kcal/min  off   fox (thefts) | eaten  litres meals bites  full | kg    fat   muscle | drinks thirsty | beaten")
 	for d, i in forager.days {
 		alive := f32(d.burned[.Muscle]) * game.KCAL_PER_KG
 		doing: f32
@@ -302,10 +437,10 @@ forager_report :: proc() {
 			}
 		}
 		work := d.work_s / 60
-		fmt.printf("%3d  %5.0f  %5.0f  %6.0f | %5.0f  %4.1f  %7.0f  %5.0f %5.0f (%3d)    | %5.0f  %5.1f  %4d %5d  %4d | %5.1f %5.1f %5.1f  | %d\n",
-			i + 1, alive, doing, alive + doing, d.gathered_kcal, work, work > 0 ? d.gathered_kcal / work : 0, d.lost_kcal, d.fox_kcal, d.thefts, d.eaten_kcal, d.eaten_litres, d.meals, d.bites, d.refused, d.kg, d.fat, d.muscle, d.beaten)
+		fmt.printf("%3d  %5.0f  %5.0f  %6.0f | %5.0f  %4.1f  %7.0f  %5.0f %5.0f (%3d)    | %5.0f  %5.1f  %4d %5d  %4d | %5.1f %5.1f %5.1f  | %5d  %6.1f  | %d\n",
+			i + 1, alive, doing, alive + doing, d.gathered_kcal, work, work > 0 ? d.gathered_kcal / work : 0, d.lost_kcal, d.fox_kcal, d.thefts, d.eaten_kcal, d.eaten_litres, d.meals, d.bites, d.refused, d.kg, d.fat, d.muscle, d.drinks, d.thirsty_s / 60, d.beaten)
 	}
-	fmt.println("(alive: what his muscles burn, with the protein used up; doing: walking, sprinting, jumps, picking, fights; in: kcal into the sack, cooking's gain included; work: minutes gathering and cooking, going there included, water trips not; off: kcal gone out of the sack by going off; fox: taken by foxes (how many times); litres: the room what he ate took in his stomach; full: minutes in which his stomach stopped him eating when he wanted to)")
+	fmt.println("(alive: what his muscles burn, with the protein used up; doing: walking, sprinting, jumps, picking, fights; in: kcal into the sack, cooking's gain included; work: minutes gathering and cooking, going there included, water trips not; off: kcal gone out of the sack by going off; fox: taken by foxes (how many times); litres: the room what he ate took in his stomach; full: minutes in which his stomach stopped him eating when he wanted to; kg: his weight, what is in his stomach included; drinks: at the pond; thirsty: minutes short of water)")
 	fmt.println("\nRipe in the meadow at the end of each day, kcal:")
 	fmt.printf("%-14s", "")
 	for _, i in forager.days {

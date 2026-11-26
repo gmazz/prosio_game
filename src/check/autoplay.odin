@@ -173,6 +173,11 @@ autoplay :: proc(minutes: int, seed: int) -> bool {
 		forager.sack_kcal = sack_food_kcal()
 		forager.last_bite = -1000
 		forager.last_refused = -1000
+		if hunt.on {
+			for _ in 0 ..< 5 {
+				game.sack_add(.Spear, 0) // the hunter starts with five spears (a turkey takes four), as if made at the workbench
+			}
+		}
 	}
 	stats.fails = make(map[string]int)
 	stats.said = make(map[string]int)
@@ -252,6 +257,7 @@ autoplay :: proc(minutes: int, seed: int) -> bool {
 		}
 		if forager.on {
 			forager_tick(frame)
+			hunt_tick(frame)
 		}
 		if frame % (5 * 60 * 60) == 0 {
 			append(&stats.samples, [6]f32{p.kg, p.fat, game.part_kg(.Muscle), game.store_kg(.Carbs), game.store_kg(.Protein), p.stamina})
@@ -413,7 +419,7 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	// Holding something.
 	if p.carry == .Enemy && bot.goal != .Hold && bot.goal != .Fire_Block {
 		e := &g.enemies[p.carry_index]
-		if e.ko && game.MEAT_KG[e.kind] > 0 && rand() < 0.7 {
+		if e.ko && game.MEAT_FROM[e.kind] && (forager.on || rand() < 0.7) {
 			bot.goal, bot.goal_t = .Fire_Block, 90
 			bot.target = g.stations[.Fire].pos
 		} else {
@@ -477,6 +483,13 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	#partial switch bot.goal {
 	case .Food:
 		arrived = game.food_in_reach(p.pos, r + 0.75) != nil && far < 2.5
+		if forager.on {
+			// (What E would pick up is the nearest in reach: the forager goes
+			// on until that is what it came for. Picking up any branch on
+			// the way, it filled its sack with 39 logs on seed 1, and stood
+			// there saying the sack was full.)
+			arrived = game.food_in_reach(p.pos, r + 0.75) == &g.foods[bot.index]
+		}
 	case .Plant:
 		arrived = game.bush_in_reach(p.pos, r + 0.6) != nil && far < 3.5
 	case .Station:
@@ -531,7 +544,7 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	// The bot pressed it anyway on seed 4, and its E watch counted that.)
 	switch bot.goal {
 	case .Food:
-		if p.carry == .Nothing && game.food_in_reach(p.pos, r + 0.75) != nil {
+		if p.carry == .Nothing && game.food_in_reach(p.pos, r + 0.75) != nil && (arrived || !forager.on) {
 			press_e(&tap, "food")
 		}
 	case .Plant:
@@ -573,6 +586,31 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 	case .Animal:
 		e := &g.enemies[bot.index]
 		gap := length(e.pos - p.pos) - r - game.ENEMY_RADIUS[e.kind]
+		if forager.on {
+			// The hunter: stomps it down, then takes hold of the body.
+			if e.ko {
+				if gap < game.GRAB_REACH * 0.8 && p.carry == .Nothing {
+					tap += {.Grab}
+				}
+			} else if e.state == .Dizzy && game.on_ground(e) {
+				// Down and dizzy: run to it, get on top of it, and stomp.
+				if gap > 0.4 && p.stamina > 15 {
+					down += {.Sprint}
+				} else if gap < 0.4 && p.stamina > 10 {
+					tap += {.Jump}
+				}
+			} else if p.sack[.Spear] > 0 && gap < 7 && gap > 1.5 && p.stamina > 10 && bot.wind == 0 && !p.winding {
+				// A spear, wound up for most of a second.
+				p.sack_sel = .Spear
+				tap += {.Grab}
+				bot.wind = 50
+			} else if p.sack[.Spear] == 0 && gap < 2.5 && p.stamina > 35 {
+				// Up: a bump at a run knocks it down.
+				down += {.Sprint}
+				tap += {.Bump}
+			}
+			break
+		}
 		switch {
 		case gap < game.GRAB_REACH * 0.8 && rand() < 0.1:
 			tap += {.Grab}
@@ -582,9 +620,13 @@ decide :: proc() -> (down, tap: bit_set[game.Button]) {
 			tap += {.Bump}
 		}
 	case .Fire_Block:
-		if p.carry == .Enemy && game.station_in_reach(.Fire, p.pos, r + 1.2) {
+		// Chopping goes on while E is held, a cut every few seconds.
+		if p.chopping {
+			down += {.Action}
+			bot.goal_t = max(bot.goal_t, 2)
+		} else if p.carry == .Enemy && game.station_in_reach(.Fire, p.pos, r + 1.2) {
 			press_e(&tap, "the chopping block")
-			bot.goal_t = 0
+			bot.goal_t = min(bot.goal_t, 2)
 		}
 	case .Hold, .Wander:
 	}
@@ -1069,6 +1111,7 @@ report :: proc(minutes, seed: int) -> bool {
 	_ = p
 	if forager.on {
 		forager_report()
+		hunt_report()
 	}
 	return odd == 0
 }

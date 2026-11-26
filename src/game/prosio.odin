@@ -39,9 +39,12 @@ Prosio :: struct {
 	eat_t:        f32, // time left in the munching animation
 	meal_fill, meal_target, meal_hold_t: f32, // temporary visual fullness after a meal
 	stomach:      f32, // litres of food in his stomach (see STOMACH_HOLDS)
+	gut:          Meal, // what is in his stomach, on its way into him (see digest)
+	store_carry:  [Need]f32, // what rounding left out of each store last time (see store_add)
 	fat_carry:    f32, // what rounding left out of his fat last time (see fat_add)
 	gas_pose_t, hiccup_pose_t, tipsy_pose_t: f32, // transient reaction poses
 	pick_t:       f32, // time left picking something up
+	chopping:     bool, // chopping the body he holds into meat, the action button held (see update_chop)
 	shake_t:      f32, // time left shaking a tree he has hold of
 	shake_power:  f32, // and how hard: the strength of his arms
 	pick_item:    Item, // what he is picking up
@@ -195,6 +198,7 @@ reset_prosio :: proc() {
 
 bruise :: proc(points: f32) {
 	p := &g.prosio
+	p.chopping = false // a knock stops his chopping
 	p.bruises = min(p.bruises + points, BRUISE_MOST)
 	p.knock_t = 0
 	p.stamina = min(p.stamina, stamina_top())
@@ -264,7 +268,8 @@ update_prosio :: proc(dt: f32) {
 	}
 
 	grounded := !p.airborne
-	busy := p.eat_t > 0 || p.pick_t > 0 || p.ache_t > 0 || p.shake_t > 0
+	update_chop(dt)
+	busy := p.eat_t > 0 || p.pick_t > 0 || p.ache_t > 0 || p.shake_t > 0 || p.chopping
 	can_act := p.dazed_t <= 0 && p.dash_t <= 0 && !busy
 	food := food_in_reach(p.pos, r + 0.75)
 	bush := bush_in_reach(p.pos, r + 0.6)
@@ -322,7 +327,7 @@ update_prosio :: proc(dt: f32) {
 			p.regen_delay = 0.4
 			burn(JUMP_BURN, .Jumping, true)
 			train(.Legs, JUMP_WORK)
-			height := jump_height(total_kg())
+			height := jump_set(jump_height(total_kg()))
 			if lacks(.Electrolytes) {
 				height *= CRAMP_JUMP // cramped legs
 			}
@@ -512,11 +517,16 @@ update_prosio :: proc(dt: f32) {
 	}
 }
 
-// Falling and landing. The meadow is flat.
+// Falling and landing. The meadow is flat (but for the workbench's stand,
+// floor_at: walking off it he falls, and walking onto it he is on it).
 prosio_vertical :: proc(dt: f32) {
 	p := &g.prosio
+	floor := floor_at(p.pos)
+	if !p.airborne && p.height > floor + 0.01 {
+		p.airborne, p.vy, p.peak = true, 0, p.height // off the edge
+	}
 	if !p.airborne {
-		p.height = 0
+		p.height = floor
 		return
 	}
 	p.vy -= GRAVITY * dt
@@ -525,9 +535,9 @@ prosio_vertical :: proc(dt: f32) {
 	if p.vy < -1 && stomp_enemies() {
 		return // came down on an animal, and bounced off it
 	}
-	if p.vy <= 0 && p.height <= 0 {
+	if p.vy <= 0 && p.height <= floor {
 		speed := -p.vy
-		p.height = 0
+		p.height = floor
 		p.vy = 0
 		p.airborne = false
 		p.jump_h = 0

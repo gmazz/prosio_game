@@ -570,9 +570,9 @@ pests_look_again :: proc() {
 	}
 }
 
+// A spear is a sharp blow, of all the energy it flies with.
 spear_damage :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
-	share := speed / ARM_SPEED
-	return SPEAR_BLOW[kind] * share * share
+	return blow_harm(kind, kinetic(SPEAR_KG, speed), .Sharp)
 }
 
 // A spear in flight meets an animal.

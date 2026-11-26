@@ -45,6 +45,7 @@ Tab :: struct {
 	dirty:   bool,
 	starts:  [dynamic]int, // where each line starts
 	counted: int, // the length of the text when starts was made (-1: make it again)
+	asking:  bool, // closing it with unsaved changes: save, discard or stay? (see editor_close)
 }
 
 Prompt :: enum {
@@ -163,18 +164,55 @@ tab_setup :: proc(t: ^Tab) {
 	}
 }
 
-editor_close :: proc(i: int) {
+// Closes a tab (its x, or Cmd+W). With unsaved changes it asks first, in
+// the tab bar: S (or a click on "save") saves and closes, D ("discard")
+// closes and throws the changes away, Esc ("stay") keeps it open. With
+// discard (Cmd+Shift+W) it closes at once, the changes thrown away; the file
+// on disk is never touched but by a save. The last tab closed, the editor
+// stays open, empty, and gives the keys back to the game (a click in it
+// takes them again, and Cmd+P opens a file).
+editor_close :: proc(i: int, discard := false) {
+	if i < 0 || i >= len(editor.tabs) {return}
 	t := editor.tabs[i]
-	if t.dirty {
-		say(fmt.tprintf("%s has unsaved changes: Cmd+S saves it, Cmd+W again closes it anyway", t.path))
-		t.dirty = false // (a second Cmd+W closes it)
+	if t.dirty && !discard {
+		for other in editor.tabs {other.asking = false}
+		t.asking = true
+		editor.current = i
+		editor.focused = true // (so S, D and Esc reach it)
 		return
 	}
+	name := strings.clone(t.path, context.temp_allocator)
+	dropped := t.dirty
 	edit.destroy(&t.state)
 	strings.builder_destroy(&t.text)
 	delete(t.starts)
+	free(t)
 	ordered_remove(&editor.tabs, i)
 	editor.current = clamp(editor.current, 0, len(editor.tabs) - 1)
+	if len(editor.tabs) == 0 {
+		editor.focused = false
+	}
+	say(dropped ? fmt.tprintf("closed %s: its changes thrown away, the file as it was saved", name) : fmt.tprintf("closed %s", name))
+}
+
+// The answer to "unsaved: save, discard or stay?" for the tab asking.
+editor_answer :: proc(t: ^Tab, answer: enum {Save, Discard, Stay}) {
+	t.asking = false
+	switch answer {
+	case .Save:
+		editor_save(t)
+		if !t.dirty {editor_close(index_of_tab(t))}
+	case .Discard:
+		editor_close(index_of_tab(t), true)
+	case .Stay:
+	}
+}
+
+index_of_tab :: proc(t: ^Tab) -> int {
+	for other, i in editor.tabs {
+		if other == t {return i}
+	}
+	return -1
 }
 
 editor_save :: proc(t: ^Tab) {
@@ -264,6 +302,16 @@ editor_keys :: proc() {
 		prompt_keys()
 		return
 	}
+	if t != nil && t.asking {
+		// Closing it with unsaved changes: S saves, D discards, Esc stays.
+		for rl.GetCharPressed() != 0 {}
+		switch {
+		case rl.IsKeyPressed(.S): editor_answer(t, .Save)
+		case rl.IsKeyPressed(.D): editor_answer(t, .Discard)
+		case rl.IsKeyPressed(.ESCAPE): editor_answer(t, .Stay)
+		}
+		return
+	}
 	if rl.IsKeyPressed(.ESCAPE) {
 		editor.focused = false
 		return
@@ -301,7 +349,7 @@ editor_keys :: proc() {
 		case rl.IsKeyPressed(.C): do_(s, .Copy)
 		case rl.IsKeyPressed(.V): do_(s, .Paste); changed = true
 		case rl.IsKeyPressed(.A): do_(s, .Select_All)
-		case rl.IsKeyPressed(.W): editor_close(editor.current); return
+		case rl.IsKeyPressed(.W): editor_close(editor.current, shift); return // (Cmd+Shift+W: the changes thrown away)
 		case hit(.LEFT): do_(s, shift ? .Select_Line_Start : .Line_Start)
 		case hit(.RIGHT): do_(s, shift ? .Select_Line_End : .Line_End)
 		case hit(.UP): do_(s, shift ? .Select_Start : .Start)
@@ -527,11 +575,22 @@ editor_mouse :: proc() {
 	}
 	top := f32(28)
 	if rl.IsMouseButtonPressed(.LEFT) && m.y < top {
-		x := x0 + 6
 		for tab, i in editor.tabs {
-			w := f32(len(tab_name(tab))) * editor.cell + 24
-			if m.x >= x && m.x < x + w {editor.current = i}
-			x += w + 4
+			r, x := tab_rect(i)
+			if rl.CheckCollisionPointRec(m, x) {
+				editor_close(i)
+				return
+			}
+			if rl.CheckCollisionPointRec(m, r) {editor.current = i}
+			if tab.asking {
+				save, discard, stay := asking_rects(i)
+				switch {
+				case rl.CheckCollisionPointRec(m, save): editor_answer(tab, .Save)
+				case rl.CheckCollisionPointRec(m, discard): editor_answer(tab, .Discard)
+				case rl.CheckCollisionPointRec(m, stay): editor_answer(tab, .Stay)
+				}
+				return
+			}
 		}
 		return
 	}
@@ -548,6 +607,44 @@ editor_mouse :: proc() {
 		t.state.selection[0] = at
 	}
 	if !rl.IsMouseButtonDown(.LEFT) {editor.dragging = false}
+}
+
+// Where a tab is in the bar, and its x. A tab asking whether to save takes
+// the room of its question after it.
+TAB_X_W :: 18
+
+tab_rect :: proc(i: int) -> (tab, x: rl.Rectangle) {
+	at := f32(rl.GetScreenWidth()) / 2 + 6
+	for t, j in editor.tabs {
+		w := f32(len(tab_name(t))) * editor.cell + 24 + TAB_X_W
+		if j == i {
+			return {at, 3, w, 24}, {at + w - TAB_X_W - 4, 5, TAB_X_W, 20}
+		}
+		at += w + 4
+		if t.asking {at += asking_w()}
+	}
+	return
+}
+
+ASKING :: "unsaved:"
+
+asking_w :: proc() -> f32 {
+	return f32(len(ASKING) + len(" S save  D discard  Esc stay")) * editor.cell + 16
+}
+
+// The three answers of a tab that asks, as places to click.
+asking_rects :: proc(i: int) -> (save, discard, stay: rl.Rectangle) {
+	tab, _ := tab_rect(i)
+	x := tab.x + tab.width + 4 + f32(len(ASKING) + 1) * editor.cell + 8
+	word :: proc(x: ^f32, text: string) -> rl.Rectangle {
+		r := rl.Rectangle{x^ - 3, 5, f32(len(text)) * editor.cell + 6, 20}
+		x^ += f32(len(text) + 2) * editor.cell
+		return r
+	}
+	save = word(&x, "S save")
+	discard = word(&x, "D discard")
+	stay = word(&x, "Esc stay")
+	return
 }
 
 tab_name :: proc(t: ^Tab) -> string {
@@ -573,20 +670,33 @@ draw_editor :: proc() {
 	x0 := w / 2
 	rl.DrawRectangleRec({x0, 0, w - x0, h}, PANEL)
 	if editor.focused {rl.DrawRectangleRec({x0, 0, 2, h}, {250, 210, 90, 255})}
-	// Tabs.
-	x := x0 + 6
+	// Tabs, each with its x; one closing with unsaved changes asks.
+	m := rl.GetMousePosition()
 	for t, i in editor.tabs {
-		name := tab_name(t)
-		tw := f32(len(name)) * editor.cell + 24
-		rl.DrawRectangleRec({x, 3, tw, 24}, i == editor.current ? rl.Color{60, 64, 76, 255} : rl.Color{34, 36, 44, 255})
-		draw_mono(name, x + 12, 7, i == editor.current ? INK : DIM)
-		x += tw + 4
+		r, xr := tab_rect(i)
+		rl.DrawRectangleRec(r, i == editor.current ? rl.Color{60, 64, 76, 255} : rl.Color{34, 36, 44, 255})
+		draw_mono(tab_name(t), r.x + 12, 7, i == editor.current ? INK : DIM)
+		over := rl.CheckCollisionPointRec(m, xr)
+		if over {rl.DrawRectangleRec(xr, {90, 60, 60, 255})}
+		draw_mono("x", xr.x + 5, 6, over ? rl.Color{255, 200, 190, 255} : DIM)
+		if t.asking {
+			ax := r.x + r.width + 4
+			rl.DrawRectangleRec({ax, 3, asking_w(), 24}, {80, 60, 24, 255})
+			draw_mono(ASKING, ax + 8, 7, {250, 210, 90, 255})
+			save, discard, stay := asking_rects(i)
+			for pair in ([3]struct {r: rl.Rectangle, s: string}{{save, "S save"}, {discard, "D discard"}, {stay, "Esc stay"}}) {
+				hot := rl.CheckCollisionPointRec(m, pair.r)
+				if hot {rl.DrawRectangleRec(pair.r, {120, 92, 40, 255})}
+				draw_mono(pair.s, pair.r.x + 3, 7, hot ? rl.Color{255, 240, 200, 255} : INK)
+			}
+		}
 	}
 	t := current_tab()
 	top := f32(28)
 	bottom := h - 34
 	if t == nil {
-		draw_mono("No file open. Cmd+P opens one by name; a compile error, clicked, opens at its line.", x0 + 14, top + 20, DIM)
+		draw_mono("No file open. Click here, then Cmd+P opens one by name; a compile error, clicked, opens at its line.", x0 + 14, top + 20, DIM)
+		draw_mono(fmt.tprintf("%s hides the editor.", key_text(.Editor)), x0 + 14, top + 20 + editor.line_h, DIM)
 	} else {
 		draw_tab(t, x0, top, bottom)
 	}
@@ -600,7 +710,7 @@ draw_editor :: proc() {
 		line := line_of(t, t.state.selection[0])
 		col := column_of(t, line, t.state.selection[0]) + 1
 		hint := editor.focused ? fmt.tprintf("Esc, then %s hides the editor", key_text(.Editor)) : fmt.tprintf("%s hides the editor · click in it to type", key_text(.Editor))
-		draw_mono(fmt.tprintf("%s  %d:%d%s   %s · Cmd+P open · Cmd+F find · Cmd+S save", t.path, line + 1, col, t.dirty ? "  (unsaved)" : "", hint), x0 + 10, bottom + 8, DIM)
+		draw_mono(fmt.tprintf("%s  %d:%d%s   %s · Cmd+P open · Cmd+F find · Cmd+S save · Cmd+W close · Cmd+Shift+W close, discard changes", t.path, line + 1, col, t.dirty ? "  (unsaved)" : "", hint), x0 + 10, bottom + 8, DIM)
 	}
 }
 

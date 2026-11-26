@@ -243,7 +243,7 @@ max_batch :: proc(r: ^Recipe) -> int {
 	for n in r.needs {
 		used += ITEM_LITRES[n.item] * f32(n.count)
 	}
-	most := BATCH_MOST
+	most := r.dish == .Roast ? SPIT_MOST : BATCH_MOST
 	if grows := ITEM_LITRES[r.dish] - used; grows > 0 {
 		most = min(most, int(math.floor(free / grows + 0.001)))
 	}
@@ -401,8 +401,7 @@ eat_from_sack :: proc() {
 		return
 	}
 	meal := item_meal(item, sack_take(item, 1))
-	eat(meal)
-	swallow(item)
+	swallow(item, meal)
 	sack_step(0)
 	say(TEXT.eat_text[item])
 	p.eat_t = PROSIO_MEAL_EAT_TIME
@@ -534,7 +533,7 @@ update_cook_menu :: proc(dt: f32) {
 		o.baking = true
 		o.dish = r.dish
 		o.count = cook_count
-		o.bake_t = cook_time(cook_at)
+		o.bake_t = batch_time(cook_at, r.dish, cook_count)
 		scene = .Playing
 		say(TEXT.station_start[cook_at], 1.4)
 	}

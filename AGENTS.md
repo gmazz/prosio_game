@@ -26,7 +26,7 @@ All of these run from a shell and answer in text (and pictures you can open):
 
 ## Changing it while it runs
 
-`tools/workbench.sh` opens the game in a window that rebuilds and swaps in new code whenever a file in `src/game`, `src/workbench` or `data` is saved, with Prosio where he was (desktop only). It can be driven from a shell: write a command to `build/workbench/command.txt` (any command of its menu, such as `go hills`, `put goat` or `kg 120`, and `shot FILE.png`, `frame-time`, `status`, `quit`) and read the answer in `build/workbench/answer.txt`. README.md, "The workbench", says more. The game the players get contains none of it.
+`tools/workbench.sh` opens the game in a window that rebuilds and swaps in new code whenever a file in `src/game`, `src/workbench` or `data` is saved, with Prosio where he was (desktop only). It can be driven from a shell: write a command to `build/workbench/command.txt` (any command of its menu, such as `go hills`, `put goat` or `kg 120`, and `shot FILE.png`, `frame-time`, `status`, `quit`) and read the answer in `build/workbench/answer.txt`. README.md, "The workbench", says more. Started by an agent, run it as `WORKBENCH_OUT=build/workbench_agent WORKBENCH_UNFOCUSED=1 tools/workbench.sh` and use the command and answer files in that folder: Gio may have his own workbench open on build/workbench, and the window then takes no keys or clicks (a Mac brings it to the front, and whatever he was typing elsewhere would go into it). Its panes (Shift+6, or `pane attacks`) turn the numbers of the formulas in the running game (`tune NAME N`, `tune-save`), and the Attacks pane has a test rig driven by `bench ...`. The game the players get contains none of it.
 
 ## Playing it yourself
 

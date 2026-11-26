@@ -53,6 +53,9 @@ Mix_Options :: struct {
 	temp, time:   [game.Heating]f32, // < 0: the best
 	keep:         [2]f32,
 	skill:        f32, // < 0: none asked
+	dry:          bool, // dried and milled instead
+	dry_temp:     f32, // < 0: DRY_TEMP
+	dry_minutes:  f32, // < 0: until it mills
 }
 
 // Reads one bowl. A part that names nothing known is an error.
@@ -94,6 +97,12 @@ parse_bowl :: proc(text: string, parts: ^[MIX_MOST_PARTS]game.Bowl_Part) -> (n: 
 			strings.write_string(&name, word)
 		}
 		food, known := mixable_named(strings.to_string(name))
+		// "potato flour": a potato dried until it mills, and milled.
+		milled := false
+		if !known && strings.has_suffix(strings.to_lower(strings.to_string(name), context.temp_allocator), "_flour") {
+			food, known = mixable_named(strings.to_string(name)[:strings.builder_len(name) - len("_flour")])
+			milled = known
+		}
 		if !known {
 			return n, fmt.tprintf("no food called \"%s\"", strings.trim_space(piece))
 		}
@@ -110,10 +119,19 @@ parse_bowl :: proc(text: string, parts: ^[MIX_MOST_PARTS]game.Bowl_Part) -> (n: 
 		case:
 			return n, fmt.tprintf("no unit called \"%s\"", unit)
 		}
+		if milled {
+			flour, _, why := game.flour_of(food, grams >= 0 ? grams : amount)
+			if why != .None {
+				return n, fmt.tprintf("%s will not make a flour: %s", lower_text(food), game.TEXT.mill_refused[why])
+			}
+			parts[n] = flour
+			n += 1
+			continue
+		}
 		if grams >= 0 {
 			amount = grams / game.unit_grams(food)
 		}
-		parts[n] = {food, amount}
+		parts[n] = {food = food, amount = amount}
 		n += 1
 	}
 	return
@@ -134,6 +152,9 @@ mixable_named :: proc(name: string) -> (food: game.Mixable, ok: bool) {
 
 amount_text :: proc(part: game.Bowl_Part) -> string {
 	name := lower_text(part.food)
+	if part.milled {
+		return fmt.tprintf("%s g %s flour", num(part.amount), name)
+	}
 	switch game.MIXABLE[part.food].unit {
 	case .Gram:
 		return fmt.tprintf("%s g %s", num(part.amount), name)
@@ -293,6 +314,11 @@ mix_command :: proc(args: []string) -> int {
 		case "--keep":
 			opts.keep = {number(args, i + 1), number(args, i + 2)}
 			i += 2
+		case "--dry":
+			opts.dry = true
+			opts.dry_temp, opts.dry_minutes = number(args, i + 1), number(args, i + 2)
+			if opts.dry_temp >= 0 {i += 1}
+			if opts.dry_minutes >= 0 {i += 1}
 		case "--skill":
 			opts.skill = number(args, i + 1)
 			i += 1
@@ -308,6 +334,7 @@ mix_command :: proc(args: []string) -> int {
 		fmt.println(`tools/check.sh mix "500g flour, 300ml water" [--wash] [--press] [--keep-before H DEG] [--mix MIN]`)
 		fmt.println(`    [--shape loaf|flat|wrapped|layered|strips|lumps [--fill "60g cheese"]] [--stand DAYS DEG [--air]]...`)
 		fmt.println(`    [--bake DEG MIN] [--grill DEG|high|middle|low MIN] [--boil MIN] [--keep H DEG] [--skill S]`)
+		fmt.println(`tools/check.sh mix "1000g potato" --dry [DEG [MIN]]   (dried, cut thin, and milled; "200g potato flour" in a bowl is that flour)`)
 		fmt.println(`tools/check.sh mix --walk`)
 		fmt.print("Foods: ")
 		for food in game.Mixable {
@@ -330,6 +357,10 @@ mix_command :: proc(args: []string) -> int {
 			text = bowl_text(parts[:n]),
 		}
 		fmt.println(row.text)
+		if opts.dry {
+			dry_report(parts[:n], opts.dry_temp, opts.dry_minutes)
+			continue
+		}
 		_, row.refused = game.mix_bowl(parts[:n], opts.prep)
 		if row.refused != .None {
 			fmt.printf("  refused: %s (at most %d kinds, %s g)\n\n", REFUSAL_TEXT[row.refused], game.BOWL_KINDS, num(game.BOWL_MOST_G))
@@ -348,6 +379,38 @@ mix_command :: proc(args: []string) -> int {
 		mix_table(rows[:], opts)
 	}
 	return bad
+}
+
+// One food dried in the oven, cut thin (at DRY_TEMP until it mills, unless
+// told), and milled: how dry it came out, and the flour, with what it is
+// made of and how much a kilogram gives.
+dry_report :: proc(parts: []game.Bowl_Part, temp, minutes: f32) {
+	if len(parts) != 1 {
+		fmt.printf("  --dry dries one food at a time\n\n")
+		return
+	}
+	m, refused := game.mix_bowl(parts, {})
+	if refused != .None {
+		fmt.printf("  refused: %s\n\n", REFUSAL_TEXT[refused])
+		return
+	}
+	t := temp >= 0 ? temp : game.DRY_TEMP
+	mins := minutes >= 0 ? minutes : max(game.drying_minutes(m, t), 0)
+	_, d, _ := game.dry_food(parts[0], t, mins)
+	fmt.printf("  dried    cut thin, at %.0f° for %.0f min (%.1f h): %.0f g left, %.0f%% of its water gone, water now %.1f%% of it (it mills at %.0f%% or less); outside %.2f, %s\n",
+		t, mins, mins / 60, d.grams, 100 * d.dried, 100 * d.matter[.Water] / max(d.grams, 1e-6), 100 * game.MILL_WATER_MOST, d.outside, kind_text(d.kind))
+	part, why := game.mill(m, d)
+	if why != .None {
+		fmt.printf("  milled   no: %s\n\n", game.TEXT.mill_refused[why])
+		return
+	}
+	flour := game.part_matter(part)
+	fmt.printf("  milled   %.0f g of %s flour from %.0f g: %.0f g a kilogram\n", part.amount, lower_text(part.food), m.grams, part.amount * 1000 / m.grams)
+	fmt.print("  in 100 g")
+	for v, k in flour {
+		if v >= 0.05 {fmt.printf(" %s %s", lower_text(k), num_g(v * 100 / part.amount))}
+	}
+	fmt.printf("  (%.0f kcal; gluten %.1f g)\n\n", game.part_kcal(part) * 100 / part.amount, game.part_gluten(part, flour) * 100 / part.amount)
 }
 
 // A bowl mixed at its best, or for so many minutes.
@@ -375,7 +438,7 @@ show_bowl :: proc(parts: []game.Bowl_Part, opts: Mix_Options) -> (m: game.Mix, r
 		fmt.println()
 	}
 	fmt.printf("  mix      free liquid %.0f%%: %s, so %s", m.free_liquid * 100, lower_text(m.consistency), kind_text(m.kind))
-	fmt.printf("  (flour %.0f%%, vegetables and fruit %.0f%%, pieces %.0f%%, sets %.1f%%", 100 * m.flour, 100 * m.veg_g / m.grams, 100 * m.filling_g / m.grams, 100 * m.setting)
+	fmt.printf("  (starch %.0f%% (free in the mix %.0f%%), from flours %.0f%%, gluten %.1f%% (strength %.2f); vegetables and fruit %.0f%%, pieces %.0f%%, sets %.1f%%", 100 * m.matter[.Starch] / m.grams, 100 * m.free_starch, 100 * m.flour, 100 * m.gluten, game.gluten_strength(m), 100 * m.veg_g / m.grams, 100 * m.filling_g / m.grams, 100 * m.setting)
 	if m.matter[.Acid] > 0 {fmt.printf(", acid %.2f%%", 100 * m.matter[.Acid] / m.grams)}
 	if m.bitter > 0 {fmt.printf(", bitter %.4f/g", m.bitter)}
 	if m.heat > 0 {fmt.printf(", chili %.1f/kg", m.heat)}
@@ -506,6 +569,7 @@ show_heat :: proc(m: game.Mix, how: game.Heating, opts: Mix_Options, key: u32) -
 		fmt.printf(", outside %.2f, dried %.0f%%", d.outside, d.dried * 100)
 	}
 	if d.water_gained > 0 {fmt.printf(", took up %.0f g of water", d.water_gained)}
+	if d.water_held > 0 {fmt.printf(", %.0f g of water held by its starch (thickened)", d.water_held)}
 	if how == .Boil && d.water_lost > 0 {fmt.printf(", boiled down %.0f g", d.water_lost)}
 	if d.poured_off > 0 {fmt.printf(", its liquid (%.0f g) gone", d.poured_off)}
 	if d.alcohol_lost > 0 {fmt.printf(", alcohol %.1f g driven off", d.alcohol_lost)}
@@ -615,8 +679,12 @@ WALK_AMOUNTS := [game.Unit][4]f32 {
 WALK_KINDS :: 3 // of food in a bowl, at most
 
 // Calls visit with every bowl of the grid: up to WALK_KINDS foods, each at
-// one of its WALK_AMOUNTS.
+// one of its WALK_AMOUNTS; and, after the foods, potato flour (a potato dried
+// and milled by the rules), by the gram, for a flour without gluten.
+walk_flour: game.Bowl_Part
+
 each_bowl :: proc(visit: proc(parts: []game.Bowl_Part, data: rawptr), data: rawptr) {
+	walk_flour, _, _ = game.flour_of(.Potato, 1)
 	parts: [WALK_KINDS]game.Bowl_Part
 	walk :: proc(parts: ^[WALK_KINDS]game.Bowl_Part, start, depth: int, visit: proc(parts: []game.Bowl_Part, data: rawptr), data: rawptr) {
 		if depth > 0 {
@@ -625,10 +693,18 @@ each_bowl :: proc(visit: proc(parts: []game.Bowl_Part, data: rawptr), data: rawp
 		if depth == WALK_KINDS {
 			return
 		}
-		for f in start ..< len(game.Mixable) {
+		for f in start ..< len(game.Mixable) + 1 {
+			if f == len(game.Mixable) {
+				for amount in WALK_AMOUNTS[.Gram] {
+					parts[depth] = walk_flour
+					parts[depth].amount = amount
+					walk(parts, f + 1, depth + 1, visit, data)
+				}
+				continue
+			}
 			food := game.Mixable(f)
 			for amount in WALK_AMOUNTS[game.MIXABLE[food].unit] {
-				parts[depth] = {food, amount}
+				parts[depth] = {food = food, amount = amount}
 				walk(parts, f + 1, depth + 1, visit, data)
 			}
 		}
@@ -684,7 +760,7 @@ census_bowl :: proc(parts: []game.Bowl_Part, data: rawptr) {
 walk_command :: proc() -> int {
 	c := new(Kind_Census)
 	each_bowl(census_bowl, c)
-	fmt.printf("%d bowls: up to %d of the %d foods, each at one of 4 amounts (grams %v, millilitres %v, eggs %v, pinches %v)\n\n", c.bowls, WALK_KINDS, len(game.Mixable), WALK_AMOUNTS[.Gram], WALK_AMOUNTS[.Millilitre], WALK_AMOUNTS[.Egg], WALK_AMOUNTS[.Pinch])
+	fmt.printf("%d bowls: up to %d of the %d foods and potato flour, each at one of 4 amounts (grams %v, millilitres %v, eggs %v, pinches %v)\n\n", c.bowls, WALK_KINDS, len(game.Mixable), WALK_AMOUNTS[.Gram], WALK_AMOUNTS[.Millilitre], WALK_AMOUNTS[.Egg], WALK_AMOUNTS[.Pinch])
 	fmt.printf("%-8s %7s %6s   %-11s %-9s %-11s %-11s %-11s  for example\n", "mix", "bowls", "", "mixing min", "degrees", "oven min", "fire min", "pot min")
 	for kind in game.Mix_Kind {
 		count := c.by_kind[kind]

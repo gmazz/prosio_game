@@ -41,6 +41,8 @@ run_rules :: proc() -> int {
 	rules_energy()
 	rules_body()
 	rules_day_budget()
+	rules_digestion()
+	rules_blows_by_energy()
 	rules_world()
 	rules_kitchen()
 	rules_animals()
@@ -54,6 +56,11 @@ run_rules :: proc() -> int {
 	rules_workbench_commands()
 	rules_workbench_index()
 	rules_workbench_keys()
+	rules_workbench_panes()
+	rules_workbench_param_sets()
+	rules_workbench_editor_close()
+	rules_workbench_still_animal()
+	rules_workbench_bowl_words()
 	rules_fighting()
 	rules_impacts()
 	rules_stones()
@@ -68,6 +75,7 @@ run_rules :: proc() -> int {
 	rules_campfire()
 	rules_undergrowth()
 	rules_mixing()
+	rules_flour_and_gluten()
 	rules_text()
 	fmt.printf("\n%d passed, %d failed\n", passed, failed)
 	return failed
@@ -99,7 +107,7 @@ rules_body :: proc() {
 		least_after = min(least_after, muscle)
 		lacked ||= game.lacks(.Protein)
 	}
-	check("wasted muscle comes back without wasting again", most > 8.3 && most - least_after < 0.05 && !lacked, fmt.tprintf("from 8.0 kg up to %.2f kg, lowest after that %.2f kg, protein %.0f%%", most, least_after, p.need[.Protein]))
+	check("wasted muscle comes back without wasting again (more slowly since protein lasts a third of a day)", most > 8.2 && most - least_after < 0.05 && !lacked, fmt.tprintf("from 8.0 kg up to %.2f kg, lowest after that %.2f kg, protein %.0f%%", most, least_after, p.need[.Protein]))
 
 	// Everything he burns is counted under what it went on.
 	fresh()
@@ -180,7 +188,7 @@ rules_fighting :: proc() {
 		alone(kg, arms)
 		p := &game.g.prosio
 		e := animal_before_him(.Turkey)
-		for throws < 12 && !e.ko {
+		for throws < 30 && !e.ko {
 			e.state, e.vel, e.y, e.scared_t, e.hurt_t = .Chase, {}, 0, 0, 0
 			e.pos = p.pos + {0, game.prosio_radius(p.kg) + game.ENEMY_RADIUS[.Turkey] + 0.3}
 			p.facing, p.stamina = 0, 100
@@ -197,16 +205,33 @@ rules_fighting :: proc() {
 	}
 	start, start_first := throws_for(80, 0)
 	strong, strong_first := throws_for(110, 1)
-	check("no single throw finishes a healthy turkey", start >= 3 && start <= 4 && strong >= 2, fmt.tprintf("the pig he starts as: %d throws (the first took %.0f of 100); 110 kg with the strongest arms: %d (%.0f)", start, start_first, strong, strong_first))
+	check("a thrown animal is a soft blow: the pig he starts as needs about twelve throws for a turkey (a quarter of what a throw took before), 110 kg with the strongest arms about six", start >= 10 && start <= 14 && strong >= 5 && strong <= 7, fmt.tprintf("the pig he starts as: %d throws (the first took %.0f of 100); 110 kg with the strongest arms: %d (%.0f)", start, start_first, strong, strong_first))
 
+	// Mending: it starts at once, at a speed that grows with the time since
+	// the last blow, up to HEAL_RATE after HEAL_RAMP seconds (2 s after a hit
+	// it has mended 0.3 of 100, after 10 s 8, after 20 s 33); a blow starts
+	// the ramp again, so blows close together keep it from mending.
 	alone(80, 0)
 	e = animal_before_him(.Turkey)
 	game.hurt_enemy(e, 60)
 	p.pos = {-40, 30} // out of its sight
-	step(60 * 5)
-	early := e.health
-	step(60 * 40)
-	check("a hurt animal mends when it is left alone", early < 41 && e.health > 70, fmt.tprintf("health 40 after the blow, %.0f five seconds on, %.0f after 45", early, e.health))
+	step(120)
+	at_2 := e.health - 40
+	step(480)
+	at_10 := e.health - 40
+	step(600)
+	at_20 := e.health - 40
+	step(60 * 20)
+	whole := e.health
+	game.hurt_enemy(e, 60)
+	for _ in 0 ..< 6 {
+		step(300)
+		game.hurt_enemy(e, 0.001) // a blow every 5 s
+	}
+	pestered := e.health - 40
+	check("a hurt animal mends from the moment it is hit, faster the longer it is left alone: 0.3 of 100 in 2 s, 8 in 10 s, 33 in 20 s, then HEAL_RATE (whole from nothing in 30 s at that); hit every 5 s for 30 s it mends 12 (a fifth of what it would left alone)",
+		abs(at_2 - 0.33) < 0.05 && abs(at_10 - 8.3) < 0.2 && abs(at_20 - 33.3) < 0.3 && whole == game.ENEMY_HEALTH && pestered < 13 && game.HEAL_RAMP == 20 && game.HEAL_RATE * 30 == game.ENEMY_HEALTH,
+		fmt.tprintf("mended %.2f in 2 s, %.1f in 10 s, %.1f in 20 s, whole after 40 s: %v; hit every 5 s for 30 s: %.1f", at_2, at_10, at_20, whole == game.ENEMY_HEALTH, pestered))
 
 	// Bold or wary, by how dangerous he is.
 	alone(40, -1)
@@ -1101,7 +1126,8 @@ rules_stones :: proc() {
 		step(1)
 		flew ||= e.state == .Flying
 	}
-	check("a thrown rock bowls a turkey over and hurts it more than a pebble", carrying && p.carry == .Nothing && flew && e.health < game.ENEMY_HEALTH - 15 && !e.ko, fmt.tprintf("lifted %v, turkey knocked over %v, health %.0f", carrying, flew, e.health))
+	pebble := game.stone_damage(game.PEBBLE_KG, game.stone_speed(game.PEBBLE_KG), .Turkey)
+	check("a thrown rock bowls a turkey over and hurts it more than a pebble (a hard blow of all the energy it flies with)", carrying && p.carry == .Nothing && flew && game.ENEMY_HEALTH - e.health > 5 * pebble && !e.ko, fmt.tprintf("lifted %v, turkey knocked over %v, health %.1f; a pebble takes %.1f", carrying, flew, e.health, pebble))
 
 	// A pig saved before there were pebbles.
 	fresh()
@@ -1376,7 +1402,7 @@ rules_release :: proc() {
 	game.add_round(p.pos + {0, game.prosio_radius(p.kg) + 0.6}, 0.45, .Rock)
 	step(2, {}, {.Grab})
 	held := p.carry == .Rock
-	step(40)
+	step(int(game.HEAVE_TIME * 60) + 20) // (heaved up: a heavy rock takes a while)
 	step(1, {}, {.Grab})
 	step(60)
 	check("a lifted rock is thrown with F", held && p.carry == .Nothing)
@@ -1739,9 +1765,9 @@ rules_animals :: proc() {
 		step(2, {}, {.Grab})
 		step(20) // taking hold
 		p.pos = fire + game.FIRE_BLOCK.xz + {0, 1.6}
-		step(1, {}, {.Action})
+		step(int(game.CHOP_TIME * f32(game.meat_pieces(kind)) * 60) + 10, {.Action}, {.Action}) // E held, a cut every CHOP_TIME
 		step(5)
-		check(fmt.tprintf("a dead %v is chopped into %d pieces of meat at the fire: its MEAT_KG", kind, game.meat_pieces(kind)), p.sack[.Meat] == game.meat_pieces(kind) && p.carry == .Nothing, fmt.tprintf("%d meat", p.sack[.Meat]))
+		check(fmt.tprintf("a dead %v is chopped, E held, into %d cuts of meat at the fire: 4%% of its weight, 3 s a cut", kind, game.meat_pieces(kind)), p.sack[.Meat] == game.meat_pieces(kind) && p.carry == .Nothing, fmt.tprintf("%d meat", p.sack[.Meat]))
 	}
 
 	fresh()
@@ -2207,11 +2233,11 @@ rules_workshop :: proc() {
 		step(2, {}, {.Grab})
 		step(40)
 		before := p.sack_kcal[.Meat]
-		step(2, {}, {.Action})
+		step(int(game.CHOP_TIME * f32(game.meat_pieces(.Turkey)) * 60) + 10, {.Action}, {.Action})
 		step(10)
 		fresh_meat[i] = (p.sack_kcal[.Meat] - before) / f32(game.meat_pieces(.Turkey))
 	}
-	check("meat chopped from a body that has lain a long while is poorer", fresh_meat[0] == 300 && fresh_meat[1] < 150, fmt.tprintf("a piece from a fresh body %.0f kcal, from one that lay 200 s %.0f kcal", fresh_meat[0], fresh_meat[1]))
+	check("meat chopped from a body that has lain a long while is poorer", fresh_meat[0] >= 295 && fresh_meat[1] < 150, fmt.tprintf("a piece from a fresh body %.0f kcal, from one that lay 200 s %.0f kcal", fresh_meat[0], fresh_meat[1]))
 
 	// He throws a turkey over a fence into a pen, jumps in after it (he
 	// cannot jump with an animal in his hooves), and throws it out again.
@@ -2358,7 +2384,7 @@ rules_workshop :: proc() {
 		step(2, {}, {.Action})
 		step(60)
 	}
-	check("a spear takes far more from a turkey than a stone, lies where it came down, and is picked up again", after_one < game.ENEMY_HEALTH - 40 && after_one > 20 && !flew && in_sack == 1 && lying >= 0 && p.sack[.Spear] == 2, fmt.tprintf("the turkey's health after one: %.0f, bowled over %v; spears in the sack %d, lying %v; after E: %d", after_one, flew, in_sack, lying >= 0, p.sack[.Spear]))
+	check("a spear takes far more from a turkey than a stone, lies where it came down, and is picked up again", after_one < game.ENEMY_HEALTH - 25 && after_one > 50 && !flew && in_sack == 1 && lying >= 0 && p.sack[.Spear] == 2, fmt.tprintf("the turkey's health after one: %.0f, bowled over %v; spears in the sack %d, lying %v; after E: %d", after_one, flew, in_sack, lying >= 0, p.sack[.Spear]))
 
 	// What he built is there next time.
 	fresh()
@@ -2794,6 +2820,11 @@ rules_campfire :: proc() {
 	p.carry, p.carry_index = .Enemy, g.enemy_count - 1
 	meat := p.sack[.Meat]
 	game.use_held_animal()
+	game.forced_down = {.Action} // E held while he chops
+	for _ in 0 ..< int(game.CHOP_TIME * f32(game.meat_pieces(.Turkey)) * 60) + 10 {
+		game.update_chop(1.0 / 60)
+	}
+	game.forced_down = {}
 	chopped := p.sack[.Meat] > meat && p.carry == .Nothing
 	check("at his campfire he cooks what the fire by the pond cooks, and chops a body into meat", roasted && chopped, fmt.tprintf("roast %v, chopped %v", roasted, chopped))
 
@@ -3341,6 +3372,28 @@ rules_mixing :: proc() {
 	dough := bowl(DOUGH)
 	d_oven, d_fire := at_best(dough, .Bake), at_best(dough, .Grill)
 	check("500 g flour and 300 ml water is a dough: bread in the oven, flatbread on the fire", dough.kind == .Dough && d_oven.kind == .Bread && d_fire.kind == .Flatbread && !d_oven.unsafe && !d_fire.unsafe, fmt.tprintf("%v, %v, %v", dough.kind, d_oven.kind, d_fire.kind))
+	// Flour is wheat flour, and only it: the starch of anything else (a
+	// spice, a herb, an egg, a vegetable) is starch, not flour. Every food
+	// that is not marked Flour, alone, with water, with tomato, or as a third
+	// of a bowl of meat, makes no flour mix and has no flour in it.
+	floury: [dynamic]string
+	floury.allocator = context.temp_allocator
+	for food in game.Mixable {
+		if .Flour in game.MIXABLE[food].marks {continue}
+		amount := game.MIXABLE[food].unit == .Egg ? f32(4) : 200 / game.unit_grams(food)
+		third := game.MIXABLE[food].unit == .Egg ? f32(2) : 60 / game.unit_grams(food)
+		bowls := [4][]game.Bowl_Part{{{food = food, amount = amount}}, {{food = food, amount = amount}, {food = .Water, amount = 100}}, {{food = food, amount = third}, {food = .Tomato, amount = 100}}, {{food = food, amount = third}, {food = .Meat, amount = 100}}}
+		for b in bowls {
+			m, refused := game.mix_bowl(b, {minutes = 5})
+			if refused == .None && (m.flour > 0 || m.kind == .Crumbs || m.kind == .Dough || m.kind == .Batter || m.kind == .Slop) {
+				append(&floury, fmt.tprintf("%v (%v, flour %.1f%%)", food, m.kind, 100 * m.flour))
+				break
+			}
+		}
+	}
+	spiced := bowl("100g tomato, 60g chili")
+	check("only a flour (dried and ground) is flour: no food as it is (chili, dill, egg, any vegetable), alone, with water, with tomato or as a third of a bowl of meat, makes crumbs, a dough, a batter or slop, or has flour in it; its starch is starch",
+		len(floury) == 0 && spiced.flour == 0 && spiced.matter[.Starch] > 0 && dough.flour > 0.4, len(floury) > 0 ? strings.join(floury[:], ", ", context.temp_allocator) : fmt.tprintf("100 g tomato and 60 g chili: %v, starch %.1f%%, flour 0", spiced.kind, 100 * spiced.matter[.Starch] / spiced.grams))
 	pie := bowl("500g flour, 300ml water, 100g cheese")
 	check("with 100 g cheese it is a dough, and a pie", pie.kind == .Dough && at_best(pie, .Bake).kind == .Pie, fmt.tprintf("%v, %v", pie.kind, at_best(pie, .Bake).kind))
 	long_fire, long_oven := at_best(dough, .Grill, 3), at_best(dough, .Bake, 3)
@@ -3908,7 +3961,7 @@ rules_no_display :: proc() {
 	if at(desktop, "if !game.init(opts) {") < 0 || at(desktop, "fmt.eprintln(NO_DISPLAY)") < 0 || at(desktop, "os.exit(1)") < 0 || at(desktop, "\"prosio: no display") < 0 {
 		append(&trouble, "the desktop game does not stop and say no display")
 	}
-	if at(wb, "if !game.open_window(") < 0 || at(host, "if !api.open_window() {") < 0 || at(host, "append_line(ANSWER_FILE, NO_DISPLAY)") < 0 || at(host, "\"workbench: no display") < 0 {
+	if at(wb, "if !game.open_window(") < 0 || at(host, "if !api.open_window() {") < 0 || at(host, "append_line(answer_file, NO_DISPLAY)") < 0 || at(host, "\"workbench: no display") < 0 {
 		append(&trouble, "the workbench does not stop and say no display, on the console and in its answers")
 	}
 	if at(tour, "grep -q \"no display\"") < 0 || at(tour, "exit 1") < 0 {
@@ -3919,4 +3972,57 @@ rules_no_display :: proc() {
 	}
 	check("with no screen to open the window on, the game, a scripted run, the workbench, the tour and play.sh stop and say \"no display\" (read in the code: a window cannot be had here)",
 		len(trouble) == 0, len(trouble) == 0 ? "the window checked before any graphics; each says so and stops" : fmt.tprintf("%v", trouble[:]))
+}
+
+// Flour, starch and gluten (the mixing rules): flour is any starchy food
+// dried and ground (wheat flour, or anything dried in a low oven until it
+// mills, and milled), and its starch is what makes a mix "with flour";
+// gluten is wheat's alone, and it is what makes a dough that rises and wants
+// long kneading. Starch from flour or mash thickens a liquid in the pot.
+rules_flour_and_gluten :: proc() {
+	section("flour, starch and gluten")
+	cooked :: proc(m: game.Mix, how: game.Heating) -> game.Dish {
+		t, minutes := game.best_settings(m, how)
+		return game.cook(m, how, t, minutes, 1)
+	}
+	// Drying and milling, and what comes of a kilogram.
+	fresh := [1]game.Bowl_Part{{food = .Potato, amount = 1000}}
+	raw_potato, _ := game.mix_bowl(fresh[:], {})
+	_, raw_refused := game.mill(raw_potato, game.as_it_stands(raw_potato))
+	potato, potato_kg, potato_refused := game.flour_of(.Potato, 100)
+	pumpkin, pumpkin_kg, _ := game.flour_of(.Pumpkin, 100)
+	_, _, nuts := game.flour_of(.Nuts, 100)
+	_, _, wheat := game.flour_of(.Flour, 100)
+	pm, km := game.part_matter(potato), game.part_matter(pumpkin)
+	check("a fresh potato is too wet to mill; dried in a low oven until its water is down to MILL_WATER_MOST, it mills: about 240 g of flour from a kilogram, mostly starch; pumpkin about 110 g, as much sugar as starch; nuts are too fatty; wheat flour is flour already",
+		raw_refused == .Too_Wet && potato_refused == .None && potato_kg > 200 && potato_kg < 260 && pumpkin_kg > 90 && pumpkin_kg < 130 && pm[.Starch] > 50 && km[.Sugar] > 0.7 * km[.Starch] && nuts == .Too_Fatty && wheat == .Already,
+		fmt.tprintf("fresh: %v; potato %.0f g a kg (starch %.0f%%), pumpkin %.0f g (starch %.0f%%, sugar %.0f%%); nuts %v, wheat flour %v", raw_refused, potato_kg, pm[.Starch], pumpkin_kg, km[.Starch], km[.Sugar], nuts, wheat))
+
+	// Gluten: wheat's only.
+	others := 0
+	for food in game.Mixable {
+		if food != .Flour && game.GLUTEN[food] != 0 {others += 1}
+	}
+	wheat_dough := bowl("500g flour, 300ml water")
+	potato_paste := bowl("500g potato flour, 300ml water")
+	half := bowl("250g flour, 250g potato flour, 300ml water")
+	little := bowl("450g flour, 50g potato flour, 300ml water")
+	bread, flat, half_bread, little_bread := cooked(wheat_dough, .Bake), cooked(potato_paste, .Bake), cooked(half, .Bake), cooked(little, .Bake)
+	dumplings := cooked(potato_paste, .Boil)
+	s :: game.gluten_strength
+	check("only wheat flour has gluten: wheat flour and water is a dough at full strength, kneaded long (8.7 min), baked into bread; potato flour and water is a paste with no gluten, mixed in under a minute, baked into a dense flat cake and boiled into dumplings, never bread",
+		others == 0 && wheat_dough.kind == .Dough && s(wheat_dough) > 0.99 && abs(wheat_dough.best_minutes - 8.7) < 0.1 && bread.kind == .Bread && .Dense not_in bread.flaws &&
+		potato_paste.kind == .Paste && s(potato_paste) == 0 && potato_paste.best_minutes < 1 && flat.kind == .Flat_Cake && .Dense in flat.flaws && dumplings.kind == .Dumplings,
+		fmt.tprintf("wheat: %v, strength %.2f, %.1f min, %v; potato: %v, strength %.2f, %.1f min, %v %v, boiled %v", wheat_dough.kind, s(wheat_dough), wheat_dough.best_minutes, bread.kind, potato_paste.kind, s(potato_paste), potato_paste.best_minutes, flat.kind, flat.flaws, dumplings.kind))
+	check("flours mix in proportion: half wheat and half potato flour is a dough of half the strength, kneaded half as long, baked into bread that is dense, between the two; a tenth of potato flour in wheat still rises",
+		half.kind == .Dough && s(half) > 0.4 && s(half) < 0.65 && half.best_minutes > potato_paste.best_minutes && half.best_minutes < wheat_dough.best_minutes &&
+		half_bread.kind == .Bread && .Dense in half_bread.flaws && half_bread.consistency > flat.consistency && half_bread.consistency < bread.consistency && .Dense not_in little_bread.flaws,
+		fmt.tprintf("half: strength %.2f, %.1f min, %v, consistency %.2f (wheat %.2f, potato %.2f); a tenth: strength %.2f, %v", s(half), half.best_minutes, half_bread.flaws, half_bread.consistency, bread.consistency, flat.consistency, s(little), little_bread.flaws))
+
+	// Thickening.
+	thick_potato := cooked(bowl("50g potato flour, 500ml water"), .Boil)
+	thick_pumpkin := cooked(bowl("50g pumpkin flour, 500ml water"), .Boil)
+	check("in a pot of water, the starch of a flour holds water as a gel and thickens it: potato flour far more than pumpkin flour, which has less starch",
+		thick_potato.water_held > 2 * thick_pumpkin.water_held && thick_pumpkin.water_held > 0 && int(thick_potato.texture) > int(thick_pumpkin.texture),
+		fmt.tprintf("50 g in 500 ml: potato holds %.0f g (%v), pumpkin %.0f g (%v)", thick_potato.water_held, thick_potato.texture, thick_pumpkin.water_held, thick_pumpkin.texture))
 }

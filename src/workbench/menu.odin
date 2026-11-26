@@ -8,7 +8,7 @@ package workbench
 // Keys that work without it, while the game has the keys (as keys.txt sets
 // them; see keys.odin): Shift+2 shows and hides the editor (editor.odin),
 // Shift+3 replays the current set-up, Shift+4 pauses and goes on, Shift+5
-// steps a frame while paused. With the free camera on, the arrows move the
+// steps a frame while paused, Shift+6 opens and closes the pane (panes.odin). With the free camera on, the arrows move the
 // camera.
 
 import cmd "commands"
@@ -36,10 +36,15 @@ menu: Menu
 
 // Keys for the workbench, each frame, before the game moves on.
 workbench_keys :: proc(dt: f32) {
+	if program_driven {
+		game.keyboard_enabled = false
+		for rl.GetCharPressed() != 0 {}
+		return
+	}
 	keys_follow_file()
 	// The workbench's own keys act only while the game has the keys (see
 	// keys.odin); wherever you are typing they type themselves.
-	typing := menu.open || inspector_edit.active || (editor.visible && editor.focused)
+	typing := menu.open || inspector_edit.active || (editor.visible && editor.focused) || pane_typing()
 	action, acted := bench_key_pressed()
 	acted &&= !typing
 	if acted {
@@ -55,6 +60,7 @@ workbench_keys :: proc(dt: f32) {
 		case .Replay: say(cmd.replay())
 		case .Pause: say(run_line("pause"))
 		case .Step: say(run_line("step"))
+		case .Panes: say(run_line("pane"))
 		}
 	}
 	if !menu.open {
@@ -65,6 +71,7 @@ workbench_keys :: proc(dt: f32) {
 	case acted: // (nothing else this frame)
 	case menu.open: menu_keys()
 	case inspector_edit.active: inspector_keys()
+	case pane_typing(): pane_keys()
 	case editor.visible && editor.focused: editor_keys()
 	case cmd.view.free:
 		move: game.Vec2
@@ -77,7 +84,7 @@ workbench_keys :: proc(dt: f32) {
 	// The game has the keys when nothing of the workbench's does, and not on
 	// the frame a workbench key acts (Shift+1 would also set the pixel size)
 	// or the workbench was typing (Esc leaving the editor would also pause).
-	game.keyboard_enabled = !acted && !typing && !menu.open && !cmd.view.free && !(editor.visible && editor.focused) && !inspector_edit.active
+	game.keyboard_enabled = !acted && !typing && !menu.open && !cmd.view.free && !(editor.visible && editor.focused) && !inspector_edit.active && !pane_typing()
 }
 
 menu_keys :: proc() {
@@ -180,6 +187,21 @@ run_line :: proc(line: string) -> string {
 		if t == nil {return "no file open"}
 		t.state.builder = &t.text
 		edit.update_time(&t.state)
+		// (Closing: the x or Cmd+W, Cmd+Shift+W, and the answers to its question.)
+		switch words[0] {
+		case "editor-close":
+			editor_close(editor.current, len(words) > 1 && words[1] == "discard")
+			if tt := current_tab(); tt != nil && tt.asking {return fmt.tprintf("%s asks: unsaved: S save, D discard, Esc stay", tt.path)}
+			return fmt.tprintf("%d tabs open, the editor %s", len(editor.tabs), editor.focused ? "has the keys" : "gave the keys back")
+		case "editor-answer":
+			if !t.asking {return "the tab is not asking"}
+			switch len(words) > 1 ? words[1] : "" {
+			case "s": editor_answer(t, .Save)
+			case "d": editor_answer(t, .Discard)
+			case: editor_answer(t, .Stay)
+			}
+			return fmt.tprintf("%d tabs open, the editor %s", len(editor.tabs), editor.focused ? "has the keys" : "gave the keys back")
+		}
 		switch words[0] {
 		case "editor-type":
 			text, _ := strings.replace_all(strings.trim_space(line[len("editor-type"):]), "\\n", "\n", context.temp_allocator)
@@ -239,6 +261,9 @@ run_line :: proc(line: string) -> string {
 	if len(words) >= 3 && words[0] == "set" {
 		rest := strings.trim_space(line[strings.index(line, words[1]) + len(words[1]):])
 		return set_field(words[1], rest)
+	}
+	if len(words) >= 1 && (words[0] == "pane" || words[0] == "tune" || words[0] == "tune-save" || words[0] == "tune-reset" || words[0] == "tune-list" || words[0] == "tune-sets" || words[0] == "tune-load" || words[0] == "bench" || words[0] == "mixing") {
+		return pane_command(line)
 	}
 	if len(words) >= 1 && words[0] == "inspect" {return inspect_text()}
 	if len(words) >= 2 && words[0] == "open-entry" {

@@ -50,8 +50,49 @@ stone_speed :: proc(kg: f32) -> f32 {
 	return min(math.sqrt(2 * THROW_ENERGY * strength() * g.prosio.kg / kg), ARM_SPEED * math.sqrt(strength()))
 }
 
-stone_damage :: proc(kg, speed: f32, kind: Enemy_Kind) -> f32 {
-	return STONE_HARD * blow_damage(kind, speed * math.sqrt(kg / ENEMY_KG[kind]))
+// The joules a stone or a rock hits with: part energy, part momentum
+// (STONE_MOMENTUM_SHARE), the momentum counted as the energy it would have
+// at ARM_SPEED, so a stone thrown that fast is the same either way and a
+// heavy, slow rock gains. Coming down on an animal, it presses on as it sinks
+// into it, as a stomp does (STOMP_SINK, by FALL_GRAVITY).
+stone_joules :: proc(kg, speed: f32, down := false) -> f32 {
+	j := stone_share_joules(kg, speed, STONE_MOMENTUM_SHARE)
+	return down ? j + kg * FALL_GRAVITY * STOMP_SINK : j
+}
+
+// The same with this share of momentum.
+stone_share_joules :: proc(kg, speed, share: f32) -> f32 {
+	return (1 - share) * kinetic(kg, speed) + share * kg * speed * ARM_SPEED / 2
+}
+
+// A stone or a rock is a hard blow.
+stone_damage :: proc(kg, speed: f32, kind: Enemy_Kind, down := false) -> f32 {
+	return blow_harm(kind, stone_joules(kg, speed, down), .Hard)
+}
+
+// How fast a stone or a rock in the air hits, counting its fall by
+// FALL_GRAVITY rather than by the GRAVITY it falls with (see animals.json):
+// its speed along the ground, and downwards what it was thrown down with
+// and what it gained falling from the top of its flight.
+hit_speed :: proc(t: Thrown_Rock) -> f32 {
+	down := t.vy * t.vy
+	if t.vy < 0 {
+		drop := max(t.top - t.y, 0)
+		down = max(down - 2 * GRAVITY * drop, 0) + 2 * FALL_GRAVITY * drop
+	}
+	return math.sqrt(dot2(t.vel, t.vel) + down)
+}
+
+// The heaviest rock his arms can lift: ARM_LIFT kilograms for each
+// kilogram of his arm muscle.
+lift_most :: proc() -> f32 {
+	return ARM_LIFT * muscle_kg(.Arms)
+}
+
+// How heavy a rock is for him: its weight as a share of the most he can
+// lift (1 at his limit).
+heft :: proc(kg: f32) -> f32 {
+	return kg / lift_most()
 }
 
 // What he is aiming a throw at, chosen while he winds up.
@@ -222,6 +263,7 @@ Thrown_Rock :: struct {
 	pos:    Vec2,
 	vel:    Vec2,
 	y, vy:  f32,
+	top:    f32, // the highest it has been (its fall counts in a blow: hit_speed)
 	spin:   f32,
 }
 
@@ -273,7 +315,10 @@ total_kg :: proc() -> f32 {
 // faster.
 load_share :: proc() -> f32 {
 	p := &g.prosio
-	return (total_kg() - p.kg - sack_kg() * (1 - LOAD_EASE)) / p.kg
+	// (A rock in his arms weighs on him the more, the nearer it is to the
+	// most he can lift: at that, twice its weight.)
+	rock := p.carry == .Rock ? p.carry_kg * heft(p.carry_kg) : 0
+	return (total_kg() - p.kg - sack_kg() * (1 - LOAD_EASE) + rock) / p.kg
 }
 
 // What he and his load come to, as his legs feel it.
@@ -392,11 +437,14 @@ update_grab :: proc(dt: f32, can_act: bool) {
 			return
 		}
 		ratio := target.kg / p.kg
-		if target.kind == .Rock && ratio > ROCK_LIMIT * strength() {
+		if target.kind == .Rock && target.kg > lift_most() {
 			answer(TEXT.way_too_heavy_lift)
 			return
 		}
 		cost := 6 + 25 * min(ratio, 1)
+		if target.kind == .Rock {
+			cost = 6 + HEAVE_COST * heft(target.kg) // a heavy rock is a struggle to get up
+		}
 		if p.stamina < cost {
 			answer(TEXT.too_tired_grab)
 			return
@@ -433,13 +481,13 @@ update_grab :: proc(dt: f32, can_act: bool) {
 				say(TEXT.got_hind_legs, 1)
 			}
 		case .Rock:
-			p.lift_total = clamp(LIFT_TIME * ratio, 0.08, 1.2)
+			p.lift_total = max(HEAVE_TIME * heft(target.kg), 0.08)
 			p.vel = {}
 			rd := &g.rounds[target.index]
 			towards = rd.pos - p.pos
 			p.carry_r = rd.r
 			rd.r = 0 // it is in his hands now, not on the ground
-			say(ratio > 0.9 ? TEXT.lift_heavy : TEXT.lift, 1)
+			say(heft(target.kg) > 0.6 ? TEXT.lift_heavy : TEXT.lift, 1)
 		case .Nothing:
 		}
 		p.lift_t = p.lift_total
@@ -461,7 +509,9 @@ update_grab :: proc(dt: f32, can_act: bool) {
 	case .Enemy:
 		e := &g.enemies[p.carry_index]
 		struggling := e.limp <= 0 && !e.ko
-		p.stamina -= CARRY_DRAIN * ratio * (struggling ? 1 : 0.25) * dt
+		if !p.chopping {
+			p.stamina -= CARRY_DRAIN * ratio * (struggling ? 1 : 0.25) * dt // (a body being chopped lies on the block)
+		}
 		train(.Arms, CARRY_WORK * min(ratio, 1.5) * dt)
 		if p.stamina <= 0 {
 			p.stamina = 0
@@ -985,6 +1035,12 @@ chain_lengths :: proc(kind: Enemy_Kind) -> (leg, body: f32) {
 	return r * linalg.length(c[1] - c[0]), r * linalg.length(c[2] - c[1])
 }
 
+// What slamming a held animal down at this speed takes from it: the part
+// of its body behind the blow (CLUB_SHARE of it) stops dead, a soft blow.
+slam_harm :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
+	return blow_harm(kind, kinetic(CLUB_SHARE * ENEMY_KG[kind], speed), .Soft)
+}
+
 // The held animal is slammed into the ground or into something solid at
 // this speed: a blow like any other (see ENEMY_HEALTH in enemies.odin).
 slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
@@ -997,7 +1053,7 @@ slam :: proc(e: ^Enemy, at: Vec3, speed: f32) {
 	burst({at.x, at.y + 0.1, at.z}, 3 + int(speed * 0.4), 1.5 + speed * 0.15, COLOR_DUST, 0.11)
 	pain_stars({at.x, at.y + ENEMY_RADIUS[e.kind], at.z}, speed)
 	e.limp = min(max(e.limp, 0) + 0.8 + speed * 0.12, LIMP_MOST)
-	hurt_enemy(e, min(SLAM_BLOW.x + SLAM_BLOW.y * speed, SLAM_MOST))
+	hurt_enemy(e, slam_harm(e.kind, speed))
 	if speed > 6 {
 		say(TEXT.bash_words[int(random() * len(TEXT.bash_words)) % len(TEXT.bash_words)], 0.5)
 	}
@@ -1186,10 +1242,12 @@ update_thrown :: proc(dt: f32) {
 		if !t.active {
 			continue
 		}
+		t.top = max(t.top, t.y)
 		t.vy -= GRAVITY * dt
 		t.y += t.vy * dt
 		t.pos += t.vel * dt
 		speed := length2(t.vel)
+		hit := hit_speed(t) // (its fall counted)
 		t.spin += speed * dt
 
 		if hit, n := collide_static(&t.pos, t.r, t.y, true, true); hit { // between the rails of a fence it goes
@@ -1206,7 +1264,7 @@ update_thrown :: proc(dt: f32) {
 		scare_pests_near(t.pos, t.y)
 
 		// A flying rock knocks enemies over: a heavier rock passes on more of its speed.
-		if speed > 2 {
+		if hit > 2 {
 			for &e in g.enemies[:g.enemy_count] {
 				reach := t.r + ENEMY_RADIUS[e.kind]
 				if !on_ground(&e) || e.state == .Dead || e.hit_t > 0 || t.y > ENEMY_RADIUS[e.kind] * 2 || length2(e.pos - t.pos) >= reach {
@@ -1217,12 +1275,14 @@ update_thrown :: proc(dt: f32) {
 					spear_hits(&t, &e, speed)
 					break
 				}
-				damage := stone_damage(t.kg, speed, e.kind)
+				down := t.vy < 0 && t.top - t.y > ENEMY_RADIUS[e.kind] // coming down on it
+				damage := stone_damage(t.kg, hit, e.kind, down)
+				along := t.vel != {} ? normalize2(t.vel) : normalize2(e.pos - t.pos)
 				if t.kg < LIGHT_STONE {
 					// A pebble: it stings and startles, and a fox lets go.
 					drop_loot(&e)
 					if hurt_enemy(&e, damage) {
-						enemy_impact(&e, normalize2(t.vel), IMPACT_FALL_SPEED, false)
+						enemy_impact(&e, along, IMPACT_FALL_SPEED, false)
 					} else if e.state == .Chase {
 						e.scared_t = max(e.scared_t, random_range(PEBBLE_FRIGHT.x, PEBBLE_FRIGHT.y))
 					}
@@ -1230,9 +1290,9 @@ update_thrown :: proc(dt: f32) {
 					t.vel *= 0.15
 					continue
 				}
-				passed := 1.6 * t.kg / (t.kg + ENEMY_KG[e.kind]) * speed
+				passed := 1.6 * t.kg / (t.kg + ENEMY_KG[e.kind]) * hit
 				hurt_enemy(&e, damage)
-				enemy_impact(&e, normalize2(t.vel), passed, false)
+				enemy_impact(&e, along, passed, false)
 				t.vel *= 0.5
 				g.shake = max(g.shake, 0.3)
 				burst({e.pos.x, 0.7, e.pos.y}, 10, 4, COLOR_STAR, 0.12)

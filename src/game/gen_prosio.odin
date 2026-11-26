@@ -34,7 +34,11 @@ DASH_TIME :: f32(0.28)
 // stooping to pick something up and putting it in the sack
 PICK_TIME :: f32(0.5)
 // Ordinary legs put the same energy into every jump, so height = energy / weight: a 40 kg Prosio jumps 0.9 high, a 120 kg Prosio only 0.3. Strong legs put in more (see LEG_SPRING in the skills section).
-JUMP_ENERGY :: f32(36)
+when WORKBENCH {
+	JUMP_ENERGY: f32 = 36
+} else {
+	JUMP_ENERGY :: f32(36)
+}
 
 // ---- lean_to_fat ----
 // Everything here gets worse with fat, and the gap is deliberately wide: each pair is his value when lean (no fat) and with all the fat he can carry (FAT_MAX); in between it goes smoothly from one to the other. Strong legs and good lungs make up for some of it (see the skills section).
@@ -150,9 +154,17 @@ NOODLE_ARMS :: f32(0.6)
 // legs: how much faster he walks and runs,
 LEG_SPEED :: f32(1.3)
 // and how much more goes into a jump;
-LEG_SPRING :: f32(2)
+when WORKBENCH {
+	LEG_SPRING: f32 = 2
+} else {
+	LEG_SPRING :: f32(2)
+}
 // both, with legs wasted away
-WEAK_LEGS :: f32(0.75)
+when WORKBENCH {
+	WEAK_LEGS: f32 = 0.75
+} else {
+	WEAK_LEGS :: f32(0.75)
+}
 // lungs: the share of the usual stamina a sprint costs,
 LUNG_DRAIN :: f32(0.55)
 // and how much faster it comes back

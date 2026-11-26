@@ -123,6 +123,16 @@
     }
   },
   "kitchen": {
+    "mill_refused": {
+      "_of": "Mill_Refusal",
+      "_some": true,
+      "Not_One_Food": "Do młyna po jednej rzeczy!",
+      "Already": "To już jest mąka!",
+      "Too_Wet": "Za mokre do mielenia... trzeba dłużej suszyć!",
+      "Too_Fatty": "Za tłuste! Robi się z tego pasta.",
+      "Burnt": "Spalone na węgiel... to byłaby sadza, nie mąka!"
+    },
+    "dense_loaf": "Ciężkie jak kamień... wcale nie wyrosło!",
     "station_name": {
       "_of": "Station_Kind",
       "Oven": "PIEC",
@@ -304,6 +314,7 @@
       "Protein": "BIAŁKO",
       "Fibre": "BŁONNIK",
       "Water": "WODA",
+      "Stomach": "W BRZUSZKU",
       "Frame": "KOŚCI"
     },
     "trait_name": {
@@ -573,7 +584,9 @@
       "nobody_eats_fox": "Nikt nie je lisów.",
       "chopping_block": "Pieniek do krojenia jest przy ognisku nad stawem (albo przy moim ognisku).",
       "no_room_meat": "Nie ma w worku miejsca na mięso!",
-      "chop": "Ciach, ciach, ciach! Mięso na ogień!",
+      "chop": "Ciach, ciach, ciach! To już ostatni kawałek!",
+      "chopping": "Ciach... ciach...",
+      "chop_cut": "Kawałek mięsa!",
       "billy_no_milk": "Kozioł nie daje mleka!",
       "only_bash": "Tym można tylko walnąć albo rzucić.",
       "goat_no_milk": "Ta koza nie ma teraz mleka.",
@@ -723,7 +736,7 @@
     "throw_over_fence": "Przerzuć przez płot: przytrzymaj {Grab}, puść",
     "too_heavy_jump_fence": "Za ciężki, żeby przeskoczyć płot!     {Grab}: rozbierz ten kawałek",
     "shake_tree": "{Bump}: potrząśnij drzewem",
-    "chop_it": "{Action}: pokrój na mięso     {then}",
+    "chop_it": "Trzymaj {Action}: pokrój na mięso     {then}",
     "drag_to_fire": "Zaciągnij to do ognia, żeby pokroić     {then}",
     "drag_to_fire_or_bash": "Zaciągnij to do ognia, żeby pokroić     {Bump}: walnij tym     {then}",
     "drag_to_pond": "Zaciągnij to do ogniska przy stawie     {then}",

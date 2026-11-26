@@ -195,6 +195,15 @@ cook_time :: proc(at: Station_Kind) -> f32 {
 	return STATION_TIME[at] * lerp(1, COOK_QUICK, g.prosio.trait[STATION_SKILL[at]])
 }
 
+// How long a batch takes: STATION_TIME, however many; but meat roasts a cut
+// at a time on the spit, ROAST_EACH seconds each.
+batch_time :: proc(at: Station_Kind, dish: Item, count: int) -> f32 {
+	if dish == .Roast {
+		return ROAST_EACH * f32(count) * lerp(1, COOK_QUICK, g.prosio.trait[STATION_SKILL[at]])
+	}
+	return cook_time(at)
+}
+
 // The game was over; he comes round at home. See WAKE_FAT.
 wake_up :: proc() {
 	old := g.prosio
@@ -223,11 +232,11 @@ save_fallen :: proc() {
 	g.prosio = lying
 }
 
-// What is kept between one sitting and the next: Prosio himself, what he
-// carries, wears and knows, what he has seen of the meadow, and what he has
-// built in it: his fences, his scarecrows, and the animals in his pens. The
-// rest of the meadow starts afresh each time.
-SAVE_VERSION :: u32(7)
+// What is kept between one sitting and the next: Prosio himself (what is
+// in his stomach too), what he carries, wears and knows, what he has seen
+// of the meadow, and what he has built in it: his fences, his scarecrows, and the
+// animals in his pens. The rest of the meadow starts afresh each time.
+SAVE_VERSION :: u32(8)
 MAX_PENNED :: 12 // penned animals kept
 
 Fence_Saved :: struct {
@@ -271,6 +280,62 @@ Save :: struct {
 	larders:         [MAX_LARDERS]Larder_Saved,
 	camp_up:         bool, // his campfire, if it is set up, and where
 	camp_pos:        Vec2,
+	stomach:         f32, // what is in his stomach: the room it takes, and what it is
+	gut:             Meal,
+}
+
+// Version 7 was the same from before his stomach held anything: it loads
+// with his stomach empty.
+Save_7 :: struct {
+	version:         u32,
+	size:            u32,
+	fat:             f32,
+	trait:           [Trait]f32,
+	need:            [Need]f32,
+	sack:            [Item]int,
+	sack_kcal:       [Item]f32,
+	sack_sel:        Item,
+	outfit:          Outfit,
+	seen:            [MAP_W * MAP_H]bool,
+	seen_region:     [Region_Kind]bool,
+	knows:           [Item]bool,
+	fence_count:     i32,
+	fences:          [MAX_FENCES]Fence_Saved,
+	scarecrow_count: i32,
+	scarecrows:      [MAX_SCARECROWS]Vec2,
+	penned_count:    i32,
+	penned:          [MAX_PENNED]Penned_Saved,
+	sack_fresh:      [Item]f32,
+	larders:         [MAX_LARDERS]Larder_Saved,
+	camp_up:         bool,
+	camp_pos:        Vec2,
+}
+
+from_save_7 :: proc(old: ^Save_7, save: ^Save) {
+	save^ = {
+		version         = SAVE_VERSION,
+		size            = size_of(Save),
+		fat             = old.fat,
+		trait           = old.trait,
+		need            = old.need,
+		sack            = old.sack,
+		sack_kcal       = old.sack_kcal,
+		sack_sel        = old.sack_sel,
+		outfit          = old.outfit,
+		seen            = old.seen,
+		seen_region     = old.seen_region,
+		knows           = old.knows,
+		fence_count     = old.fence_count,
+		fences          = old.fences,
+		scarecrow_count = old.scarecrow_count,
+		scarecrows      = old.scarecrows,
+		penned_count    = old.penned_count,
+		penned          = old.penned,
+		sack_fresh      = old.sack_fresh,
+		larders         = old.larders,
+		camp_up         = old.camp_up,
+		camp_pos        = old.camp_pos,
+	}
 }
 
 // Version 6 was the same from before the campfire, with one thing fewer in
@@ -306,10 +371,10 @@ Save_6 :: struct {
 	larders:         [MAX_LARDERS]Larder_Saved_6,
 }
 
-from_save_6 :: proc(old: ^Save_6, save: ^Save) {
+from_save_6 :: proc(old: ^Save_6, save: ^Save_7) {
 	save^ = {
-		version         = SAVE_VERSION,
-		size            = size_of(Save),
+		version         = 7,
+		size            = size_of(Save_7),
 		fat             = old.fat,
 		trait           = old.trait,
 		need            = old.need,
@@ -491,12 +556,13 @@ has_save: bool
 save_t: f32 // until the next save
 // The save is put together and read here, not on the stack: it is big.
 save_buffer: Save
+old_save_7: Save_7
 old_save_6: Save_6
 old_save_5: Save_5
 old_save_4: Save_4
 old_save_3: Save_3
 // Room for a saved game of any version, as read from a file.
-SAVE_ROOM :: max(size_of(Save), size_of(Save_6), size_of(Save_5), size_of(Save_4), size_of(Save_3))
+SAVE_ROOM :: max(size_of(Save), size_of(Save_7), size_of(Save_6), size_of(Save_5), size_of(Save_4), size_of(Save_3))
 save_bytes: [SAVE_ROOM]u8
 
 save_game :: proc() {
@@ -524,6 +590,7 @@ save_game :: proc() {
 		save.larders[i] = {l.used, l.pos, l.stock, l.kcal, l.fresh}
 	}
 	save.camp_up, save.camp_pos = g.camp_up, g.stations[.Camp].pos
+	save.stomach, save.gut = p.stomach, p.gut
 	for way in Fence_Way {
 		for there, i in g.fences[way] {
 			if there && save.fence_count < MAX_FENCES {
@@ -567,7 +634,8 @@ read_save :: proc(bytes: []u8) -> bool {
 		from_save_3(&old_save_3, &old_save_4)
 		from_save_4(&old_save_4, &old_save_5)
 		from_save_5(&old_save_5, &old_save_6)
-		from_save_6(&old_save_6, save)
+		from_save_6(&old_save_6, &old_save_7)
+		from_save_7(&old_save_7, save)
 		n = size_of(Save)
 	} else if n == size_of(Save_4) && save.version == 4 {
 		copy(([^]u8)(&old_save_4)[:size_of(Save_4)], bytes[:size_of(Save_4)])
@@ -576,7 +644,8 @@ read_save :: proc(bytes: []u8) -> bool {
 		}
 		from_save_4(&old_save_4, &old_save_5)
 		from_save_5(&old_save_5, &old_save_6)
-		from_save_6(&old_save_6, save)
+		from_save_6(&old_save_6, &old_save_7)
+		from_save_7(&old_save_7, save)
 		n = size_of(Save)
 	} else if n == size_of(Save_5) && save.version == 5 {
 		copy(([^]u8)(&old_save_5)[:size_of(Save_5)], bytes[:size_of(Save_5)])
@@ -584,14 +653,23 @@ read_save :: proc(bytes: []u8) -> bool {
 			return false
 		}
 		from_save_5(&old_save_5, &old_save_6)
-		from_save_6(&old_save_6, save)
+		from_save_6(&old_save_6, &old_save_7)
+		from_save_7(&old_save_7, save)
 		n = size_of(Save)
 	} else if n == size_of(Save_6) && save.version == 6 {
 		copy(([^]u8)(&old_save_6)[:size_of(Save_6)], bytes[:size_of(Save_6)])
 		if old_save_6.size != size_of(Save_6) {
 			return false
 		}
-		from_save_6(&old_save_6, save)
+		from_save_6(&old_save_6, &old_save_7)
+		from_save_7(&old_save_7, save)
+		n = size_of(Save)
+	} else if n == size_of(Save_7) && save.version == 7 {
+		copy(([^]u8)(&old_save_7)[:size_of(Save_7)], bytes[:size_of(Save_7)])
+		if old_save_7.size != size_of(Save_7) {
+			return false
+		}
+		from_save_7(&old_save_7, save)
 		n = size_of(Save)
 	}
 	if n != size_of(Save) || save.version != SAVE_VERSION || save.size != size_of(Save) {
@@ -636,6 +714,15 @@ load_game :: proc() -> bool {
 	p.sack_fresh = save.sack_fresh
 	p.sack_sel = save.sack_sel
 	p.knows = save.knows
+	// What was in his stomach, unless it makes no sense (then it is empty).
+	gut := save.gut
+	sane := save.stomach >= 0 && save.stomach <= 2 * STOMACH_HOLDS
+	for x in ([7]f32{gut.carbs, gut.fat, gut.protein, gut.fibre, gut.vitamins, gut.salts, gut.water}) {
+		sane &&= !math.is_nan(x) && x >= 0 && x < 10
+	}
+	if sane && save.stomach > 0 {
+		p.stomach, p.gut = save.stomach, gut
+	}
 	p.kg = weight_with(p.fat)
 	outfit = save.outfit
 	g.seen = save.seen

@@ -13,6 +13,7 @@ Bench_Action :: enum {
 	Replay,
 	Pause,
 	Step,
+	Panes,
 }
 
 Bench_Key :: struct {
@@ -33,6 +34,7 @@ DEFAULT_KEYS := [Bench_Action]Bench_Key {
 	.Replay = {code = '3', shift = true},
 	.Pause = {code = '4', shift = true},
 	.Step = {code = '5', shift = true},
+	.Panes = {code = '6', shift = true},
 }
 
 KEY_F1 :: 290 // raylib's F1; F2 to F12 follow it
@@ -56,7 +58,7 @@ parse_keys :: proc(text: string) -> (out: Bench_Keys, trouble: string) {
 		}
 		switch {
 		case !known:
-			trouble = fmt.tprintf("keys.txt line %d: no action %q (menu, editor, replay, pause, step)", number, words[0])
+			trouble = fmt.tprintf("keys.txt line %d: no action %q (menu, editor, replay, pause, step, panes)", number, words[0])
 		case !ok:
 			trouble = fmt.tprintf("keys.txt line %d: %q is not a key (say Shift+1, Cmd+K or F1)", number, len(words) > 1 ? words[1] : "")
 		case out.count[action] < KEYS_PER_ACTION:

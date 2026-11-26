@@ -1,23 +1,19 @@
 {
   "_about": "What his hooves do: grabbing, lifting, holding, dragging, throwing, swinging and bashing, and what a stone or a slam does.",
   "throwing": {
-    "THROW_ENERGY": {
+    "THROW_ENERGY": {"tune": "attacks", 
       "f32": 8,
       "about": "Rocks and stones: his arms put the same energy into every throw, THROW_ENERGY joules for each kilogram of him (times the strength of his arms), so the speed is the square root of twice that over the stone's weight. A heavy rock is a short, slow lob; a light stone would fly faster than an arm can move, and leaves at ARM_SPEED (times the root of his strength) at the most."
     },
-    "ARM_SPEED": {"f32": 22, "about": "the fastest a stone or a spear leaves his hoof, m/s, for arms of ordinary strength"},
+    "ARM_SPEED": {"tune": "attacks", "f32": 22, "about": "the fastest a stone or a spear leaves his hoof, m/s, for arms of ordinary strength"},
     "PEBBLE_KG": {"f32": 0.3, "about": "what a pebble weighs, in kg"},
     "PEBBLE_RADIUS": {"f32": 0.07, "about": "how big a pebble is, in metres"},
     "PEBBLE_COST": {"f32": 3, "about": "stamina to throw one"},
-    "STONE_HARD": {
-      "f32": 2,
-      "about": "What a thrown stone does to an animal it hits is the blow of an animal of that kind landing with the stone's energy, counted STONE_HARD times over (a stone does not give). A stone under LIGHT_STONE kg knocks nothing over: it stings, startles (the animal runs for PEBBLE_FRIGHT seconds) and makes a fox drop what it stole."
-    },
-    "LIGHT_STONE": {"f32": 2, "about": "in kg: a stone lighter than this only stings and startles"},
+    "LIGHT_STONE": {"f32": 2, "about": "in kg: a stone lighter than this knocks nothing over: it stings, startles (the animal runs for PEBBLE_FRIGHT seconds) and makes a fox drop what it stole. A stone or a rock harms by all the energy it flies with, a hard blow (see ENEMY_HEALTH in animals.json)"},
     "PEBBLE_FRIGHT": {"Vec2": [3, 6], "const": true, "about": "seconds, at random in this range, an animal a pebble startles runs off for"},
     "AIM_RANGE": {"f32": 16, "about": "how far off he can pick something out to throw at"},
-    "ANIMAL_THROW_GAIN": {"f32": 3.2, "about": "for animals, which he can wind up"},
-    "MAX_THROW": {"f32": 22, "about": "the fastest anything he throws or swings can go, m/s"},
+    "ANIMAL_THROW_GAIN": {"tune": "attacks", "f32": 3.2, "about": "for animals, which he can wind up"},
+    "MAX_THROW": {"tune": "attacks", "f32": 22, "about": "the fastest anything he throws or swings can go, m/s"},
     "MAX_THROWN": {"untyped": 4, "about": "stones and spears in the air at once, a count"},
     "WIND_TAP": {
       "f32": 0.2,
@@ -32,7 +28,9 @@
     "LIFT_TIME": {"f32": 0.35, "about": "seconds to lift something of his own weight"},
     "CARRY_DRAIN": {"f32": 5, "about": "stamina per second for holding his own weight"},
     "LIFT_LIMIT": {"f32": 0.9, "about": "he can swing or throw up to this share of his own weight"},
-    "ROCK_LIMIT": {"f32": 2, "about": "he can lift a rock of up to twice his own weight"},
+    "ARM_LIFT": {"tune": "attacks", "f32": 8, "about": "kg of rock he can lift for each kg of his arm muscle: an ordinary Prosio (5 kg of arm muscle) 40 kg, the strongest arms (12 kg) 96 kg, arms wasted away (3 kg) 24 kg. A rock heavier than that stays on the ground (\"Way too heavy to lift!\"). Raise it and he lifts heavier rocks"},
+    "HEAVE_TIME": {"tune": "attacks", "f32": 2, "about": "seconds to heave up a rock at the most he can lift; a lighter one in proportion (a 10 kg rock, for an ordinary Prosio, half a second)"},
+    "HEAVE_COST": {"tune": "attacks", "f32": 40, "about": "stamina to heave up a rock at the most he can lift, on top of 6 for any; a lighter one in proportion. Held, a rock also weighs on him the more the nearer it is to his limit: at it, as much again as it weighs"},
     "ROCK_DENSITY": {
       "f32": 380,
       "about": "A rock of radius 0.3 weighs about 10 kg, 0.6 about 82 kg, and the big boulders (0.9) about 280 kg: liftable only by a heavy, rested Prosio."
@@ -51,16 +49,10 @@
   },
   "bashing": {
     "FOLLOW_THROUGH": {"f32": 0.12, "about": "seconds his arm stays down after a swing lands"},
-    "SLAM_BLOW": {
-      "Vec2": [4, 1.2],
-      "const": true,
-      "about": "What a slam takes from a held animal's health: so much, plus so much for each m/s it hit at, and never more than SLAM_MOST. (His arm sets the speed, whatever he holds, so this does not go by how sturdy the animal is.)"
-    },
-    "SLAM_MOST": {"f32": 30, "about": "the most health one slam can take"},
     "LIMP_MOST": {"f32": 8, "about": "seconds an animal bashed about hangs limp, at most"},
-    "CLUB_SHARE": {
+    "CLUB_SHARE": {"tune": "attacks", 
       "f32": 0.6,
-      "about": "Whatever the swung animal hits takes a share of its speed set by their weights, as when two balls collide. But the club is floppy: only part of its body (CLUB_SHARE of its weight) is behind the blow, and it squashes rather than bounces (restitution BASH_BOUNCE). For a club of weight m moving at v, striking something of weight M: it flies off at   (1 + e) * m' / (m' + M) * v,   with m' = CLUB_SHARE * m the club goes on  (m' - e * M) / (m' + M) * v So a turkey swung into a turkey knocks it about half as fast as it was swung, and swung into the billy goat it barely rocks it and bounces back."
+      "about": "A held animal slammed into the ground or anything solid harms itself by the energy of the part of its body behind the blow (CLUB_SHARE of its weight) at the speed it hit, a soft blow. Whatever the swung animal hits takes a share of its speed set by their weights, as when two balls collide. But the club is floppy: only part of its body (CLUB_SHARE of its weight) is behind the blow, and it squashes rather than bounces (restitution BASH_BOUNCE). For a club of weight m moving at v, striking something of weight M: it flies off at   (1 + e) * m' / (m' + M) * v,   with m' = CLUB_SHARE * m the club goes on  (m' - e * M) / (m' + M) * v So a turkey swung into a turkey knocks it about half as fast as it was swung, and swung into the billy goat it barely rocks it and bounces back."
     },
     "BASH_BOUNCE": {"f32": 0.35, "about": "how bouncy the swung animal is when it strikes (e in the sums above, 0 to 1): raise it and what it hits flies off faster and it bounces back more"}
   },

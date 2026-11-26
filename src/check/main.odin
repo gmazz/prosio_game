@@ -44,9 +44,15 @@ main :: proc() {
 				}
 			case "--forager":
 				forager.on = true // play sensibly, and report the day's budget (forager.odin)
+			case "--hunt":
+				forager.on, hunt.on = true, true // and hunt a turkey first (forager.odin)
 			}
 		}
 		os.exit(autoplay(minutes, seed) ? 0 : 1)
+	}
+	if len(args) > 0 && args[0] == "blows" {
+		blows_command()
+		return
 	}
 	if len(args) > 0 && args[0] == "mix" {
 		os.exit(mix_command(args[1:]))

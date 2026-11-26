@@ -12,3 +12,4 @@ editor  Shift+2   # @ shows and hides the editor
 replay  Shift+3   # # replays the set-up
 pause   Shift+4   # $ pauses and goes on
 step    Shift+5   # % one frame on, while paused
+panes   Shift+6   # ^ opens and closes the pane (the Attacks pane)

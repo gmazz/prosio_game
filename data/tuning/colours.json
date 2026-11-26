@@ -104,6 +104,7 @@
         "Protein": [236, 150, 190, 255],
         "Fibre": [120, 196, 96, 255],
         "Water": [80, 170, 240, 255],
+        "Stomach": [172, 116, 74, 255],
         "Frame": [168, 168, 178, 255]
       },
       "about": "the colour of each part of him, in the bar of what he is made of and on the BODY page"

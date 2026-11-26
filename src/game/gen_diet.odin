@@ -7,10 +7,10 @@ package game
 // ---- stores ----
 // What he is made of besides fat and muscle.
 
-// kg of him that never change: bones, and the rest
-FRAME :: f32(12.5)
-// What each store weighs when it is full, in kg. (Vitamins and electrolytes weigh nothing.)
-STORE_KG := [Need]f32{.Carbs = 6, .Protein = 3, .Fibre = 2, .Water = 5, .Vitamins = 0, .Electrolytes = 0}
+// kg of him that never change: bones, and the rest (14.9 so that he starts at 80 kg: it was 12.5 when his water store held 5 kg, not 2)
+FRAME :: f32(14.9)
+// What each store weighs when it is full, in kg. (Vitamins and electrolytes weigh nothing.) His water is light, so drinking and thirst move his weight by a kilogram or so, not by kilograms
+STORE_KG := [Need]f32{.Carbs = 6, .Protein = 3, .Fibre = 2, .Water = 2, .Vitamins = 0, .Electrolytes = 0}
 // Having run right out of these ends the game, if it lasts.
 DEADLY := [Need]bool{.Carbs = false, .Protein = false, .Fibre = false, .Water = true, .Vitamins = true, .Electrolytes = true}
 // calories of fibre to a kilogram of his fibre store
@@ -23,7 +23,7 @@ SALT_KCAL :: f32(1)
 // ---- levels ----
 // Where each level starts, where lacking, full and too much begin, and how fast levels go down.
 
-// where each level but water starts; above it, vitamins and electrolytes go in more slowly the fuller he is
+// where each level but water starts; above it, vitamins and electrolytes go in more slowly the fuller he is: each point taken in closes a share of what is left up to 100 (see need_points), so they go in the same however the food is shared out
 NEED_START :: f32(50)
 // where his water level starts
 WATER_START :: f32(80)
@@ -37,12 +37,14 @@ NEED_HIGH :: f32(70)
 NEED_OVER :: f32(90)
 // below this he lacks water (water has its own line, higher than NEED_LOW)
 WATER_LOW :: f32(25)
-// the share of his protein, fibre, vitamins and electrolytes used up every second, at rest: half of each in a day (0.6931 is the natural log of 2). Carbs are burned instead (see BASAL in prosio.json), and water has its own THIRST
+// the share of his fibre, vitamins and electrolytes used up every second, at rest: half of each in a day (0.6931 is the natural log of 2). Protein has its own, PROTEIN_FADE. Carbs are burned instead (see BASAL in prosio.json), and water has its own THIRST
 NEED_FADE :: f32(0.6931 / DAY_SECONDS)
+// the share of his protein used up every second, at rest (mending him, and counted as burned for his muscle): half of it in a third of a day, 20 minutes of play, so meat, fish and eggs must be eaten every day or so; raise it and protein goes sooner
+PROTEIN_FADE :: f32(0.6931 / (DAY_SECONDS / 3))
 // above NEED_OVER the share of it that moves on every second: too much of anything is over in a few minutes, as it was before the day was long (it does not follow NEED_FADE)
 SHED :: f32(0.006)
-// water level used up every second: a full drink lasts a good quarter of an hour
-THIRST :: f32(0.1)
+// water level used up every second, at rest: from where it starts (WATER_START) to thirsty (WATER_LOW) in a quarter of the day, 15 minutes of play; a full drink lasts about 20 minutes, three or four drinks a day less what his food waters him (sprinting it goes twice as fast, salty or parched faster still; see SALTY_THIRST and PARCHED_THIRST). Raise it and he drinks more often
+THIRST :: f32((WATER_START - WATER_LOW) / (DAY_SECONDS / 4))
 // seconds without water, vitamins or electrolytes before the game is over
 TOO_LONG :: f32(180)
 // seconds a drink takes
@@ -55,16 +57,16 @@ DRINK_SALT :: f32(25)
 DRINK_SALT_FLOOR :: f32(40)
 
 // ---- stomach ----
-// His stomach: it limits how much he eats at once, by volume. What he eats takes room in it (its weight in ITEM_KG, food.json, times STOMACH_K) and leaves it at a steady pace. He can eat while it is not full; a big piece (a pumpkin) may fill it past full, and then he must wait. What he eats still goes into him at once: the stomach only says how much more he can take.
+// His stomach: it limits how much he eats at once, by volume. What he eats takes room in it (its weight in ITEM_KG, food.json, times STOMACH_K) and leaves it at a steady pace. He can eat while it is not full; a big piece (a pumpkin) may fill it past full, and then he must wait. What he eats waits in it, and goes into him as it leaves, all of it in the end: see digest in diet.odin. (Water he drinks goes straight in, without taking room.)
 
 // litres of stomach a kilogram of food takes; raise it and food is bulkier
 STOMACH_K :: f32(1)
-// litres his stomach holds: about a kilogram of food at once; raise it and he eats more at a sitting
-STOMACH_HOLDS :: f32(1)
-// he is full from this share of what it holds, and eats nothing more until it is below it again: after a cabbage, about two minutes; raise it towards 1 and he waits less
+// litres his stomach holds: about a kilogram and a half of food at once (a pumpkin fills it); raise it and he eats more at a sitting
+STOMACH_HOLDS :: f32(1.5)
+// he is full from this share of what it holds, and eats nothing more until it is below it again: after a pumpkin, about half a minute; raise it towards 1 and he waits less
 STOMACH_FULL :: f32(0.9)
-// seconds a full stomach takes to empty: 5 hours of the game's day, 12.5 minutes of play, so about 4.8 kg of food a day (it was 8 hours, and he could not eat enough to keep his weight); raise it and he eats less a day
-STOMACH_EMPTIES :: f32(5.0 / 24 * DAY_SECONDS)
+// seconds a full stomach takes to empty: 2 hours of the game's day, 5 minutes of play, so up to 18 litres of food a day (it was 5 hours with a litre, and he waited too long to eat again); raise it and he eats less a day
+STOMACH_EMPTIES :: f32(2.0 / 24 * DAY_SECONDS)
 
 // ---- full_and_lacking ----
 // What full and lacking do, in numbers.

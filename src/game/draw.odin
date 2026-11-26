@@ -692,6 +692,17 @@ draw_enemy_marks :: proc(e: Enemy, head: Vec3) {
 		box(m, {}, {HEALTH_BAR + 0.06, 0.14, 0.03}, UI_DARK)
 		box(m, {-HEALTH_BAR * (1 - share) / 2, 0, 0.02}, {HEALTH_BAR * share, 0.08, 0.03}, share > 0.5 ? HEALTH_GOOD : (share > 0.25 ? UI_ORANGE : UI_RED))
 	}
+	// A body being chopped, or begun, shows how much meat is left on it.
+	p := &g.prosio
+	chopping := p.chopping && p.carry == .Enemy && e.state == .Held // (only one is ever held)
+	if e.ko && MEAT_FROM[e.kind] && (e.cut > 0 || e.chop_t > 0 || chopping) && !drawing_shadows() {
+		at := e.state == .Held ? e.chain[1] : Vec3{e.pos.x, e.y, e.pos.y}
+		m := translate(at + {0, r * 2.2 + 0.75, 0})
+		cut := f32(e.cut) + e.chop_t / CHOP_TIME
+		share := 1 - cut / f32(max(meat_pieces(e.kind), 1))
+		box(m, {}, {HEALTH_BAR + 0.06, 0.14, 0.03}, UI_DARK)
+		box(m, {-HEALTH_BAR * (1 - share) / 2, 0, 0.02}, {HEALTH_BAR * share, 0.08, 0.03}, ITEM_COLOR[.Meat])
+	}
 }
 
 // The frame that carries one half of a held animal's body: the model point a

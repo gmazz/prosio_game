@@ -15,9 +15,15 @@ import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:mem"
+import "core:os"
 import "core:strings"
 import "core:time"
 import rl "vendor:raylib"
+
+// Started by a program (WORKBENCH_UNFOCUSED): the window takes no keys and no
+// clicks, only commands, so a person typing elsewhere (a Mac may bring the
+// window to the front all the same) changes nothing in it.
+program_driven: bool
 
 // What the host has told us about the latest build (see wb_set_status).
 Phase :: enum {
@@ -61,6 +67,12 @@ draw_start: time.Tick
 
 @(export, link_name = "wb_open_window")
 wb_open_window :: proc() -> bool {
+	// Started by a program (WORKBENCH_UNFOCUSED=1), the window opens without
+	// taking the keyboard: whatever the person is typing elsewhere stays there.
+	if os.get_env("WORKBENCH_UNFOCUSED", context.temp_allocator) != "" {
+		rl.SetConfigFlags({.WINDOW_UNFOCUSED})
+		program_driven = true
+	}
 	if !game.open_window("Prosio — workbench", 1280, 720) {
 		return false // no display: the host says so and stops
 	}
@@ -73,6 +85,7 @@ wb_open_window :: proc() -> bool {
 
 @(export, link_name = "wb_load_graphics")
 wb_load_graphics :: proc() {
+	program_driven = os.get_env("WORKBENCH_UNFOCUSED", context.temp_allocator) != "" // (again in each new library)
 	game.load_graphics()
 	game.set_ground_layout()
 	editor_load_font()
@@ -115,10 +128,12 @@ wb_frame :: proc() -> bool {
 		v.steps = max(v.steps - 1, 0)
 	}
 	update_start := time.tick_now()
+	pane_before_update()
 	for _ in 0 ..< runs {
 		game.g.frame += 1
 		game.update_frame(total / f32(runs))
 	}
+	pane_after_update()
 	update := f32(time.duration_milliseconds(time.tick_since(update_start)))
 	cmd.apply_view(dt)
 	after_update()
@@ -132,11 +147,15 @@ wb_frame :: proc() -> bool {
 // The frame drawn (and saved to a file, with a path), the camera looking a
 // little to the right while the editor is open over the right half, so that
 // he stays in sight on the left.
+camera_shifted: bool
+
 draw_shifted :: proc(path: cstring) {
 	draw_start = time.tick_now()
-	shift: f32 = editor.visible ? EDITOR_CAMERA_SHIFT * game.g.camera_zoom : 0
+	shift: f32 = editor.visible || pane.open != .None ? EDITOR_CAMERA_SHIFT * game.g.camera_zoom : 0
 	game.g.camera.x += shift
+	camera_shifted = true // (so view_camera, drawing over it, does not shift it again)
 	game.draw_frame(path)
+	camera_shifted = false
 	game.g.camera.x -= shift
 }
 
@@ -156,7 +175,7 @@ wb_run_setup :: proc(text: string) -> string {
 // library on a swap.
 @(export, link_name = "wb_workbench")
 wb_workbench :: proc() -> string {
-	return fmt.tprintf("%s%s%s", cmd.workbench_text(), selection_text(), editor_text())
+	return fmt.tprintf("%s%s%s%s", cmd.workbench_text(), selection_text(), panes_text(), editor_text())
 }
 
 @(export, link_name = "wb_take_workbench")
@@ -171,7 +190,18 @@ wb_take_workbench :: proc(text: string) {
 		take_selection_text(commands[i:][:end if end >= 0 else len(commands) - i])
 		commands = strings.concatenate({commands[:i], commands[i:][end + 1 if end >= 0 else len(commands) - i:]}, context.temp_allocator)
 	}
-	cmd.take_workbench_text(commands)
+	// (The panes' lines: the numbers changed and the pane's choices.)
+	kept_lines, pane_lines: [dynamic]string
+	kept_lines.allocator, pane_lines.allocator = context.temp_allocator, context.temp_allocator
+	for line in strings.split_lines(commands, context.temp_allocator) {
+		if strings.has_prefix(line, "#tune ") || strings.has_prefix(line, "#pane ") || strings.has_prefix(line, "#mix ") {
+			append(&pane_lines, line)
+		} else {
+			append(&kept_lines, line)
+		}
+	}
+	take_panes_text(strings.join(pane_lines[:], "\n", context.temp_allocator))
+	cmd.take_workbench_text(strings.join(kept_lines[:], "\n", context.temp_allocator))
 }
 
 // What the workbench asks of the host (a build switch changed, say): taken
@@ -358,8 +388,10 @@ after_draw :: proc() {
 		work_ms[frame_slot] = f32(time.duration_milliseconds(time.tick_since(work_start)))
 	}
 	draw_overlays()
+	draw_rig()
 	draw_status()
 	draw_inspector()
+	draw_pane()
 	draw_editor()
 	draw_menu()
 }

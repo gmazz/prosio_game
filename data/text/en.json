@@ -128,6 +128,17 @@
   },
   "kitchen": {
     "_about": "The oven, the cooking fire, the churn, the workbench and his campfire.",
+    "mill_refused": {
+      "_of": "Mill_Refusal",
+      "_some": true,
+      "_about": "what he says when a dried food will not mill into a flour (the mixing rules: mill); none when it mills",
+      "Not_One_Food": "One thing at a time in the mill!",
+      "Already": "It's flour already!",
+      "Too_Wet": "Too wet to mill... it needs more drying!",
+      "Too_Fatty": "Too greasy! It just turns to paste.",
+      "Burnt": "Burnt black... that would be soot, not flour!"
+    },
+    "dense_loaf": {"text": "Heavy as a stone... it never rose!", "about": "a loaf baked from flour with too little gluten (the flaw Dense)"},
     "station_name": {
       "_of": "Station_Kind",
       "Oven": "THE OVEN",
@@ -321,6 +332,7 @@
       "Protein": "PROTEIN",
       "Fibre": "FIBRE",
       "Water": "WATER",
+      "Stomach": "IN TUMMY",
       "Frame": "BONES"
     },
     "trait_name": {
@@ -603,7 +615,9 @@
       "nobody_eats_fox": "Nobody eats fox.",
       "chopping_block": "The chopping block is by the fire, at the pond (or by my campfire).",
       "no_room_meat": "No room in my sack for meat!",
-      "chop": "Chop, chop, chop! Meat for the fire!",
+      "chop": "Chop, chop, chop! That was the last of it!",
+      "chopping": "Chop... chop...",
+      "chop_cut": "A cut of meat!",
       "billy_no_milk": "A billy goat gives no milk!",
       "only_bash": "Nothing to do with this one but bash or throw it.",
       "goat_no_milk": "This goat has no milk just now.",
@@ -757,7 +771,7 @@
     "too_heavy_jump_fence": "Too heavy to jump the fence!     {Grab}: take this piece down",
     "shake_tree": "{Bump}: shake the tree",
     "chop_it": {
-      "text": "{Action}: chop it into meat     {then}",
+      "text": "Hold {Action}: chop it into meat     {then}",
       "about": "{then}: what letting go would do (let_go, put_down_tired or put_down_or_throw)"
     },
     "drag_to_fire": {"text": "Drag it to a fire to chop it     {then}", "about": "{then}: as in chop_it"},

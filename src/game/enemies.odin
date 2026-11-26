@@ -89,6 +89,8 @@ Enemy :: struct {
 	loot_t:    f32, // for how long it has been carrying it
 	loot:      Item,
 	loot_kcal: f32,
+	cut:       int, // cuts of meat chopped off its body so far (see update_chop)
+	chop_t:    f32, // seconds into the next cut: kept when he stops, so he goes on where he left off
 }
 
 // How far down a drowned animal has sunk.
@@ -96,9 +98,41 @@ sunk :: proc(e: Enemy) -> f32 {
 	return max(e.drowned_t - SINK_WAIT, 0) * SINK_SPEED
 }
 
+// The kinds of blow, by how much of their energy harms (BLOW_FACTOR).
+Blow :: enum {
+	Soft, // his belly in a bump, a thrown or bashed animal, one animal into another
+	Hard, // his hooves in a stomp, a stone, a rock
+	Sharp, // a spear
+}
+
+// The energy of something of this weight moving this fast, in joules.
+kinetic :: proc(kg, speed: f32) -> f32 {
+	note_moving(kg, speed)
+	return 0.5 * kg * speed * speed
+}
+
+// What a blow of this much energy takes from an animal of this kind: the
+// share of it that harms (by the kind of blow, and for a spear by how much
+// of it gets through the animal's hide), out of what the animal can take
+// (BLOW_TAKES joules a kilogram of it, times its toughness).
+blow_harm :: proc(kind: Enemy_Kind, joules: f32, how: Blow) -> f32 {
+	harm := ENEMY_HEALTH * joules * BLOW_FACTOR[how] / (BLOW_TAKES * ENEMY_KG[kind] * ENEMY_TOUGH[kind])
+	harm = how == .Sharp ? harm * ENEMY_HIDE[kind] : harm
+	note_harm(kind, joules, how, harm)
+	return harm
+}
+
+// How fast a hurt animal mends now, health a second: from the moment it is
+// hit, growing with the time since, to HEAL_RATE once HEAL_RAMP seconds have
+// gone by.
+mend_rate :: proc(e: Enemy) -> f32 {
+	return HEAL_RATE * (HEAL_RAMP > 0 ? min(e.hurt_t / HEAL_RAMP, 1) : 1)
+}
+
+// An animal knocked flying at this speed: the energy that reached it is
+// what it now moves with.
 blow_damage :: proc(kind: Enemy_Kind, speed: f32) -> f32 {
-	share := speed / ENEMY_STURDY[kind]
-	return HARD_BLOW * share * share
+	return blow_harm(kind, kinetic(ENEMY_KG[kind], speed), .Soft)
 }
 
 // Prosio has hit it, thrown it, or knocked it about, hurt or not: a goat
@@ -118,6 +152,7 @@ hurt_enemy :: proc(e: ^Enemy, damage: f32) -> bool {
 	}
 	e.health = max(e.health - damage, 0)
 	e.hurt_t = 0
+	note_hurt(e, damage)
 	offend(e)
 	if e.kind == .Turkey && damage > 4 {
 		// Feathers fly.
@@ -132,13 +167,14 @@ hurt_enemy :: proc(e: ^Enemy, damage: f32) -> bool {
 	return e.ko
 }
 
-// How dangerous Prosio is to an animal of this kind: the share of its health
-// that one good throw of his would take. It goes with his weight and with
-// the strength of his arms, and the animals can tell.
+// How dangerous Prosio is to an animal of this kind, 0 to 1: by how fast he
+// could throw one (ENEMY_DREAD). It goes with his weight and with the
+// strength of his arms, and the animals can tell.
 threat :: proc(kind: Enemy_Kind) -> f32 {
 	p := &g.prosio
 	speed := min(ANIMAL_THROW_GAIN * strength() * p.kg / ENEMY_KG[kind], MAX_THROW)
-	return clamp(blow_damage(kind, speed) / ENEMY_HEALTH, 0, 1)
+	share := speed / ENEMY_DREAD[kind]
+	return clamp(share * share, 0, 1)
 }
 
 boldness :: proc(kind: Enemy_Kind) -> f32 {
@@ -258,8 +294,8 @@ update_enemies :: proc(dt: f32) {
 		e.scared_t -= dt
 		e.milk_t -= dt
 		e.hurt_t += dt
-		if e.state == .Chase && e.hurt_t > HEAL_AFTER && !e.ko {
-			e.health = min(e.health + HEAL_RATE * dt, ENEMY_HEALTH)
+		if e.state == .Chase && !e.ko && mends() {
+			e.health = min(e.health + mend_rate(e) * dt, ENEMY_HEALTH)
 		}
 		switch e.state {
 		case .Gone:
@@ -317,6 +353,15 @@ update_enemies :: proc(dt: f32) {
 			if e.pen_t <= 0 {
 				e.pen_t = PEN_CHECK
 				look_for_pen(&e)
+			}
+			// (On the workbench, an animal told to stand still stands: it does not
+			// come for him or shove him, but he still bumps into it, cannot walk
+			// through it, and his bumps land.)
+			if held_still(index) {
+				e.vel = {}
+				e.y = 0
+				touch_prosio(&e, false)
+				continue
 			}
 			// Far from Prosio, it rests (but a fox with something of his
 			// goes on to its den).
@@ -542,7 +587,7 @@ update_enemies :: proc(dt: f32) {
 			e.y = 0
 			touch_prosio(&e, false)
 			if e.state == .Dizzy && ready && (e.impact.kind == .None || e.impact.age > 0) {
-				if e.ko && MEAT_KG[e.kind] > 0 {
+				if e.ko && MEAT_FROM[e.kind] {
 					// That was the end of it: its body stays.
 					e.state = .Dead
 					if e.body_t <= 0 {
@@ -793,9 +838,8 @@ drop_loot :: proc(e: ^Enemy) {
 	}
 }
 
-// It is gone, and another will not take its place for a good while.
-// It is gone: another takes its place at its home in time, after about a
-// season if it was killed (KILLED_BACK), sooner if it was only lost in the
+// It is gone: another takes its place at its home in time, after about
+// two days if it was killed (KILLED_BACK), sooner if it was only lost in the
 // fog or slunk off (RESPAWN).
 leave :: proc(e: ^Enemy, killed: bool) {
 	unpen(e) // the next one comes back where its kind lives, not in the pen
@@ -804,11 +848,17 @@ leave :: proc(e: ^Enemy, killed: bool) {
 	back := killed ? KILLED_BACK : RESPAWN[e.kind]
 	e.timer = random_range(back.x, back.y)
 	e.has_loot = false
+	e.cut = 0
+	e.chop_t = 0
 }
 
-// The pieces of meat a dead animal gives: its MEAT_KG in pieces of meat.
+// The cuts of meat a dead animal gives: MEAT_SHARE of its weight, in cuts
+// of ITEM_KG[.Meat], to the nearest cut.
 meat_pieces :: proc(kind: Enemy_Kind) -> int {
-	return int(math.round(MEAT_KG[kind] / ITEM_KG[.Meat]))
+	if !MEAT_FROM[kind] {
+		return 0
+	}
+	return int(math.round(MEAT_SHARE * ENEMY_KG[kind] / ITEM_KG[.Meat]))
 }
 
 // E with an animal in his hand: a goat is milked; a dead turkey or goat is
@@ -817,7 +867,7 @@ use_held_animal :: proc() {
 	p := &g.prosio
 	e := &g.enemies[p.carry_index]
 	switch {
-	case e.ko && MEAT_KG[e.kind] == 0:
+	case e.ko && !MEAT_FROM[e.kind]:
 		answer(TEXT.nobody_eats_fox)
 	case e.ko:
 		fire, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2)
@@ -825,28 +875,14 @@ use_held_animal :: proc() {
 			answer(TEXT.chopping_block)
 			return
 		}
-		room := sack_room(.Meat)
-		if room <= 0 {
+		_ = fire
+		if sack_room(.Meat) <= 0 {
 			answer(TEXT.no_room_meat)
 			return
 		}
-		// A body that has lain a while gives poorer meat, nearer going off.
-		fresh: f32 = 1 // (a body never put down has not started to lie: body_t is 0)
-		if e.body_t > 0 {
-			fresh = lerp(BODY_MEAT_LEAST, 1, clamp(e.body_t / BODY_LIFE, 0, 1))
-		}
-		for _ in 0 ..< min(meat_pieces(e.kind), room) {
-			sack_add(.Meat, math.round(RAW_KCAL[.Meat] * fresh), fresh)
-		}
-		p.sack_sel = .Meat
-		block := g.stations[fire].pos + FIRE_BLOCK.xz
-		burst({block.x, 0.7, block.y}, 12, 3, COLOR_STAR, 0.08)
-		leave(e, true)
-		p.carry = .Nothing
-		p.lift_t = 0
-		p.carry_kg = 0
-		p.swinging = false
-		say(TEXT.chop, 1.8)
+		// He chops while the button is held: see update_chop.
+		p.chopping = true
+		say(TEXT.chopping, 1.2)
 	case e.kind == .Goat:
 		milk_goat(e, e.chain[1])
 	case e.kind == .Billy:
@@ -854,6 +890,57 @@ use_held_animal :: proc() {
 	case:
 		answer(TEXT.only_bash)
 	}
+}
+
+// Chopping the body he holds at the block, while the action button is held:
+// a cut of meat into the sack every CHOP_TIME seconds, until there is no
+// meat left on it. Letting go of the button, or being hit, stops it: what
+// is cut is in the sack, and the rest stays on the body, to finish later.
+update_chop :: proc(dt: f32) {
+	p := &g.prosio
+	if !p.chopping {
+		return
+	}
+	e := &g.enemies[p.carry_index]
+	fire, at_fire := fire_in_reach(p.pos, prosio_radius(p.kg) + 1.2)
+	if p.carry != .Enemy || !e.ko || !at_fire || !button_down(.Action) || p.fail != .None || p.dazed_t > 0 {
+		p.chopping = false
+		return
+	}
+	p.vel = {}
+	e.chop_t += dt
+	if e.chop_t < CHOP_TIME {
+		return
+	}
+	e.chop_t -= CHOP_TIME
+	if sack_room(.Meat) <= 0 {
+		answer(TEXT.no_room_meat)
+		p.chopping = false
+		return
+	}
+	// A body that has lain a while gives poorer meat, nearer going off.
+	fresh: f32 = 1 // (a body never put down has not started to lie: body_t is 0)
+	if e.body_t > 0 {
+		fresh = lerp(BODY_MEAT_LEAST, 1, clamp(e.body_t / BODY_LIFE, 0, 1))
+	}
+	sack_add(.Meat, math.round(RAW_KCAL[.Meat] * fresh), fresh)
+	p.sack_sel = .Meat
+	e.cut += 1
+	block := g.stations[fire].pos + FIRE_BLOCK.xz
+	burst({block.x, 0.7, block.y}, 6, 2, COLOR_STAR, 0.07)
+	if e.cut < meat_pieces(e.kind) {
+		say(TEXT.chop_cut, 0.8)
+		return
+	}
+	// The last of it.
+	burst({block.x, 0.7, block.y}, 12, 3, COLOR_STAR, 0.08)
+	leave(e, true)
+	p.carry = .Nothing
+	p.lift_t = 0
+	p.carry_kg = 0
+	p.swinging = false
+	p.chopping = false
+	say(TEXT.chop, 1.8)
 }
 
 // Milks a goat, held by its hind legs, standing quietly licking the salt
@@ -1098,6 +1185,26 @@ prosio_hits_enemy :: proc(e: ^Enemy, away: Vec2) {
 	}
 }
 
+// A stomp from this high: the energy is his weight (with what he carries)
+// times FALL_GRAVITY (not the GRAVITY he falls by: see animals.json) times
+// the height, and STOMP_SINK more as he sinks into the
+// animal; a hard blow.
+stomp_energy :: proc(height: f32) -> f32 {
+	note_moving(total_kg(), math.sqrt(2 * GRAVITY * max(height, 0))) // (as fast as he falls)
+	return total_kg() * FALL_GRAVITY * (max(height, 0) + STOMP_SINK)
+}
+
+stomp_harm :: proc(kind: Enemy_Kind, height: f32) -> f32 {
+	return blow_harm(kind, stomp_energy(height), .Hard)
+}
+
+// How long a stomp from this high leaves an animal flattened: by his
+// momentum as he lands, his weight times his falling speed (as fast as he
+// really falls, by GRAVITY).
+stomp_pin :: proc(height: f32) -> f32 {
+	return STOMP_PIN * total_kg() * math.sqrt(2 * GRAVITY * max(height, 0))
+}
+
 // Checked as he falls: if he comes down on an animal, it takes the blow and
 // he bounces off. True if he did.
 stomp_enemies :: proc() -> bool {
@@ -1120,26 +1227,67 @@ stomp_enemies :: proc() -> bool {
 			continue
 		}
 		away := dist > 1e-4 ? d / dist : facing_dir(p.facing)
-		damage = STOMP_K * total_kg() * max(p.peak - e.y, 0)
+		damage = stomp_harm(e.kind, p.peak - e.y)
 		drop_loot(&e)
 		e.hit_t = 0.9
-		if hurt_enemy(&e, damage * ENEMY_HEALTH / ENEMY_TOUGH[e.kind]) {
+		if hurt_enemy(&e, damage) {
 			launch_enemy(&e, away, 5, false) // flattened
 			e.vy = 3
 			knocked_out = true
 		} else {
 			enemy_impact(&e, away, IMPACT_FALL_SPEED, false)
-			e.timer = 0.8 + 2.5 * (1 - e.health / ENEMY_HEALTH)
+			e.timer = stomp_pin(p.peak - e.y)
 		}
-		pain_stars({e.pos.x, e.y + r * 1.8, e.pos.y}, damage / 12)
-		burst({e.pos.x, e.y + 0.7, e.pos.y}, 4 + int(damage / 25), 3 + damage / 60, COLOR_STAR, 0.12)
+		pain_stars({e.pos.x, e.y + r * 1.8, e.pos.y}, 3 + damage / 4)
+		burst({e.pos.x, e.y + 0.7, e.pos.y}, 4 + int(damage / 6), 3 + damage / 15, COLOR_STAR, 0.12)
 		hit = true
 	}
 	if hit {
 		p.vy = 5
 		p.peak = p.height
-		g.shake = max(g.shake, min(damage / 400, 0.6))
+		g.shake = max(g.shake, min(0.1 + damage / 100, 0.6))
 		say(knocked_out ? TEXT.mega_stomp : TEXT.stomp, 0.8)
 	}
 	return hit
+}
+
+// The blows of a fight, for the tables (tools/check.sh blows, and the
+// workbench's Attacks pane): what each takes from an animal of each kind,
+// dealt by Prosio as he is now.
+Test_Blow :: enum {
+	Bump, // at a run
+	Throw, // the animal itself, wound up fully
+	Stomp, // from the top of his jump
+	Pebble,
+	Stone, // 2 kg
+	Rock, // the heaviest he can lift
+	Spear,
+}
+
+test_blow :: proc(row: Test_Blow, kind: Enemy_Kind) -> f32 {
+	p := &g.prosio
+	switch row {
+	case .Bump:
+		v := bump_speed(p.kg * dash_speed(), kind)
+		return v >= IMPACT_LAUNCH_SPEED ? blow_damage(kind, v) : 0
+	case .Throw:
+		return blow_damage(kind, min(ANIMAL_THROW_GAIN * strength() * p.kg / ENEMY_KG[kind], MAX_THROW))
+	case .Stomp:
+		return stomp_harm(kind, jump_set(jump_height(total_kg())))
+	case .Pebble:
+		return stone_damage(PEBBLE_KG, stone_speed(PEBBLE_KG), kind)
+	case .Stone:
+		return stone_damage(2, stone_speed(2), kind)
+	case .Rock:
+		most := lift_most()
+		return stone_damage(most, stone_speed(most), kind)
+	case .Spear:
+		return spear_damage(kind, stone_speed(SPEAR_KG))
+	}
+	return 0
+}
+
+// How many such blows bring it down (0: never).
+blows_needed :: proc(harm: f32) -> int {
+	return harm > 0 ? int(math.ceil(ENEMY_HEALTH / harm - 0.001)) : 0
 }

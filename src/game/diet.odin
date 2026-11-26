@@ -14,6 +14,7 @@ import "core:math"
 //   protein   what muscle is built from, waiting to be used
 //   fibre     roughage on its way through him
 //   water
+//   stomach   what he has eaten and not yet digested (see digest)
 //
 // Every bar on the screen is one of these parts, with its kilograms beside
 // it, and the weight bar is the same parts laid end to end. Two more things
@@ -21,16 +22,22 @@ import "core:math"
 //
 // Food is made of the same stuff: each food's calories are shared between
 // carbs, fat, protein, fibre, vitamins and electrolytes, in the proportions
-// of its row in COMPOSITION below. Eating puts each into the part of him
-// that is the same thing:
+// of its row in COMPOSITION below. What he eats goes into his stomach, with
+// the water in it, and from there, as his stomach empties, into him: each
+// into the part of him that is the same thing:
 //
 //   carbs    into his carbs; what will not fit turns to fat
 //   fat      straight onto his fat
 //   protein  into his protein; what will not fit passes through
 //   fibre    into his; what will not fit passes through
 //
-// (Protein never turns into carbs. Water he drinks at the pond, and gets
-// from the water in what he eats: see swallow.)
+//   water    into his; what will not fit passes through
+//
+// (Protein never turns into carbs. Water he drinks at the pond goes straight
+// into him; the water in what he eats comes with the rest of it.) So
+// whatever eating does to him (a sugar rush, a full belly of fibre and its
+// wind, eagle eyes, salty) comes on as he digests, over the minutes his
+// stomach takes to empty, and nothing of it is lost or made on the way.
 //
 // What he burns comes out of his carbs and his fat. His muscle burns all
 // the time, in proportion to how much of it there is, and that, with
@@ -116,13 +123,27 @@ composition :: proc(item: Item) -> (c: Composition) {
 }
 
 // What a piece of food puts into him: kg of each part, and points of the
-// two weightless needs.
+// two weightless needs; and, once he has swallowed it, kg of water.
 Meal :: struct {
 	carbs, fat, protein, fibre: f32,
 	vitamins, salts:            f32,
+	water:                      f32,
 }
 
-// What it weighs going in.
+// A share of a meal (the same share of everything in it).
+meal_share :: proc(m: Meal, k: f32) -> Meal {
+	return {m.carbs * k, m.fat * k, m.protein * k, m.fibre * k, m.vitamins * k, m.salts * k, m.water * k}
+}
+
+meal_sum :: proc(a, b: Meal) -> Meal {
+	return {a.carbs + b.carbs, a.fat + b.fat, a.protein + b.protein, a.fibre + b.fibre, a.vitamins + b.vitamins, a.salts + b.salts, a.water + b.water}
+}
+
+meal_less :: proc(a, b: Meal) -> Meal {
+	return {a.carbs - b.carbs, a.fat - b.fat, a.protein - b.protein, a.fibre - b.fibre, a.vitamins - b.vitamins, a.salts - b.salts, a.water - b.water}
+}
+
+// What it weighs going in, its water left out.
 meal_kg :: proc(m: Meal) -> f32 {
 	return m.carbs + m.fat + m.protein + m.fibre
 }
@@ -152,30 +173,62 @@ store_kg :: proc(n: Need) -> f32 {
 }
 
 // Puts this many kg into a store (or takes them out), and says how many
-// would not fit.
+// would not fit. What rounding leaves out is kept for next time, as for
+// his fat (see fat_add): digesting puts in a few hundred-thousandths of a
+// kilogram a frame.
 store_add :: proc(n: Need, kg: f32) -> (over: f32) {
+	p := &g.prosio
 	room := STORE_KG[n]
-	have := store_kg(n) + kg
+	was := store_kg(n)
+	want := kg + p.store_carry[n]
+	have := was + want
 	over = max(have - room, 0)
-	g.prosio.need[n] = clamp(have, 0, room) / room * 100
+	now := clamp(have, 0, room)
+	p.need[n] = now / room * 100
+	meant := have == now ? want : now - was // (all of it, unless it would not fit)
+	p.store_carry[n] = meant - (store_kg(n) - was)
 	return
 }
 
-// He has eaten this: each part of it goes to the same part of him.
-eat :: proc(m: Meal) {
+// Vitamins and electrolytes go in point for point up to NEED_START; above
+// it, the fuller he is of them the less he takes in: each point closes a
+// share of what is left up to 100. Counted in points taken in (need_points),
+// a level is simply what was taken in, so a meal taken in a piece at a time
+// or all at once comes to the same level; and what rounding leaves out of
+// the tiny pieces of digesting is kept for next time, as for the stores.
+need_points :: proc(level: f32) -> f64 {
+	if level <= NEED_START {
+		return f64(level)
+	}
+	gap := f64(100 - NEED_START)
+	return f64(NEED_START) - gap * math.ln(max(f64(100 - level), 1e-9) / gap)
+}
+
+need_level :: proc(points: f64) -> f32 {
+	if points <= f64(NEED_START) {
+		return f32(points)
+	}
+	gap := f64(100 - NEED_START)
+	return f32(100 - gap * math.exp(-(points - f64(NEED_START)) / gap))
+}
+
+need_take :: proc(n: Need, points: f32) {
 	p := &g.prosio
+	target := need_points(p.need[n]) + f64(points + p.store_carry[n])
+	p.need[n] = clamp(need_level(target), 0, 100)
+	p.store_carry[n] = f32(target - need_points(p.need[n]))
+}
+
+// This has reached him from his stomach: each part of it goes to the same
+// part of him.
+eat :: proc(m: Meal) {
 	fat_add(m.fat)
 	fat_add(store_add(.Carbs, m.carbs)) // what his carbs cannot hold turns to fat
-	store_add(.Protein, m.protein) // spare protein passes through him, as spare fibre does
+	store_add(.Protein, m.protein) // spare protein passes through him, as spare fibre and water do
 	store_add(.Fibre, m.fibre)
-	for points, n in ([Need]f32{.Carbs = 0, .Protein = 0, .Fibre = 0, .Water = 0, .Vitamins = m.vitamins, .Electrolytes = m.salts}) {
-		gain := points
-		if gain > 0 && p.need[n] > NEED_START {
-			// The fuller he is of it, the less of it he takes in.
-			gain *= (100 - p.need[n]) / (100 - NEED_START)
-		}
-		p.need[n] = clamp(p.need[n] + gain, 0, 100)
-	}
+	store_add(.Water, m.water)
+	need_take(.Vitamins, m.vitamins)
+	need_take(.Electrolytes, m.salts)
 	train(.Gut, GUT_WORK * m.fibre)
 }
 
@@ -200,12 +253,46 @@ stomach_full :: proc() -> bool {
 	return g.prosio.stomach >= STOMACH_HOLDS * STOMACH_FULL
 }
 
-// He has swallowed a piece of this: it takes room in his stomach, and the
-// water in it waters him.
-swallow :: proc(item: Item) {
+// He has swallowed a piece of this, which puts this meal into him: it goes
+// into his stomach, with the water in it, taking room there.
+swallow :: proc(item: Item, m: Meal) {
 	p := &g.prosio
+	m := m
+	m.water = ITEM_KG[item] * item_water(item)
 	p.stomach += stomach_room(item)
-	store_add(.Water, ITEM_KG[item] * item_water(item))
+	p.gut = meal_sum(p.gut, m)
+}
+
+// What is in his stomach weighs this.
+gut_kg :: proc() -> f32 {
+	gut := g.prosio.gut
+	return meal_kg(gut) + gut.water
+}
+
+// His stomach empties at a steady pace (a full one in STOMACH_EMPTIES), and
+// what leaves it goes into him: the same share of everything in it as of
+// the room it took. When it is empty, all of it has gone in.
+digest :: proc(dt: f32) {
+	p := &g.prosio
+	if p.stomach <= 0 {
+		p.stomach = 0
+		if p.gut != {} {
+			eat(p.gut) // (anything left, to the last crumb)
+			p.gut = {}
+		}
+		return
+	}
+	out := min(STOMACH_HOLDS / STOMACH_EMPTIES * dt, p.stomach)
+	left := meal_share(p.gut, (p.stomach - out) / p.stomach)
+	p.stomach -= out
+	if p.stomach <= 0 {
+		left = {}
+	}
+	// What goes in is what the stomach no longer holds, so that the two
+	// always add up to what he ate.
+	gone := meal_less(p.gut, left)
+	p.gut = left
+	eat(gone)
 }
 
 // Weight burned, as energy. Muscle work (carbs_first: his muscles keeping
@@ -383,7 +470,7 @@ update_diet :: proc(dt: f32) {
 		if n == .Water || (n == .Carbs && !too_much(n)) {
 			continue
 		}
-		used := p.need[n] * (too_much(n) ? SHED : NEED_FADE) * dt
+		used := p.need[n] * (too_much(n) ? SHED : (n == .Protein ? PROTEIN_FADE : NEED_FADE)) * dt
 		kg := used * STORE_KG[n] / 100
 		surplus := too_much(n)
 		p.need[n] -= used
@@ -406,8 +493,7 @@ update_diet :: proc(dt: f32) {
 		thirst *= SALTY_THIRST
 	}
 	p.need[.Water] = max(p.need[.Water] - thirst * dt, 0)
-	// His stomach empties at a steady pace.
-	p.stomach = max(p.stomach - STOMACH_HOLDS / STOMACH_EMPTIES * dt, 0)
+	digest(dt)
 
 	for n in Need {
 		state := need_state(n)
@@ -589,6 +675,7 @@ Part :: enum {
 	Protein,
 	Fibre,
 	Water,
+	Stomach, // what he has eaten and not yet digested (see digest)
 	Frame,
 }
 PART_NEED := #partial [Part]Need {
@@ -606,6 +693,8 @@ part_kg :: proc(part: Part) -> f32 {
 		return muscle_kg(.Arms) + muscle_kg(.Legs)
 	case .Frame:
 		return FRAME
+	case .Stomach:
+		return gut_kg()
 	case .Carbs, .Protein, .Fibre, .Water:
 		return store_kg(PART_NEED[part])
 	}
@@ -721,11 +810,9 @@ draw_body_panel :: proc(x, y, s: f32) -> (width, height: f32) {
 	// How full his stomach is: when the bar is full he cannot eat more.
 	draw_pixels(STOMACH_ICON, x, stomach_y - 2 * s, 16 * s)
 	ui_rect(bar_x, stomach_y, bar_w, 12 * s, UI_DARK)
-	ui_rect(bar_x + 2 * s, stomach_y + 2 * s, (bar_w - 4 * s) * clamp(p.stomach / STOMACH_HOLDS, 0, 1), 8 * s, stomach_full() ? UI_ORANGE : STOMACH_BAR)
+	ui_rect(bar_x + 2 * s, stomach_y + 2 * s, (bar_w - 4 * s) * clamp(p.stomach / STOMACH_HOLDS, 0, 1), 8 * s, stomach_full() ? UI_ORANGE : PART_COLOR[.Stomach])
 	return
 }
-
-STOMACH_BAR :: Color{204, 142, 82, 255}
 
 // The bands of the weight bar, by his fat (kg, out of FAT_MAX): starving at
 // the thin end, lean, chubby, huge, and too fat for his heart.

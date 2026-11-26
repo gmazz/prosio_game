@@ -26,6 +26,13 @@ package gen_data
 // bool, or "untyped" for a bare number) makes a constant; any other type a
 // table, which is a constant only with "const": true.
 //
+// A value the workbench's panes may turn while the game runs is marked with
+// the pane it belongs to, "tune": "attacks" (or a list of panes), and may
+// give the span of its slider, "range": [0, 1]. It must be an f32 or a table
+// of them. In the workbench's build such an f32 is a variable, not a
+// constant; the game the players get is built as before. Every marked value
+// is listed in src/game/gen_tune.odin, for the panes (see generate_tunables).
+//
 // The words the game shows are in data/text/<language>.json, one file to a
 // language, made into one struct of texts (src/game/gen_text.odin): see
 // generate_text below.
@@ -47,10 +54,11 @@ main :: proc() {
 	slice.sort(matches)
 	failed := false
 	written: [dynamic]string
+	tunes: [dynamic]Tune
 	for path in matches {
 		subject := strings.trim_suffix(filepath.base(path), ".json")
 		out := path_join(out_dir, fmt.tprintf("gen_%s.odin", subject))
-		code, ok := generate_tuning(path)
+		code, ok := generate_tuning(path, subject, &tunes)
 		if !ok {
 			failed = true
 			continue
@@ -62,6 +70,16 @@ main :: proc() {
 				fmt.eprintfln("gen_data: could not write %s", out)
 				failed = true
 			}
+		}
+	}
+	{
+		out := path_join(out_dir, "gen_tune.odin")
+		code := generate_tunables(tunes[:])
+		append(&written, "gen_tune.odin")
+		old, _ := os.read_entire_file(out, context.allocator)
+		if string(old) != code && os.write_entire_file(out, code) != nil {
+			fmt.eprintfln("gen_data: could not write %s", out)
+			failed = true
 		}
 	}
 	if code, ok := generate_text(path_join(root, "data", "text")); ok {
@@ -383,7 +401,7 @@ write_comment :: proc(b: ^strings.Builder, text, indent: string) {
 	}
 }
 
-generate_tuning :: proc(path: string) -> (code: string, ok: bool) {
+generate_tuning :: proc(path, subject: string, tunes: ^[dynamic]Tune) -> (code: string, ok: bool) {
 	root, read := read_file(path)
 	if !read {
 		return
@@ -395,7 +413,7 @@ generate_tuning :: proc(path: string) -> (code: string, ok: bool) {
 	b := strings.builder_make()
 	body := strings.builder_make()
 	ok = true
-	write_section(&body, root, path, &ok)
+	write_section(&body, root, path, subject, tunes, &ok)
 	fmt.sbprintfln(&b, "package game\n")
 	fmt.sbprintfln(&b, "// Made by tools/gen_data from data/tuning/%s: do not edit; edit that file.\n", filepath.base(path))
 	if strings.contains(strings.to_string(body), "math.") {
@@ -406,7 +424,7 @@ generate_tuning :: proc(path: string) -> (code: string, ok: bool) {
 	return strings.to_string(b), ok
 }
 
-write_section :: proc(b: ^strings.Builder, section: Node, path: string, ok: ^bool) {
+write_section :: proc(b: ^strings.Builder, section: Node, path, subject: string, tunes: ^[dynamic]Tune, ok: ^bool) {
 	for key, i in section.keys {
 		value := section.values[i]
 		switch {
@@ -416,10 +434,10 @@ write_section :: proc(b: ^strings.Builder, section: Node, path: string, ok: ^boo
 				strings.write_byte(b, '\n')
 			}
 		case is_capitals(key):
-			write_entry(b, key, value, path, ok)
+			write_entry(b, key, value, path, subject, tunes, ok)
 		case value.kind == .Object:
 			fmt.sbprintfln(b, "// ---- %s ----", key)
-			write_section(b, value, path, ok)
+			write_section(b, value, path, subject, tunes, ok)
 			strings.write_byte(b, '\n')
 		case:
 			fmt.eprintfln("%s:%d: \"%s\": a value's name is in CAPITALS; any other key is a section (an object)", path, value.line, key)
@@ -428,7 +446,7 @@ write_section :: proc(b: ^strings.Builder, section: Node, path: string, ok: ^boo
 	}
 }
 
-write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path: string, ok: ^bool) {
+write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path, subject: string, tunes: ^[dynamic]Tune, ok: ^bool) {
 	if entry.kind != .Object {
 		fmt.eprintfln("%s:%d: %s: write it as { \"type\": value, \"about\": \"...\" }", path, entry.line, name)
 		ok^ = false
@@ -437,6 +455,9 @@ write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path: string
 	type, about := "", ""
 	value: Node
 	constant, partial, has_constant := false, false, false
+	panes: [dynamic]string
+	range: [2]f64
+	has_range := false
 	for key, i in entry.keys {
 		v := entry.values[i]
 		switch key {
@@ -446,6 +467,21 @@ write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path: string
 			constant, has_constant = v.truth, true
 		case "partial":
 			partial = v.truth
+		case "tune":
+			if v.kind == .String {
+				append(&panes, v.text)
+			} else {
+				for item in v.items {append(&panes, item.text)}
+			}
+		case "range":
+			if v.kind != .Array || len(v.items) != 2 {
+				fmt.eprintfln("%s:%d: %s: a range is two numbers, [lowest, highest]", path, v.line, name)
+				ok^ = false
+				return
+			}
+			range.x, _ = strconv.parse_f64(v.items[0].text)
+			range.y, _ = strconv.parse_f64(v.items[1].text)
+			has_range = true
 		case:
 			if type != "" {
 				fmt.eprintfln("%s:%d: %s has two types, %s and %s", path, v.line, name, type, key)
@@ -466,6 +502,25 @@ write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path: string
 	literal := strings.builder_make()
 	write_literal(&literal, value)
 	lit := strings.to_string(literal)
+	if len(panes) > 0 {
+		pane := strings.join(panes[:], " ")
+		switch {
+		case type == "f32":
+			// A variable in the workbench's build, so a pane can turn it.
+			v := value.kind == .String ? value.text : lit
+			fmt.sbprintfln(b, "when WORKBENCH {{\n\t%s: f32 = %s\n}} else {{\n\t%s :: f32(%s)\n}}", name, v, name, v)
+			append(tunes, Tune{name, subject, "", pane, about, range, has_range})
+			return
+		case strings.has_prefix(type, "[") && strings.has_suffix(type, "]f32") && value.kind == .Object && !constant:
+			for key in value.keys {
+				append(tunes, Tune{name, subject, key, pane, about, range, has_range})
+			}
+		case:
+			fmt.eprintfln("%s:%d: %s: only an f32, or a table of them that is not \"const\", can be tuned", path, entry.line, name)
+			ok^ = false
+			return
+		}
+	}
 	scalar := slice.contains(SCALARS, type)
 	switch {
 	case type == "untyped":
@@ -480,6 +535,59 @@ write_entry :: proc(b: ^strings.Builder, name: string, entry: Node, path: string
 		}
 		fmt.sbprintfln(b, "%s %s %s%s%s", name, constant ? "::" : ":=", partial ? "#partial " : "", type, lit)
 	}
+}
+
+// ---- The values the workbench's panes can turn. ----
+
+Tune :: struct {
+	name, subject, key, panes, about: string,
+	range:                            [2]f64,
+	has_range:                        bool,
+}
+
+// src/game/gen_tune.odin: in the workbench's build only, every value marked
+// "tune", with where it is written (the file, and the entry of a table), its
+// "about", the span of its slider (when the file gives one) and where it
+// lives in the running game. The panes (src/workbench/panes.odin) turn them
+// there, and write them back into the file when told to save.
+generate_tunables :: proc(tunes: []Tune) -> string {
+	b := strings.builder_make()
+	fmt.sbprintln(&b, "package game\n")
+	fmt.sbprintln(&b, "// Made by tools/gen_data from the values marked \"tune\" in data/tuning/*.json: do not edit.\n")
+	fmt.sbprintln(&b, "when WORKBENCH {")
+	fmt.sbprintln(&b, "\tTunable :: struct {\n\t\tname, file, key, panes, about: string,\n\t\tvalue:                         ^f32,\n\t\trange:                         [2]f32,\n\t\thas_range:                     bool,\n\t}\n")
+	fmt.sbprintln(&b, "\ttunables :: proc() -> []Tunable {")
+	if len(tunes) == 0 {
+		fmt.sbprintln(&b, "\t\treturn nil")
+	} else {
+		fmt.sbprintfln(&b, "\t\t@(static) list: [%d]Tunable", len(tunes))
+		fmt.sbprintln(&b, "\t\tlist = {")
+		for t in tunes {
+			at := t.key == "" ? t.name : fmt.tprintf("%s[.%s]", t.name, t.key)
+			fmt.sbprintfln(&b, "\t\t\t{{%s, %s, %s, %s, %s, &%s, {{%v, %v}}, %v}},", quoted(t.name), quoted(t.subject), quoted(t.key), quoted(t.panes), quoted(t.about), at, t.range.x, t.range.y, t.has_range)
+		}
+		fmt.sbprintln(&b, "\t\t}")
+		fmt.sbprintln(&b, "\t\treturn list[:]")
+	}
+	fmt.sbprintln(&b, "\t}")
+	fmt.sbprintln(&b, "}")
+	return strings.to_string(b)
+}
+
+// A text as an Odin string.
+quoted :: proc(s: string) -> string {
+	b := strings.builder_make()
+	strings.write_byte(&b, '"')
+	for c in s {
+		switch c {
+		case '"': strings.write_string(&b, "\\\"")
+		case '\\': strings.write_string(&b, "\\\\")
+		case '\n': strings.write_string(&b, "\\n")
+		case: strings.write_rune(&b, c)
+		}
+	}
+	strings.write_byte(&b, '"')
+	return strings.to_string(b)
 }
 
 // ---- Writing the texts as Odin. ----

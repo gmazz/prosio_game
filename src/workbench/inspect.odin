@@ -71,7 +71,7 @@ candidates :: proc() -> []Candidate {
 // shift), for finding things on the screen.
 view_camera :: proc() -> rl.Camera3D {
 	g := &game.g
-	shift: f32 = editor.visible ? EDITOR_CAMERA_SHIFT * g.camera_zoom : 0
+	shift: f32 = (editor.visible || pane.open != .None) && !camera_shifted ? EDITOR_CAMERA_SHIFT * g.camera_zoom : 0
 	target := rl.Vector3{g.camera.x + shift, 0.8, g.camera.y}
 	return {position = target + game.CAMERA_OFFSET * g.camera_zoom, target = target, up = {0, 1, 0}, fovy = CAMERA_FOV, projection = .PERSPECTIVE}
 }
@@ -191,6 +191,7 @@ inspect_mouse :: proc() {
 	m := rl.GetMousePosition()
 	on_editor := editor.visible && m.x >= f32(rl.GetScreenWidth()) / 2
 	on_inspector := selection.active && rl.CheckCollisionPointRec(m, inspector_rect)
+	if pane_over(m) {return} // (the pane takes its own clicks)
 	if on_inspector {
 		if wheel := rl.GetMouseWheelMove(); wheel != 0 {selection.scroll = max(selection.scroll - int(wheel * 3), 0)}
 		return

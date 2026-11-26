@@ -27,6 +27,9 @@ Text :: struct {
 	eat_text: [Item]cstring,
 	plan_about: [Item]cstring,
 	thing_about: [Item]cstring,
+	mill_refused: [Mill_Refusal]cstring,
+	// a loaf baked from flour with too little gluten (the flaw Dense)
+	dense_loaf: cstring,
 	station_name: [Station_Kind]cstring,
 	station_label: [Station_Kind]cstring,
 	station_about: [Station_Kind]cstring,
@@ -156,6 +159,8 @@ Text :: struct {
 	chopping_block: cstring,
 	no_room_meat: cstring,
 	chop: cstring,
+	chopping: cstring,
+	chop_cut: cstring,
 	billy_no_milk: cstring,
 	only_bash: cstring,
 	goat_no_milk: cstring,
@@ -448,6 +453,8 @@ TEXTS := [Language]Text {
 		eat_text = #partial [Item]cstring{.Apple = "Crunch! Yum!", .Berries = "Berries! Yum!", .Mushroom = "Mmm, mushroom!", .Pumpkin = "A whole pumpkin! Burp!", .Cabbage = "Crunch crunch... cabbage!", .Nuts = "Crack! Nutty nuts!", .Salt = "Lick, lick... SO salty!", .Fish = "Raw fish? Blergh! The fire by the pond grills it.", .Meat = "Raw meat? No! The fire by the pond roasts it.", .Milk = "Glug glug... creamy milk!", .Honey = "Sticky, sweet honey! Mmm!", .Pebble = "I can't eat a pebble! Hold {Grab} to throw one.", .Wheat = "I can't eat raw wheat! The mill makes flour of it.", .Egg = "A raw egg? Yuck! The fire by the pond fries it.", .Flour = "Dry flour? Blergh! It wants baking.", .Apple_Pie = "Apple pie! Heavenly!", .Pumpkin_Pie = "Pumpkin pie! BURP!", .Berry_Muffins = "Muffins! So fluffy!", .Mushroom_Pie = "Mushroom pie! Mmm!", .Nut_Cake = "Nut cake! So rich!", .Fried_Egg = "A fried egg! Sunny side up!", .Grilled_Fish = "Grilled fish! Crispy!", .Roast = "Roast meat! What a feast!", .Butter = "A whole pat of butter! Slurp!", .Cheese = "Cheese! Squeaky and salty!", .Bread = "Warm bread! Yum!", .Wood = "I can't eat wood! It is for fires, and for building.", .Fence = "No room for a fence here!", .Scarecrow = "No room for a scarecrow here!", .Rod = "My fishing rod! {Grab} at the pond casts it.", .Spear = "My spear! Hold {Grab} to throw it.", .Gate = "A gate! {Eat} puts it up in a fence.", .Larder = "A larder! {Eat} stands it up.", .Campfire = "My campfire kit! {Eat} sets it up."},
 		plan_about = #partial [Item]cstring{.Fence = "{Eat} puts it up. Animals stay in... or out.", .Scarecrow = "{Eat} stands it up. Crows keep off the wheat.", .Rod = "{Grab} at the pond: fish from far, no fright.", .Spear = "Hold {Grab}: throw it. {Action} picks it up again.", .Gate = "{Eat} puts it up in a fence. {Action} opens it.", .Larder = "{Eat} stands it up. Food keeps 5 times longer.", .Campfire = "{Eat} sets it up: cook and chop meat anywhere."},
 		thing_about = #partial [Item]cstring{.Pebble = "For throwing: choose it, then hold {Grab} and let go", .Wood = "For the oven, the cooking fire and the workbench", .Fence = "{Eat} puts it up in front of you. {Grab} takes it down again", .Scarecrow = "{Eat} stands it up. Crows keep off the wheat near it", .Rod = "Choose it, then {Grab} at the pond: fish from far off", .Spear = "Choose it, then hold {Grab} and let go. {Action} picks it up again", .Gate = "{Eat} puts it up like a fence. {Action} opens and shuts it, even holding an animal", .Larder = "{Eat} stands it up. {Action} opens it: food keeps 5 times longer in it", .Campfire = "{Eat} sets it up: a fire to cook eggs, fish and meat at, and to chop meat. {Grab} packs it up again"},
+		mill_refused = #partial [Mill_Refusal]cstring{.Not_One_Food = "One thing at a time in the mill!", .Already = "It's flour already!", .Too_Wet = "Too wet to mill... it needs more drying!", .Too_Fatty = "Too greasy! It just turns to paste.", .Burnt = "Burnt black... that would be soot, not flour!"},
+		dense_loaf = "Heavy as a stone... it never rose!",
 		station_name = #partial [Station_Kind]cstring{.Oven = "THE OVEN", .Fire = "THE COOKING FIRE", .Churn = "THE CHURN", .Bench = "THE WORKBENCH", .Camp = "MY CAMPFIRE"},
 		station_label = #partial [Station_Kind]cstring{.Oven = "OVEN", .Fire = "FIRE", .Churn = "CHURN", .Bench = "WORKBENCH", .Camp = "CAMPFIRE"},
 		station_about = #partial [Station_Kind]cstring{.Oven = "The better the baker, the richer the bake", .Fire = "The better the cook, the richer the dish", .Churn = "The better the dairy pig, the more butter and cheese", .Bench = "Wood from the forest, made into useful things.", .Camp = "The better the cook, the richer the dish"},
@@ -474,7 +481,7 @@ TEXTS := [Language]Text {
 		high_name = #partial [Need]cstring{.Carbs = "SUGAR RUSH", .Protein = "BULKING", .Fibre = "GASSY", .Water = "", .Vitamins = "EAGLE EYES", .Electrolytes = "SALTY"},
 		too_much_name = #partial [Need]cstring{.Carbs = "HICCUPS", .Protein = "STIFF", .Fibre = "GAS STORM", .Water = "", .Vitamins = "GLOWING", .Electrolytes = "PARCHED"},
 		need_eat = #partial [Need]cstring{.Carbs = "bread, honey, fruit, pumpkin", .Protein = "eggs, fish, meat, nuts", .Fibre = "cabbage, pumpkin, apples", .Water = "a drink at the pond", .Vitamins = "berries, cabbage, pumpkin", .Electrolytes = "rock salt, cheese, mushrooms"},
-		part_name = #partial [Part]cstring{.Fat = "FAT", .Muscle = "MUSCLE", .Carbs = "CARBS", .Protein = "PROTEIN", .Fibre = "FIBRE", .Water = "WATER", .Frame = "BONES"},
+		part_name = #partial [Part]cstring{.Fat = "FAT", .Muscle = "MUSCLE", .Carbs = "CARBS", .Protein = "PROTEIN", .Fibre = "FIBRE", .Water = "WATER", .Stomach = "IN TUMMY", .Frame = "BONES"},
 		trait_name = #partial [Trait]cstring{.Arms = "ARMS", .Legs = "LEGS", .Lungs = "LUNGS", .Hide = "HIDE", .Gut = "GUT", .Hooves = "HOOVES", .Baking = "BAKING", .Grilling = "GRILLING", .Dairy = "DAIRY"},
 		trait_grows = #partial [Trait]cstring{.Arms = "lifting, dragging, bashing, throwing (with protein)", .Legs = "running, jumping, long walks (with protein)", .Lungs = "sprinting", .Hide = "taking pecks, butts and stings", .Gut = "eating fibre", .Hooves = "picking, fishing, milking", .Baking = "baking at the oven", .Grilling = "cooking at the fire", .Dairy = "churning"},
 		trait_gives = #partial [Trait]cstring{.Arms = "he lifts and throws more", .Legs = "he is faster and jumps higher", .Lungs = "sprints cost less, breath comes back sooner", .Hide = "knocks hurt less", .Gut = "he holds his wind, and lets it go with {Gas}", .Hooves = "quicker picking, a longer reach", .Baking = "richer bakes (+15% to +80%), sooner", .Grilling = "richer grills (+0% to +50%), sooner", .Dairy = "more butter and cheese (+0% to +25%)"},
@@ -565,7 +572,9 @@ TEXTS := [Language]Text {
 		nobody_eats_fox = "Nobody eats fox.",
 		chopping_block = "The chopping block is by the fire, at the pond (or by my campfire).",
 		no_room_meat = "No room in my sack for meat!",
-		chop = "Chop, chop, chop! Meat for the fire!",
+		chop = "Chop, chop, chop! That was the last of it!",
+		chopping = "Chop... chop...",
+		chop_cut = "A cut of meat!",
 		billy_no_milk = "A billy goat gives no milk!",
 		only_bash = "Nothing to do with this one but bash or throw it.",
 		goat_no_milk = "This goat has no milk just now.",
@@ -708,7 +717,7 @@ TEXTS := [Language]Text {
 		throw_over_fence = "Throw it over the fence: hold {Grab}, let go",
 		too_heavy_jump_fence = "Too heavy to jump the fence!     {Grab}: take this piece down",
 		shake_tree = "{Bump}: shake the tree",
-		chop_it = "{Action}: chop it into meat     {then}",
+		chop_it = "Hold {Action}: chop it into meat     {then}",
 		drag_to_fire = "Drag it to a fire to chop it     {then}",
 		drag_to_fire_or_bash = "Drag it to a fire to chop it     {Bump}: bash with it     {then}",
 		drag_to_pond = "Drag it to the fire by the pond     {then}",
@@ -825,6 +834,8 @@ TEXTS := [Language]Text {
 		eat_text = #partial [Item]cstring{.Apple = "Chrup! Pycha!", .Berries = "Jagody! Pycha!", .Mushroom = "Mmm, grzybek!", .Pumpkin = "Cała dynia! Bek!", .Cabbage = "Chrup, chrup... kapusta!", .Nuts = "Trzask! Orzeszki!", .Salt = "Liz, liz... ale SŁONE!", .Fish = "Surowa ryba? Fuj! Ognisko przy stawie ją upiecze.", .Meat = "Surowe mięso? Nie! Ognisko przy stawie je upiecze.", .Milk = "Glu, glu... kremowe mleko!", .Honey = "Lepki, słodki miodek! Mmm!", .Pebble = "Kamyka nie zjem! Przytrzymaj {Grab}, żeby rzucić.", .Wheat = "Surowej pszenicy nie zjem! Młyn zrobi z niej mąkę.", .Egg = "Surowe jajko? Fuj! Ognisko przy stawie je usmaży.", .Flour = "Sucha mąka? Fuj! Trzeba z niej coś upiec.", .Apple_Pie = "Szarlotka! Niebo w gębie!", .Pumpkin_Pie = "Placek dyniowy! BEK!", .Berry_Muffins = "Jagodzianki! Ale puszyste!", .Mushroom_Pie = "Tarta z grzybami! Mmm!", .Nut_Cake = "Ciasto orzechowe! Ale pyszne!", .Fried_Egg = "Jajko sadzone! Słoneczko na talerzu!", .Grilled_Fish = "Ryba z grilla! Chrupiąca!", .Roast = "Pieczeń! Co za uczta!", .Butter = "Cała kostka masła! Mlask!", .Cheese = "Ser! Skrzypiący i słony!", .Bread = "Ciepły chlebek! Pycha!", .Wood = "Drewna nie zjem! Jest na ogień i do budowania.", .Fence = "Tu nie ma miejsca na płot!", .Scarecrow = "Tu nie ma miejsca na stracha na wróble!", .Rod = "Moja wędka! {Grab} przy stawie ją zarzuca.", .Spear = "Moja włócznia! Przytrzymaj {Grab}, żeby rzucić.", .Gate = "Furtka! {Eat} wstawia ją w płot.", .Larder = "Spiżarka! {Eat} ją stawia.", .Campfire = "Mój zestaw na ognisko! {Eat} je rozpala."},
 		plan_about = #partial [Item]cstring{.Fence = "{Eat} go stawia. Zwierzęta w środku... lub poza.", .Scarecrow = "{Eat} go stawia. Wrony z dala od pszenicy!", .Rod = "{Grab} nad stawem: łowisz z daleka, po cichu.", .Spear = "Przytrzymaj {Grab}: rzut. {Action} znowu ją podnosi.", .Gate = "{Eat} wstawia ją w płot. {Action} ją otwiera.", .Larder = "{Eat} ją stawia. Jedzenie wytrzyma 5 razy dłużej.", .Campfire = "{Eat} je rozpala: gotuj i krój mięso, gdzie chcesz."},
 		thing_about = #partial [Item]cstring{.Pebble = "Do rzucania: wybierz go, przytrzymaj {Grab} i puść", .Wood = "Do pieca, na ognisko i do warsztatu", .Fence = "{Eat} stawia go przed tobą. {Grab} znowu go rozbiera", .Scarecrow = "{Eat} go stawia. Wrony nie podejdą do pszenicy obok niego", .Rod = "Wybierz ją, potem {Grab} przy stawie: łowisz z daleka", .Spear = "Wybierz ją, przytrzymaj {Grab} i puść. {Action} znowu ją podnosi", .Gate = "{Eat} wstawia ją jak płot. {Action} ją otwiera i zamyka, nawet ze zwierzęciem", .Larder = "{Eat} ją stawia. {Action} ją otwiera: jedzenie wytrzyma w niej 5 razy dłużej", .Campfire = "{Eat} je rozpala: upieczesz przy nim jajka, ryby i mięso, i pokroisz mięso. {Grab} znowu je składa"},
+		mill_refused = #partial [Mill_Refusal]cstring{.Not_One_Food = "Do młyna po jednej rzeczy!", .Already = "To już jest mąka!", .Too_Wet = "Za mokre do mielenia... trzeba dłużej suszyć!", .Too_Fatty = "Za tłuste! Robi się z tego pasta.", .Burnt = "Spalone na węgiel... to byłaby sadza, nie mąka!"},
+		dense_loaf = "Ciężkie jak kamień... wcale nie wyrosło!",
 		station_name = #partial [Station_Kind]cstring{.Oven = "PIEC", .Fire = "OGNISKO", .Churn = "MASŁOBOJKA", .Bench = "WARSZTAT", .Camp = "MOJE OGNISKO"},
 		station_label = #partial [Station_Kind]cstring{.Oven = "PIEC", .Fire = "OGNISKO", .Churn = "MASŁOBOJKA", .Bench = "WARSZTAT", .Camp = "OGNISKO"},
 		station_about = #partial [Station_Kind]cstring{.Oven = "Im lepszy piekarz, tym bogatszy wypiek", .Fire = "Im lepszy kucharz, tym bogatsze danie", .Churn = "Im lepszy mleczarz, tym więcej masła i sera", .Bench = "Drewno z lasu zamienione w przydatne rzeczy.", .Camp = "Im lepszy kucharz, tym bogatsze danie"},
@@ -851,7 +862,7 @@ TEXTS := [Language]Text {
 		high_name = #partial [Need]cstring{.Carbs = "CUKROWY SZAŁ", .Protein = "ROŚNIE SIŁA", .Fibre = "GAZY", .Water = "", .Vitamins = "SOKOLE OKO", .Electrolytes = "SŁONO"},
 		too_much_name = #partial [Need]cstring{.Carbs = "CZKAWKA", .Protein = "SZTYWNY", .Fibre = "BURZA GAZÓW", .Water = "", .Vitamins = "ŚWIECI", .Electrolytes = "WYSUSZONY"},
 		need_eat = #partial [Need]cstring{.Carbs = "chleb, miód, owoce, dynia", .Protein = "jajka, ryba, mięso, orzechy", .Fibre = "kapusta, dynia, jabłka", .Water = "łyk wody ze stawu", .Vitamins = "jagody, kapusta, dynia", .Electrolytes = "sól kamienna, ser, grzyby"},
-		part_name = #partial [Part]cstring{.Fat = "TŁUSZCZ", .Muscle = "MIĘŚNIE", .Carbs = "CUKRY", .Protein = "BIAŁKO", .Fibre = "BŁONNIK", .Water = "WODA", .Frame = "KOŚCI"},
+		part_name = #partial [Part]cstring{.Fat = "TŁUSZCZ", .Muscle = "MIĘŚNIE", .Carbs = "CUKRY", .Protein = "BIAŁKO", .Fibre = "BŁONNIK", .Water = "WODA", .Stomach = "W BRZUSZKU", .Frame = "KOŚCI"},
 		trait_name = #partial [Trait]cstring{.Arms = "RĘCE", .Legs = "NOGI", .Lungs = "PŁUCA", .Hide = "SKÓRA", .Gut = "BRZUCH", .Hooves = "KOPYTKA", .Baking = "PIECZENIE", .Grilling = "GRILLOWANIE", .Dairy = "MLECZARSTWO"},
 		trait_grows = #partial [Trait]cstring{.Arms = "dźwiganie, ciągnięcie, walenie, rzucanie (z białkiem)", .Legs = "bieganie, skakanie, długie spacery (z białkiem)", .Lungs = "sprinty", .Hide = "dziobnięcia, bodnięcia i użądlenia", .Gut = "jedzenie błonnika", .Hooves = "zrywanie, łowienie ryb, dojenie", .Baking = "pieczenie w piecu", .Grilling = "gotowanie na ognisku", .Dairy = "ubijanie masła"},
 		trait_gives = #partial [Trait]cstring{.Arms = "podnosi i rzuca więcej", .Legs = "jest szybszy i skacze wyżej", .Lungs = "sprint mniej męczy, oddech szybciej wraca", .Hide = "uderzenia mniej bolą", .Gut = "trzyma gazy i puszcza je, kiedy chcesz: {Gas}", .Hooves = "szybsze zrywanie, dłuższy zasięg", .Baking = "bogatsze wypieki (+15% do +80%), szybciej", .Grilling = "bogatsze dania z ognia (+0% do +50%), szybciej", .Dairy = "więcej masła i sera (+0% do +25%)"},
@@ -942,7 +953,9 @@ TEXTS := [Language]Text {
 		nobody_eats_fox = "Nikt nie je lisów.",
 		chopping_block = "Pieniek do krojenia jest przy ognisku nad stawem (albo przy moim ognisku).",
 		no_room_meat = "Nie ma w worku miejsca na mięso!",
-		chop = "Ciach, ciach, ciach! Mięso na ogień!",
+		chop = "Ciach, ciach, ciach! To już ostatni kawałek!",
+		chopping = "Ciach... ciach...",
+		chop_cut = "Kawałek mięsa!",
 		billy_no_milk = "Kozioł nie daje mleka!",
 		only_bash = "Tym można tylko walnąć albo rzucić.",
 		goat_no_milk = "Ta koza nie ma teraz mleka.",
@@ -1085,7 +1098,7 @@ TEXTS := [Language]Text {
 		throw_over_fence = "Przerzuć przez płot: przytrzymaj {Grab}, puść",
 		too_heavy_jump_fence = "Za ciężki, żeby przeskoczyć płot!     {Grab}: rozbierz ten kawałek",
 		shake_tree = "{Bump}: potrząśnij drzewem",
-		chop_it = "{Action}: pokrój na mięso     {then}",
+		chop_it = "Trzymaj {Action}: pokrój na mięso     {then}",
 		drag_to_fire = "Zaciągnij to do ognia, żeby pokroić     {then}",
 		drag_to_fire_or_bash = "Zaciągnij to do ognia, żeby pokroić     {Bump}: walnij tym     {then}",
 		drag_to_pond = "Zaciągnij to do ogniska przy stawie     {then}",
@@ -1201,7 +1214,7 @@ TEXTS := [Language]Text {
 TEXT := &TEXTS[.English]
 
 // The tables only some things have a text in ("_some": true).
-TEXT_SOME := [?]string{"gather_text", "plan_about", "thing_about", "say_high", "say_over", "high_name", "too_much_name", "row_section", "menu_text", "ending"}
+TEXT_SOME := [?]string{"gather_text", "plan_about", "thing_about", "mill_refused", "say_high", "say_over", "high_name", "too_much_name", "row_section", "menu_text", "ending"}
 
 // The letters the texts use besides plain ASCII: the font is made with them too.
 TEXT_LETTERS := [?]rune{'Ó', 'ó', 'Ą', 'ą', 'Ć', 'ć', 'Ę', 'ę', 'Ł', 'ł', 'Ń', 'ń', 'Ś', 'ś', 'Ź', 'ź', 'Ż', 'ż'}
