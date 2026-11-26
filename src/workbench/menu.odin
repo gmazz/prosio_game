@@ -147,7 +147,13 @@ menu_matches :: proc() -> []cmd.Command {
 	if i := strings.index_byte(typed, ' '); i >= 0 {
 		first = typed[:i]
 	}
-	for c in cmd.COMMANDS {
+	// (and each pane's own command)
+	all := make([dynamic]cmd.Command, context.temp_allocator)
+	append(&all, ..cmd.COMMANDS)
+	for p in PANES {
+		if p.command != nil {append(&all, cmd.Command{"Panes", p.name, p.help, fmt.tprintf("the %s pane's own: what it takes, answered with what comes of it", p.title)})}
+	}
+	for c in all {
 		hay := strings.to_lower(strings.concatenate({c.group, " ", c.name, " ", c.help}, context.temp_allocator), context.temp_allocator)
 		if typed == "" || strings.has_prefix(c.name, first) || strings.contains(hay, typed) {
 			append(&out, c)
@@ -262,7 +268,7 @@ run_line :: proc(line: string) -> string {
 		rest := strings.trim_space(line[strings.index(line, words[1]) + len(words[1]):])
 		return set_field(words[1], rest)
 	}
-	if len(words) >= 1 && (words[0] == "pane" || words[0] == "tune" || words[0] == "tune-save" || words[0] == "tune-reset" || words[0] == "tune-list" || words[0] == "tune-sets" || words[0] == "tune-load" || words[0] == "bench" || words[0] == "mixing") {
+	if len(words) >= 1 && (words[0] == "pane" || words[0] == "tune" || words[0] == "tune-save" || words[0] == "tune-reset" || words[0] == "tune-list" || words[0] == "tune-sets" || words[0] == "tune-load" || words[0] == "bench" || pane_named(words[0]) >= 0) {
 		return pane_command(line)
 	}
 	if len(words) >= 1 && words[0] == "inspect" {return inspect_text()}

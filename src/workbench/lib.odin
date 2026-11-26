@@ -151,7 +151,7 @@ camera_shifted: bool
 
 draw_shifted :: proc(path: cstring) {
 	draw_start = time.tick_now()
-	shift: f32 = editor.visible || pane.open != .None ? EDITOR_CAMERA_SHIFT * game.g.camera_zoom : 0
+	shift: f32 = editor.visible || pane_is_open() ? EDITOR_CAMERA_SHIFT * game.g.camera_zoom : 0
 	game.g.camera.x += shift
 	camera_shifted = true // (so view_camera, drawing over it, does not shift it again)
 	game.draw_frame(path)
@@ -194,7 +194,7 @@ wb_take_workbench :: proc(text: string) {
 	kept_lines, pane_lines: [dynamic]string
 	kept_lines.allocator, pane_lines.allocator = context.temp_allocator, context.temp_allocator
 	for line in strings.split_lines(commands, context.temp_allocator) {
-		if strings.has_prefix(line, "#tune ") || strings.has_prefix(line, "#pane ") || strings.has_prefix(line, "#mix ") {
+		if strings.has_prefix(line, "#tune ") || strings.has_prefix(line, "#pane ") || strings.has_prefix(line, "#paneof ") {
 			append(&pane_lines, line)
 		} else {
 			append(&kept_lines, line)

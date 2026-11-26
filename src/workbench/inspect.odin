@@ -71,7 +71,7 @@ candidates :: proc() -> []Candidate {
 // shift), for finding things on the screen.
 view_camera :: proc() -> rl.Camera3D {
 	g := &game.g
-	shift: f32 = (editor.visible || pane.open != .None) && !camera_shifted ? EDITOR_CAMERA_SHIFT * g.camera_zoom : 0
+	shift: f32 = (editor.visible || pane_is_open()) && !camera_shifted ? EDITOR_CAMERA_SHIFT * g.camera_zoom : 0
 	target := rl.Vector3{g.camera.x + shift, 0.8, g.camera.y}
 	return {position = target + game.CAMERA_OFFSET * g.camera_zoom, target = target, up = {0, 1, 0}, fovy = CAMERA_FOV, projection = .PERSPECTIVE}
 }

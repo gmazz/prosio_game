@@ -1,6 +1,6 @@
 # [WD 2] The day's budget: what he burns, what the meadow gives, how fast he changes
 
-**Status:** proposal for Gio to review (2026-11-24). Worked out on paper from the numbers in `data/tuning/`; nothing is built, nothing has been measured in the game, and nothing has been sent to the dev session.
+**Status:** built and committed (2026-11-25, `90cdfc4`), then changed after Gio played it (2026-11-26, `230b24f`): food is digested from the stomach, the stomach empties in 2 game hours and holds 1.5 litres, meat is 4% of an animal's weight, protein fades by half in 20 minutes. The numbers below are the proposal as first written, worked out on paper; `data/tuning/` holds what the game uses now.
 
 ## The targets (Gio, 2026-11-24)
 

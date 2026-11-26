@@ -1,6 +1,6 @@
 # [Tools 1] The workbench: change the game while it runs
 
-**Status:** proposal for Gio to review (2026-11-25). Nothing is built and nothing has been sent to the dev session. Build times below were measured on Gio's Mac; everything about Windows and Linux is unverified.
+**Status:** built (all six steps, 2026-11-25) and extended since with panes (2026-11-26, see `docs/workbench-panes.md`); the README's "The workbench" says how it works now. What follows is the proposal as written before building. Build times below were measured on Gio's Mac; everything about Windows and Linux is unverified.
 
 ## What Gio asked for (2026-11-25)
 

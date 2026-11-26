@@ -200,6 +200,24 @@ rules_workbench_panes :: proc() {
 	check("every number marked \"tune\" in data/tuning is listed for the workbench's panes, and is a variable there and a constant in the game the players get",
 		marked >= 20 && missing == "", missing != "" ? fmt.tprintf("%s is not", missing) : fmt.tprintf("%d marked", marked))
 
+	// Every pane a number is marked for is in the table of panes (a new
+	// pane: a file of its own and one line there, docs/workbench-panes.md).
+	panes_code, _ := os.read_entire_file("src/workbench/panes.odin", context.temp_allocator)
+	no_pane := ""
+	for path in tuning {
+		text, _ := os.read_entire_file(path, context.temp_allocator)
+		rest := string(text)
+		for {
+			at := strings.index(rest, "\"tune\": \"")
+			if at < 0 {break}
+			rest = rest[at + len("\"tune\": \""):]
+			name := rest[:strings.index_byte(rest, '"')]
+			if !strings.contains(string(panes_code), fmt.tprintf("name = \"%s\"", name)) {no_pane = name}
+		}
+	}
+	check("every pane a number in data/tuning is marked for (\"tune\") has its line in the table of panes, PANES in src/workbench/panes.odin",
+		no_pane == "" && strings.contains(string(panes_code), "PANES := []Pane_Kind"), no_pane != "" ? fmt.tprintf("no pane called %s", no_pane) : "")
+
 	// Save: only the number changes, a single value, an entry of a table, or
 	// a sum (which becomes the number it came to).
 	sample := "{\n  \"a\": {\n    \"HEAL_RAMP\": {\"f32\": 20, \"tune\": \"attacks\", \"about\": \"the \\\"Goat\\\": 1 of it\"},\n    \"ENEMY_HIDE\": {\"[Enemy_Kind]f32\": {\"Turkey\": 1, \"Goat\": 0.8}, \"about\": \"x\"},\n    \"HEAL_RATE\": {\"f32\": \"ENEMY_HEALTH / 30\", \"about\": \"y\"}\n  }\n}\n"

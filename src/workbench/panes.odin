@@ -18,8 +18,8 @@ package workbench
 // game to try, unsaved.
 // Pointing at one shows its "about" at the foot of the pane.
 //
-// The Attacks pane (the only one so far; more, such as mixing and cooking,
-// the body and the day's budget, or the animals, go in Pane) has Prosio's
+// The panes are listed in PANES below; a new one is a file of its own and
+// one line there (docs/workbench-panes.md). The Attacks pane has Prosio's
 // weight, muscle and jump, things to hand (pebbles, spears, a stone or rock
 // of any weight), a stand of any height (the workbench's own: the game has
 // none), a target animal at any distance (standing still or as usual,
@@ -36,10 +36,36 @@ import "core:strconv"
 import "core:strings"
 import rl "vendor:raylib"
 
-Pane :: enum {
-	None,
-	Attacks,
-	Mixing,
+// The panes there are. A new pane is a file of its own (pane_NAME.odin)
+// with its drawing procedure, and, if it wants them, a command of its own
+// and what it keeps across a swap; and one line here. Its numbers are those
+// marked "tune": "NAME" in data/tuning. See docs/workbench-panes.md.
+Pane_Kind :: struct {
+	name:    string, // "pane NAME" opens it; "tune": "NAME" puts a number on it
+	title:   string, // on its button under the pane's head
+	draw:    proc(), // its rows, between the head and the foot
+	command: proc(words: []string, line: string) -> string, // "NAME ..." from the menu or outside (nil: none)
+	help:    string, // what that command takes, for the menu
+	save:    proc() -> string, // its own state, one line, kept across a swap (nil: none)
+	load:    proc(text: string), // and read back
+}
+
+PANES := []Pane_Kind {
+	{name = "attacks", title = "Attacks", draw = draw_attacks},
+	{name = "mixing", title = "Mixing and cooking", draw = draw_mixing, command = mixing_command, save = mixing_text, load = take_mixing_text,
+	 help = "bowl 500g flour, 200g potato flour, 300ml water | dry potato 1000 | mill | minutes N | best | shape flat | cook oven|fire|pot|stands | temp N | spit low | time N | wash | press | result"},
+}
+
+pane_is_open :: proc() -> bool {
+	return pane.open >= 0 && pane.open < len(PANES)
+}
+
+// The pane of this name, or -1.
+pane_named :: proc(name: string) -> int {
+	for p, i in PANES {
+		if strings.equal_fold(p.name, name) {return i}
+	}
+	return -1
 }
 
 PANE_W :: 580
@@ -53,8 +79,8 @@ CHANGED :: rl.Color{255, 150, 80, 255}
 PANE_BACK :: rl.Color{22, 24, 30, 240}
 
 Pane_State :: struct {
-	open:         Pane,
-	last:         Pane, // the pane last open (Shift+6 opens it again)
+	open:         int, // which of PANES is open (-1: none)
+	last:         int, // the pane last open (Shift+6 opens it again; -1: none yet)
 	scroll:       f32,
 	content_h:    f32,
 	rect:         rl.Rectangle,
@@ -85,6 +111,8 @@ Pane_State :: struct {
 }
 
 pane := Pane_State {
+	open     = -1,
+	last     = -1,
 	rock_kg  = 2,
 	distance = 4,
 	stand_h  = 2,
@@ -271,17 +299,21 @@ panes_text :: proc() -> string {
 	for t, i in tune_list() {
 		if tune_changed(i) {fmt.sbprintf(&b, "#tune %s %s %v\n", t.name, t.key == "" ? "-" : t.key, t.value^)}
 	}
-	strings.write_string(&b, mixing_text())
+	for p in PANES {
+		if p.save != nil {fmt.sbprintf(&b, "#paneof %s %s\n", p.name, strings.trim_space(p.save()))}
+	}
 	r := game.bench
-	fmt.sbprintf(&b, "#pane %d %v %v %v %v %v %v %v %v %v %v %v %d %d\n", int(pane.open), pane.rock_kg, pane.distance, pane.stand_h, r.no_mend, r.jump, r.stand, r.stand_at.x, r.stand_at.y, r.stand_r, r.stand_h, pane.scroll, int(pane.kind), r.still)
+	fmt.sbprintf(&b, "#pane %s %v %v %v %v %v %v %v %v %v %v %v %d %d\n", pane_is_open() ? PANES[pane.open].name : "-", pane.rock_kg, pane.distance, pane.stand_h, r.no_mend, r.jump, r.stand, r.stand_at.x, r.stand_at.y, r.stand_r, r.stand_h, pane.scroll, int(pane.kind), r.still)
 	return strings.to_string(b)
 }
 
 take_panes_text :: proc(text: string) {
 	for line in strings.split_lines(text, context.temp_allocator) {
 		w := strings.fields(line, context.temp_allocator)
-		if len(w) > 0 && w[0] == "#mix" {
-			take_mixing_text(line)
+		if len(w) > 2 && w[0] == "#paneof" {
+			if i := pane_named(w[1]); i >= 0 && PANES[i].load != nil {
+				PANES[i].load(strings.trim_space(line[strings.index(line, w[1]) + len(w[1]):]))
+			}
 			continue
 		}
 		if len(w) == 4 && w[0] == "#tune" {
@@ -290,7 +322,7 @@ take_panes_text :: proc(text: string) {
 		} else if len(w) == 15 && w[0] == "#pane" {
 			f :: proc(s: string) -> f32 {v, _ := strconv.parse_f32(s); return v}
 			n :: proc(s: string) -> int {v, _ := strconv.parse_int(s); return v}
-			pane.open = Pane(clamp(n(w[1]), 0, len(Pane) - 1))
+			pane.open = pane_named(w[1])
 			pane.rock_kg, pane.distance, pane.stand_h = f(w[2]), f(w[3]), f(w[4])
 			r := &game.bench
 			r.no_mend, r.jump, r.stand = w[5] == "true", f(w[6]), w[7] == "true"
@@ -306,11 +338,11 @@ take_panes_text :: proc(text: string) {
 // ---- Keys and the mouse. ----
 
 pane_typing :: proc() -> bool {
-	return pane.open != .None && pane.typing
+	return pane_is_open() && pane.typing
 }
 
 pane_over :: proc(m: rl.Vector2) -> bool {
-	return pane.open != .None && rl.CheckCollisionPointRec(m, pane.rect)
+	return pane_is_open() && rl.CheckCollisionPointRec(m, pane.rect)
 }
 
 pane_keys :: proc() {
@@ -509,7 +541,7 @@ wrap :: proc(text: string, cols: int) -> []string {
 }
 
 draw_pane :: proc() {
-	if pane.open == .None {return}
+	if !pane_is_open() {return}
 	pane.last = pane.open
 	w := f32(rl.GetScreenWidth())
 	h := f32(rl.GetScreenHeight())
@@ -536,7 +568,7 @@ draw_pane :: proc() {
 
 	// The head: which pane, and the numbers changed.
 	n := tune_changes()
-	title := fmt.tprintf("%v", pane.open)
+	title := PANES[pane.open].title
 	text_at(strings.to_upper(title, context.temp_allocator), x + 10, row.y, AMBER)
 	text_at(n > 0 ? fmt.tprintf("%d changed, not saved", n) : "as the files have them", x + 10 + f32(len(title) + 2) * editor.cell, row.y, n > 0 ? CHANGED : DIM)
 	row.y += PANE_LINE + 2
@@ -544,12 +576,12 @@ draw_pane :: proc() {
 	case 0: say(tune_save())
 	case 1: say(tune_reset())
 	case 2: pane.show_sets = !pane.show_sets
-	case 3: pane.open = .None
+	case 3: pane.open = -1
 	}
-	switch pane_buttons({"Attacks", "Mixing and cooking"}, {pane.open == .Attacks, pane.open == .Mixing}, "the panes: one for each mechanic") {
-	case 0: pane.open = .Attacks
-	case 1: pane.open = .Mixing
-	}
+	titles := make([]string, len(PANES), context.temp_allocator)
+	lit := make([]bool, len(PANES), context.temp_allocator)
+	for p, i in PANES {titles[i], lit[i] = p.title, i == pane.open}
+	if k := pane_buttons(titles, lit, "the panes: one for each mechanic"); k >= 0 {pane.open = k}
 	if pane.loaded != "" {
 		text_at(fmt.tprintf("trying %s: not saved", pane.loaded), x + 10, row.y, CHANGED)
 	}
@@ -563,11 +595,7 @@ draw_pane :: proc() {
 	if pane.show_sets {
 		draw_sets()
 	}
-	switch pane.open {
-	case .None:
-	case .Attacks: draw_attacks()
-	case .Mixing: draw_mixing()
-	}
+	if pane_is_open() {PANES[pane.open].draw()}
 	pane.content_h = row.y - top + 8
 	rl.EndScissorMode()
 	row.clip = pane.rect
@@ -853,9 +881,7 @@ pane_command :: proc(line: string) -> string {
 	case "pane":
 		which := len(lower) > 1 ? lower[1] : ""
 		switch which {
-		case "attacks": pane.open = .Attacks
-		case "mixing", "cooking": pane.open = .Mixing
-		case "off", "none": pane.open = .None
+		case "off", "none": pane.open = -1
 		case "sets":
 			pane.show_sets = !pane.show_sets
 			return pane.show_sets ? "the saved parameter sets shown" : "the saved parameter sets hidden"
@@ -871,12 +897,22 @@ pane_command :: proc(line: string) -> string {
 		case "scroll":
 			pane.scroll = len(lower) > 2 ? cmd.f32_of(lower, 2, 0) : 0
 			return fmt.tprintf("scrolled to %.0f of %.0f", pane.scroll, pane.content_h)
-		case "": pane.open = pane.open == .None ? (pane.last != .None ? pane.last : .Attacks) : .None
-		case: return "pane attacks | mixing | off"
+		case "": pane.open = pane_is_open() ? -1 : max(pane.last, 0)
+		case:
+			i := pane_named(which)
+			if i < 0 {
+				names := make([]string, len(PANES), context.temp_allocator)
+				for p, j in PANES {names[j] = p.name}
+				return fmt.tprintf("pane %s | off", strings.join(names, " | ", context.temp_allocator))
+			}
+			pane.open = i
 		}
-		return pane.open == .None ? "no pane" : fmt.tprintf("the %v pane", pane.open)
-	case "mixing":
-		return mixing_command(lower, line)
+		return pane_is_open() ? fmt.tprintf("the %s pane", PANES[pane.open].title) : "no pane"
+	case:
+		// A pane's own command: its name, then what it takes.
+		if i := pane_named(lower[0]); i >= 0 && PANES[i].command != nil {
+			return PANES[i].command(lower, line)
+		}
 	case "tune":
 		if len(words) < 3 {return "tune NAME [ENTRY] VALUE"}
 		v, ok := strconv.parse_f32(words[len(words) - 1])
