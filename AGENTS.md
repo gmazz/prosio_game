@@ -7,7 +7,7 @@ Prosio is a small game about a pig, for seven-year-olds, written in Odin with ra
 Agents of more than one maker work here and cannot message each other; the board, [docs/work.md](docs/work.md), is how each knows what the others do. Whoever you are:
 
 - **Read the board before you start, write your row before your first edit, and move it to the history at handoff** (what landed, how you checked it, what nobody verified, the next step).
-- **Work on a branch in a git worktree of your own**, not in the main folder; commit small and often there. `main` is merged and pushed only on Gio's word.
+- **The main folder is Gio's and the dev session's** (it works there so Gio sees its changes live in his workbench). **Every other agent works on a branch in a git worktree of its own**, committing small and often there. `main` is merged and pushed only on Gio's word.
 - **Before touching a file, check the board and `git status`** for anyone else's work on it. If another row has it, say so to Gio instead of editing.
 - **`tools/check.sh` must pass before a handoff.**
 - **A workbench you start** uses its own folder and takes no keys or clicks: `WORKBENCH_OUT=build/workbench_YOURNAME WORKBENCH_UNFOCUSED=1 tools/workbench.sh`.
@@ -17,7 +17,7 @@ Who owns what (the workshop and the GLBs it exports, `src/game` and the rules, t
 
 ## Models and assets
 
-Every model reaches the game as a GLB in `assets/`, packed by `tools/pack_assets` (Odin) into the files the game `#load`s; the build scripts and `tools/check.sh` repack on every build, so after exporting a new GLB from Blender just build. Blender files and any Python that works on them live outside this repository, in the workshop folder (`/Users/gio/Projects/prosio_workshop/`); never add a `.py` file here (a rule fails). README.md, "Models: from Blender to the game", says what a GLB must hold.
+Every model reaches the game as a GLB in `assets/`, packed by `tools/pack_assets` (Odin) into the files the game `#load`s; the build scripts and `tools/check.sh` repack on every build, so after exporting a new GLB from Blender just build. Blender files and any Python that works on them live outside this repository, in the workshop folder (`/Users/gio/Projects/prosio_asset_gen/`); never add a `.py` file here (a rule fails). README.md, "Models: from Blender to the game", says what a GLB must hold.
 
 ## Building and running
 

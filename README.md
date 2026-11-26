@@ -732,7 +732,7 @@ Blender (outside this repository) --export--> assets/<name>/<name>.glb
 - **The packer works out everything else**, in `tools/pack_assets/` (`gltf.odin` reads the file, then one file a family: `quadruped.odin`, `skin.odin`, `fox.odin`, `trees.odin`): flat and smooth (outline) normals, the four strongest weights made to add up to one, inverse rest frames, animations sampled 20 times a second, how far a cycle carries an animal, material groups, sockets, which faces of a tree are bark and which leaves and their colours, and the tables the game is built with. It stops with a message if a GLB lacks what the game needs: a point weighted to no bone, a part missing or renamed, more than 65,536 points where they are numbered in 16 bits, a missing animation, socket or bone.
 - **It runs on every build** (`tools/pack_assets.sh`, from the build scripts and `tools/check.sh`, after `gen_data`); packing everything takes well under a second, and a file is written only when what it holds changes. The game reads only the packed files, never a GLB, and allocates nothing for them.
 
-To change a model, open its source in Blender in the workshop folder (outside this repository: `/Users/gio/Projects/prosio_workshop/`, whose README says how each GLB was made), export the GLB over the one in `assets/`, and build. A rule fails if a Python file is found in the repository, or if a model the game loads has no GLB beside it.
+To change a model, open its source in Blender in the workshop folder (outside this repository: `/Users/gio/Projects/prosio_asset_gen/`, whose README says how each GLB was made), export the GLB over the one in `assets/`, and build. A rule fails if a Python file is found in the repository, or if a model the game loads has no GLB beside it.
 
 ### Animals from the animal pack
 
@@ -1035,6 +1035,7 @@ The game never reads these files: `tools/gen_data` (run by the build scripts and
 | `saving.json` | How often the game is saved, and the backups: their folder, how many the Load list shows, how many the browser keeps (`saving`) |
 | `colours.json` | Every colour, by where it is used |
 | `controls.json` | The keys and Xbox buttons each action starts with, which can be changed (`buttons`); the controller's dead zones (`controller`) |
+| `graphics.json` | The graphics agent's own numbers, for its models' and textures' look on its workbench panes; it owns the file (`docs/work.md`), and the game reads a number from it only once the dev session wires it in. Empty for now |
 
 A few things stay in the code, because they are not numbers to tune but part of how something works, or they must match something else:
 

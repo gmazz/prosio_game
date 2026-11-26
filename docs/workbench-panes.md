@@ -62,9 +62,25 @@ A number in `data/tuning/*.json` goes on a pane when it is marked with the pane'
 "STONE_MOMENTUM_SHARE": {"f32": 0, "tune": "attacks", "range": [0, 1], "about": "..."}
 ```
 
-It must be an `f32`, or a table of them keyed by an enum (`"[Enemy_Kind]f32": {...}`) that is not `"const": true`; `"range"` is its slider's span (otherwise 0 to three times its value); `"tune"` may list several panes. `tools/gen_data` then makes it a variable in the workbench's build only and lists it in `src/game/gen_tune.odin`; `draw_formulas("NAME")` puts every number marked so on the pane. In the game the players get it stays a constant, as before. (`data/tuning` and `tools/gen_data` belong to the dev session: mark numbers through a row on the board.)
+It must be an `f32`, or a table of them keyed by an enum (`"[Enemy_Kind]f32": {...}`) that is not `"const": true`; `"range"` is its slider's span (otherwise 0 to three times its value); `"tune"` may list several panes. `tools/gen_data` then makes it a variable in the workbench's build only and lists it in `src/game/gen_tune.odin`; `draw_formulas("NAME")` puts every number marked so on the pane. In the game the players get it stays a constant, as before. (`data/tuning` and `tools/gen_data` belong to the dev session: mark its numbers through a row on the board. The graphics agent has a file of its own, below.)
 
 Every pane shares, without any code of its own: a slider and a box for each number, acting in the running game at once; changed numbers marked and counted in the head, and kept across swaps; **Save** (writes each changed number into its JSON file, nothing else in it, after backing up all of `data/tuning` into `tuning_backups/tuning_DDMMYY_HHMMSS/`), **Reset** (back to the files), and **Load parameters** (a backed-up set into the running game, to try). The commands `tune`, `tune-save`, `tune-reset`, `tune-list`, `tune-sets` and `tune-load` do the same from outside.
+
+## Numbers of the graphics agent's own
+
+`data/tuning/graphics.json` belongs to the graphics agent (Gio, 2026-11-26), so it can put numbers on its panes without waiting for the dev session. It starts empty. To add a number, write an entry in it as in any tuning file, in a section if you like, marked for your pane:
+
+```json
+{
+  "_about": "...",
+  "skin": {
+    "_about": "Prosio's skin on the bare pig.",
+    "SKIN_SHINE": {"f32": 0.3, "tune": "textures", "range": [0, 1], "about": "how glossy his skin looks, 0 (matt) to 1; raise it and he shines"}
+  }
+}
+```
+
+Every value has its name in capitals, its type, its value and an `about` saying what it is, its unit and which way to turn it (a rule fails if one has none; README, "Tuning"). On the next build (in the workbench, the next save) it is `game.SKIN_SHINE` in the code, a variable in the workbench's build and a constant in the players' game, and on your pane through `draw_formulas("textures")`. The pane named in `"tune"` must have its line in `PANES` (a rule checks). Save, Reset, the backups and Load parameters treat this file as every other. A number here changes nothing in the game until the game's code reads it: your pane can read it at once; the game's drawing reads it once the dev session wires it in, through a row on the board.
 
 ## Trying it from a shell
 

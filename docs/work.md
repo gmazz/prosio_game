@@ -6,7 +6,7 @@ Several agents work on Prosio, from more than one maker, and they cannot send ea
 
 1. **Before you start**, read **Current work** below, then run `git status` and `git worktree list`. If a row (or someone's uncommitted change) already has a file you need, do not edit it: tell Gio which file and whose row, and wait.
 2. **Write your row** before your first edit: who you are (agent and model), the slice, the files or areas, the branch or folder, since when, the status, the next step. Change it when the scope changes.
-3. **Work on a branch in a git worktree of your own**, not in the main folder (`/Users/gio/Projects/prosio_game`, which is Gio's and the dev session's):
+3. **The main folder, `/Users/gio/Projects/prosio_game`, is Gio's and the dev session's.** The dev session works there, where Gio runs his workbench and sees its changes swapped in live (Gio, 2026-11-26). **Every other agent works on a branch in a git worktree of its own**:
 
    ```bash
    git worktree add ../prosio_game_SLICE -b SLICE
@@ -21,8 +21,9 @@ Several agents work on Prosio, from more than one maker, and they cannot send ea
 
 | Area | Owner | Notes |
 |---|---|---|
-| The workshop folder (Blender files, recipes, textures, any Python) and the GLBs (with their `.asset.json`) it exports into `assets/` | The graphics agent (ChatGPT-6.2 Sol) | Outside this repository; a GLB in `assets/` is the only hand-over. What a GLB must hold, and the asset ownership and interchange rules: [asset-integration.md](asset-integration.md) and README, "Models: from Blender to the game". |
-| `src/game` (the game and its rules), `data/tuning`, `data/text`, `src/check`, `tools/` (the data generator and the model packer), `README.md` | The dev session (Claude) | A new kind of model the packer does not read yet, or a change the game must make to show an asset, goes through a row here and the dev session. |
+| The workshop folder, `/Users/gio/Projects/prosio_asset_gen/` (Blender files, recipes, textures, any Python), and the GLBs (with their `.asset.json`) it exports into `assets/` | The graphics agent (ChatGPT-6.2 Sol) | Outside this repository; a GLB in `assets/` is the only hand-over. What a GLB must hold, and the asset ownership and interchange rules: [asset-integration.md](asset-integration.md) and README, "Models: from Blender to the game". |
+| `data/tuning/graphics.json`: the numbers of its models' and textures' look, for its panes | The graphics agent (ChatGPT-6.2 Sol) | Its own, so it can put numbers on its panes without waiting for the dev session (Gio, 2026-11-26): [workbench-panes.md](workbench-panes.md), "Numbers of the graphics agent's own". The game's code reads one only once the dev session wires it in, through a row here. |
+| `src/game` (the game and its rules), `data/tuning` (but `graphics.json`), `data/text`, `src/check`, `tools/` (the data generator and the model packer), `README.md` | The dev session (Claude) | A new kind of model the packer does not read yet, or a change the game must make to show an asset, goes through a row here and the dev session. |
 | `src/workbench` | Shared | Each agent adds its panes in files of its own ([workbench-panes.md](workbench-panes.md)): a new pane is its own file and one line in the pane table. A change to the shared workbench files (`panes.odin`, `lib.odin`, `menu.odin`, `editor.odin`, `host/`, `commands/`) needs a row here first. |
 | `docs/plans/` | The planning session (Claude) | Briefs and Gio's decisions. Other agents read them; they do not edit them. |
 | `main`, and pushing | Gio | Merged and pushed on his word only. |
@@ -31,11 +32,11 @@ Several agents work on Prosio, from more than one maker, and they cannot send ea
 
 | Who (agent, model) | Slice | Files or areas | Branch or folder | Since | Status | Next step |
 |---|---|---|---|---|---|---|
-| ChatGPT-6.2 Sol | Graphics: building assets and textures, to be tried in the workbench | The workshop folder, `assets/`, its own pane in `src/workbench` | Its own | ? | Not recorded here yet | Sol: replace this row with your own before your next edit |
+| ChatGPT-6.2 Sol | Graphics: building assets and textures, to be tried in the workbench | `/Users/gio/Projects/prosio_asset_gen/` (its workshop), `assets/`, `data/tuning/graphics.json`, its own pane in `src/workbench` | `/Users/gio/Projects/prosio_asset_gen/`, and a worktree of its own for the repository | ? | Not recorded here yet | Sol: replace this row with your own before your next edit |
 
 ## Handoff history
 
-Newest first. Each entry: the date, who, what landed, how it was checked, what nobody verified, and the next step.
+Newest first. Each entry: the date, who, what landed, how it was checked, what nobody verified, and the next step. (Entries are left as written: the workshop folder they name as `prosio_workshop` is `/Users/gio/Projects/prosio_asset_gen/` since 2026-11-26.)
 
 **2026-11-26: Claude (dev session), on main: guidelines for working together.** This board (`docs/work.md`, all work in the repository, its history moved here from `docs/asset-integration.md`, which keeps the asset sections), a short section in `AGENTS.md` for any agent of any maker, and `docs/workbench-panes.md` on adding a pane. In the workbench, the panes are a table (`PANES` in `src/workbench/panes.odin`): a new pane is a file of its own and one line there; Attacks and Mixing behave as before. The planning session brought the status lines of `docs/plans/tools1-workbench.md` and `wd2-day-budget.md` up to date. **Checked:** `tools/check.sh`, 296 rules (one new: every pane a "tune" mark names is in the table); the two panes, a pane's own command, the menu, and a swap keeping a pane's state, in an unfocused workbench of the agent's own; every link in the documents. **Not verified:** the panes with the real mouse. **Open, with Gio:** the workshop folder's name (`prosio_workshop`, named in the documents, does not exist here; `prosio_asset_gen` does), whether the dev session moves off the main folder into a worktree, and whether the graphics agent gets a tuning file of its own. **Next:** ChatGPT-6.2 Sol writes its row.
 
